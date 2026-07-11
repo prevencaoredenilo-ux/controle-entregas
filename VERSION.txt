@@ -1,3 +1,1 @@
-Controle de Entregas PWA V1
-Versão: 1.0.0
-Gerado em: 2026-07-11
+2.0.0 — lançamento rápido, ações intuitivas, reembolso e faturamento no registro

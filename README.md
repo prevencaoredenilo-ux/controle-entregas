@@ -52,3 +52,13 @@ O app será publicado em um endereço no formato:
 - `sw.js`
 - `icons/icon-192.png`
 - `icons/icon-512.png`
+
+
+## V2 — lançamento simplificado e faturamento corrigido
+
+- Nova compra em poucos campos.
+- Taxa entra no faturamento no registro da compra.
+- Reagendamentos não duplicam receita.
+- Retirada na loja pode ter reembolso zero, total ou parcial.
+- Dashboard mostra faturamento bruto, reembolsos e faturamento líquido.
+- Operação do dia usa botões rápidos: Saiu, Entregue, Retornou, Reagendar, Retirada e Devolvida.

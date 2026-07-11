@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const APP_VERSION = '1.0.0';
+  const APP_VERSION = '2.0.0';
   const DB_NAME = 'controle_entregas_nx';
   const DB_VERSION = 1;
   const STORE_NAME = 'app_state';
@@ -386,6 +386,43 @@
   function reason(id) { return state.reasons.find(v => v.id === id); }
   function cycle(id) { return state.cycles.find(v => v.id === id); }
 
+
+  function currentTimeHM() {
+    const d = new Date();
+    return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  }
+  function isRootPurchase(d) { return !d.parentId; }
+  function rootDelivery(d) {
+    const rootId = d?.rootId || d?.id;
+    return state.deliveries.find(x => x.id === rootId) || d;
+  }
+  function financialsForRange(range) {
+    const purchases = state.deliveries.filter(d => isRootPurchase(d) && inRange(d.date, range));
+    const refunds = state.deliveries.filter(d => isRootPurchase(d) && Number(d.refundAmount || 0) > 0 && d.refundDate && inRange(d.refundDate, range));
+    const gross = sum(purchases.map(d => d.fee));
+    const refundTotal = sum(refunds.map(d => d.refundAmount));
+    return { purchases, refunds, gross, refundTotal, net: gross - refundTotal };
+  }
+  function netRevenueOfRoot(d) {
+    const root = rootDelivery(d);
+    return Math.max(0, Number(root?.fee || 0) - Number(root?.refundAmount || 0));
+  }
+  function revenueAttributedTo(records) {
+    const roots = unique(records.map(d => d.rootId || d.id));
+    return sum(roots.map(id => {
+      const root = state.deliveries.find(x => x.id === id);
+      return root ? netRevenueOfRoot(root) : 0;
+    }));
+  }
+  function currentWaitMinutes(d) {
+    if (!d.purchaseTime || isFinal(d)) return null;
+    if (d.departureTime) return deliveryCalc(d).wait;
+    const endDate = todayISO();
+    const endTime = currentTimeHM();
+    if (d.date > endDate) return null;
+    return workingMinutesBetween(d.date, d.purchaseTime, endDate, endTime);
+  }
+
   function deliveryCalc(d) {
     const wait = d.purchaseTime && d.departureTime ? workingMinutesBetween(d.date,d.purchaseTime,d.date,d.departureTime) : null;
     const toClient = d.departureTime && d.finalizationTime ? durationMinutes(d.date,d.departureTime,d.date,d.finalizationTime) : null;
@@ -399,7 +436,7 @@
     const deliveries = state.deliveries.filter(d => d.cycleId === c.id && d.status === 'Finalizada');
     const km = Math.max(0, Number(c.kmEnd || 0) - Number(c.kmStart || 0));
     const minutes = c.departureTime && c.returnTime ? durationMinutes(c.date,c.departureTime,c.date,c.returnTime) : null;
-    const revenue = sum(deliveries.map(d => d.fee));
+    const revenue = revenueAttributedTo(deliveries);
     return { deliveries: deliveries.length, km, minutes, revenue };
   }
   function isFinal(d) { return d.status === 'Finalizada' || d.status === 'Retirada na loja' || d.status === 'Cancelada'; }
@@ -471,7 +508,8 @@
     const costs = filteredCosts();
     const cycles = filteredCycles();
     const final = deliveries.filter(d => d.status === 'Finalizada');
-    const revenue = sum(final.map(d => d.fee));
+    const range = selectedRange();
+    const fin = financialsForRange(range);
     const totalCosts = sum(costs.map(c => c.value));
     const totalKm = sum(cycles.map(c => cycleCalc(c).km));
     const activeDays = unique([...deliveries.map(d => d.date),...cycles.map(c => c.date),...costs.map(c => c.date)]).length || 1;
@@ -482,9 +520,7 @@
     const avgWait = avg(deliveries.map(d => deliveryCalc(d).wait));
     const avgRoute = avg(deliveries.map(d => deliveryCalc(d).route));
     const delayed = deliveries.filter(d => deliveryCalc(d).delayed).length;
-    const devolved = deliveries.filter(d => d.status === 'Devolvida').length;
     const openSched = deliveries.filter(openScheduled).length;
-    const range = selectedRange();
     const weeklyRows = buildWeeklyRows(deliveries,costs,cycles);
     const nbRows = buildNeighborhoodRows(deliveries);
     const topDelivery = nbRows[0];
@@ -493,15 +529,17 @@
 
     $('#view').innerHTML = `
       <section class="hero-strip">
-        <div><h2>Visão executiva • ${esc(range.label)}</h2><p>Acompanhe operação, frota, custos, produtividade e qualidade das entregas.</p></div>
-        <div class="hero-meta"><span class="hero-chip">${final.length} finalizadas</span><span class="hero-chip">${cycles.length} ciclos</span><span class="hero-chip">${number(totalKm,1)} km</span></div>
+        <div><h2>Visão executiva • ${esc(range.label)}</h2><p>O faturamento entra no momento em que a compra é registrada. Reagendamentos não duplicam receita.</p></div>
+        <div class="hero-meta"><span class="hero-chip">${fin.purchases.length} compras</span><span class="hero-chip">${final.length} entregas finalizadas</span><span class="hero-chip">${number(totalKm,1)} km</span></div>
       </section>
 
       <section class="metrics-grid">
-        ${cardMetric('Faturamento', money(revenue), `${final.length} entregas finalizadas`, 'R$', 'green')}
+        ${cardMetric('Faturamento bruto', money(fin.gross), `${fin.purchases.length} compras registradas`, 'R$', 'green')}
+        ${cardMetric('Reembolsos de taxa', money(fin.refundTotal), `${fin.refunds.length} reembolsos`, '↩', fin.refundTotal ? 'yellow':'blue')}
+        ${cardMetric('Faturamento líquido', money(fin.net), 'Bruto menos reembolsos', '+', 'green')}
         ${cardMetric('Custos totais', money(totalCosts), `Combustível: ${money(fuel)}`, '−', 'red')}
-        ${cardMetric('Saldo operacional', money(revenue-totalCosts), 'Faturamento menos custos registrados', '+', revenue-totalCosts >= 0 ? 'green':'red')}
-        ${cardMetric('Custo por entrega', money(costPerDelivery), 'Média do período', 'CE', 'yellow')}
+        ${cardMetric('Saldo operacional', money(fin.net-totalCosts), 'Líquido menos custos registrados', '+', fin.net-totalCosts >= 0 ? 'green':'red')}
+        ${cardMetric('Custo por entrega', money(costPerDelivery), 'Custos ÷ entregas finalizadas', 'CE', 'yellow')}
         ${cardMetric('Entregas por ciclo', number(deliveriesPerCycle,2), `${cycles.length} ciclos registrados`, '↻', 'purple')}
         ${cardMetric('KM médio por dia', `${number(totalKm/activeDays,1)} km`, `${activeDays} dias com movimento`, 'KM', 'blue')}
         ${cardMetric('KM por entrega', `${number(final.length?totalKm/final.length:0,2)} km`, 'Média das finalizadas', '↗', 'blue')}
@@ -521,25 +559,24 @@
             ${statRow('Mais entregas', topDelivery?.name || '—', topDelivery ? `${topDelivery.deliveries} entregas` : 'Sem dados')}
             ${statRow('Mais endereço errado', topWrong?.name || '—', topWrong ? `${topWrong.wrongAddress} ocorrências` : 'Sem dados')}
             ${statRow('Mais reagendamentos', topReschedule?.name || '—', topReschedule ? `${topReschedule.rescheduled} reagendamentos` : 'Sem dados')}
-            ${statRow('Devoluções', number(devolved), deliveries.length ? `${number(devolved/deliveries.length*100,1)}% das registradas` : '0%')}
           </div>
         </article>
       </section>
 
       <section class="dashboard-grid equal">
         <article class="card section-card">
-          ${sectionHeader('R$','Faturamento x custos por semana','Comparação financeira por semana.')}
-          <div class="chart-box">${groupedBarChartHTML(weeklyRows.map(r => ({label:r.label,a:r.revenue,b:r.costs})), 'Faturamento','Custos')}</div>
+          ${sectionHeader('R$','Faturamento líquido x custos por semana','Receita registrada, reembolsos e gastos da operação.')}
+          <div class="chart-box small">${groupedBarChartHTML(weeklyRows.map(r => ({label:r.label,a:r.netRevenue,b:r.costs})), 'Faturamento líquido','Custos')}</div>
         </article>
         <article class="card section-card">
-          ${sectionHeader('◎','Top bairros por entregas','Ranking das entregas finalizadas.')}
-          <div class="chart-box">${horizontalBarChartHTML(nbRows.slice(0,10).map(r => ({label:r.name,value:r.deliveries})), '#2EA8A1')}</div>
+          ${sectionHeader('◎','Top bairros por entregas','Quantidade de entregas finalizadas por bairro.')}
+          <div class="chart-box small">${horizontalBarChartHTML(nbRows.slice(0,8).map(r=>({label:r.name,value:r.deliveries})),'#2E73B9')}</div>
         </article>
       </section>
 
       <section class="dashboard-grid equal">
         <article class="card section-card">
-          ${sectionHeader('◉','Custos por categoria','Distribuição de combustível, manutenção e outros.')}
+          ${sectionHeader('◉','Custos por categoria','Combustível, manutenção e demais gastos.')}
           <div class="chart-box small">${donutChartHTML(buildCostCategoryRows(costs))}</div>
         </article>
         <article class="card section-card">
@@ -549,7 +586,7 @@
       </section>
 
       <section class="card section-card" style="margin-top:12px">
-        ${sectionHeader('▤','Resultados semanais','Entregas, faturamento, custos, KM e eficiência por ciclo.')}
+        ${sectionHeader('▤','Resultados semanais','Entregas, faturamento bruto/líquido, reembolsos, custos, KM e eficiência por ciclo.')}
         ${weeklyTable(weeklyRows)}
       </section>
     `;
@@ -564,17 +601,23 @@
   }
 
   function buildWeeklyRows(deliveries = filteredDeliveries(), costs = filteredCosts(), cycles = filteredCycles()) {
-    const weeks = unique([...deliveries.map(d=>startOfWeek(d.date)),...costs.map(c=>startOfWeek(c.date)),...cycles.map(c=>startOfWeek(c.date))]).sort();
+    const selected = selectedRange();
+    const refundDates = state.deliveries.filter(d=>d.refundDate && inRange(d.refundDate, selected)).map(d=>startOfWeek(d.refundDate));
+    const weeks = unique([...deliveries.map(d=>startOfWeek(d.date)),...costs.map(c=>startOfWeek(c.date)),...cycles.map(c=>startOfWeek(c.date)),...refundDates]).sort();
     return weeks.map((week, index) => {
-      const d = deliveries.filter(x => startOfWeek(x.date) === week);
+      const weekRange = {start:week,end:endOfWeek(week)};
+      const d = deliveries.filter(x => inRange(x.date, weekRange));
       const final = d.filter(x => x.status === 'Finalizada');
-      const c = costs.filter(x => startOfWeek(x.date) === week);
-      const cy = cycles.filter(x => startOfWeek(x.date) === week);
+      const c = costs.filter(x => inRange(x.date, weekRange));
+      const cy = cycles.filter(x => inRange(x.date, weekRange));
       const km = sum(cy.map(x => cycleCalc(x).km));
+      const fin = financialsForRange(weekRange);
       return {
         week, label:`Sem. ${index+1}`,
         deliveries:final.length,
-        revenue:sum(final.map(x=>x.fee)),
+        grossRevenue:fin.gross,
+        refunds:fin.refundTotal,
+        netRevenue:fin.net,
         costs:sum(c.map(x=>x.value)),
         km,
         cycles:cy.length,
@@ -585,30 +628,34 @@
 
   function weeklyTable(rows) {
     if (!rows.length) return emptyState('▤','Sem dados semanais','Registre entregas, custos ou ciclos para gerar esta análise.');
-    return `<div class="table-wrap"><table><thead><tr><th>Semana</th><th>Entregas</th><th>Faturamento</th><th>Custos</th><th>Saldo</th><th>KM</th><th>Ciclos</th><th>Ent./ciclo</th></tr></thead><tbody>${rows.map(r => `<tr><td><div class="cell-title">${esc(r.label)}</div><div class="cell-sub">${dateBR(r.week)} a ${dateBR(endOfWeek(r.week))}</div></td><td>${r.deliveries}</td><td>${money(r.revenue)}</td><td>${money(r.costs)}</td><td>${money(r.revenue-r.costs)}</td><td>${number(r.km,1)} km</td><td>${r.cycles}</td><td>${number(r.deliveriesPerCycle,2)}</td></tr>`).join('')}</tbody></table></div>`;
+    return `<div class="table-wrap"><table><thead><tr><th>Semana</th><th>Entregas</th><th>Bruto</th><th>Reembolsos</th><th>Líquido</th><th>Custos</th><th>Saldo</th><th>KM</th><th>Ciclos</th><th>Ent./ciclo</th></tr></thead><tbody>${rows.map(r => `<tr><td><div class="cell-title">${esc(r.label)}</div><div class="cell-sub">${dateBR(r.week)} a ${dateBR(endOfWeek(r.week))}</div></td><td>${r.deliveries}</td><td>${money(r.grossRevenue)}</td><td>${money(r.refunds)}</td><td>${money(r.netRevenue)}</td><td>${money(r.costs)}</td><td>${money(r.netRevenue-r.costs)}</td><td>${number(r.km,1)} km</td><td>${r.cycles}</td><td>${number(r.deliveriesPerCycle,2)}</td></tr>`).join('')}</tbody></table></div>`;
   }
 
   function renderToday() {
     const date = todayISO();
     const deliveries = state.deliveries.filter(d => d.date === date);
+    const purchases = deliveries.filter(isRootPurchase);
     const scheduled = scheduledForDate(date);
     const pending = allPending().filter(d => d.date === date || d.scheduledDate === date);
     const final = deliveries.filter(d => d.status === 'Finalizada');
     const costs = state.costs.filter(c => c.date === date);
     const cycles = state.cycles.filter(c => c.date === date);
+    const fin = financialsForRange({start:date,end:date});
     $('#view').innerHTML = `
-      <section class="today-hero"><div><h2>Operação de hoje</h2><p>As entregas programadas e reagendadas para hoje aparecem automaticamente.</p></div><div class="today-date-chip">${dateBR(date)}</div></section>
+      <section class="today-hero"><div><h2>Operação de hoje</h2><p>Registre a compra em poucos segundos e depois use botões rápidos para cada etapa.</p></div><div class="today-date-chip">${dateBR(date)}</div></section>
       <section class="quick-kpis">
-        ${quickKpi('Registradas', deliveries.length, 'No dia')}
+        ${quickKpi('Compras registradas', purchases.length, 'Faturam no registro')}
         ${quickKpi('Finalizadas', final.length, 'Concluídas')}
         ${quickKpi('Em rota', deliveries.filter(d=>d.status==='Em rota').length, 'Sem retorno')}
         ${quickKpi('Programadas', scheduled.length, 'Para hoje')}
         ${quickKpi('Pendências', pending.length, 'Exigem ação')}
-        ${quickKpi('Faturamento', money(sum(final.map(d=>d.fee))), `Custos ${money(sum(costs.map(c=>c.value)))}`)}
+        ${quickKpi('Faturamento bruto', money(fin.gross), 'No registro da compra')}
+        ${quickKpi('Reembolsos', money(fin.refundTotal), `${fin.refunds.length} ocorrências`)}
+        ${quickKpi('Faturamento líquido', money(fin.net), `Custos ${money(sum(costs.map(c=>c.value)))}`)}
       </section>
       <section class="two-column">
         <article class="card section-card">
-          ${sectionHeader('◷','Programadas para hoje','Puxadas automaticamente pela Data Programada.', `<button class="btn primary small" data-action="new-delivery">＋ Nova entrega</button>`)}
+          ${sectionHeader('◷','Programadas para hoje','Puxadas automaticamente pela Data Programada.', `<button class="btn primary small" data-action="new-delivery">＋ Registrar compra</button>`)}
           ${scheduledTable(scheduled, true)}
         </article>
         <article class="card section-card">
@@ -626,15 +673,57 @@
           ${costMiniTable(costs)}
         </article>
       </section>
-      <section class="card section-card" style="margin-top:12px">
-        ${sectionHeader('▣','Entregas de hoje','Controle operacional completo.', `<button class="btn primary small" data-action="new-delivery">＋ Nova entrega</button>`)}
-        ${deliveryTable(deliveries)}
-      </section>
+      <article class="card section-card" style="margin-top:12px">
+        ${sectionHeader('▣','Entregas de hoje','Ações rápidas: Saiu, Entregue, Retornou, Reagendar, Retirada ou Devolvida.', `<button class="btn primary small" data-action="new-delivery">＋ Registrar compra</button>`)}
+        ${operationCards(deliveries)}
+      </article>
     `;
     bindViewActions();
   }
 
   function quickKpi(label,value,sub) { return `<article class="card quick-kpi"><span>${esc(label)}</span><strong>${value}</strong><small>${esc(sub)}</small></article>`; }
+
+
+  function operationCards(deliveries) {
+    if (!deliveries.length) return emptyState('▣','Nenhuma compra registrada hoje','Clique em Registrar compra para começar.');
+    const sorted = deliveries.slice().sort((a,b) => {
+      const af = isFinal(a) ? 1 : 0, bf = isFinal(b) ? 1 : 0;
+      return af-bf || `${a.purchaseTime||''}`.localeCompare(`${b.purchaseTime||''}`);
+    });
+    return `<div class="operation-card-grid">${sorted.map(d => {
+      const calc = deliveryCalc(d);
+      const liveWait = currentWaitMinutes(d);
+      const liveDelayed = liveWait !== null && liveWait > Number(state.settings.delayMinutes || 120);
+      const root = rootDelivery(d);
+      const refund = Number(root?.refundAmount || 0);
+      const isFutureScheduled = d.scheduledDate && d.scheduledDate > todayISO() && openScheduled(d);
+      let actions = '';
+      if (!isFinal(d) && !isFutureScheduled) {
+        if (!d.departureTime) actions += `<button class="action-btn primary" data-action="quick-departure" data-id="${d.id}"><span>🚚</span>Saiu</button>`;
+        if (d.departureTime && !d.finalizationTime) actions += `<button class="action-btn success" data-action="quick-delivered" data-id="${d.id}"><span>✅</span>Entregue</button>`;
+        if (d.departureTime && !d.returnTime) actions += `<button class="action-btn navy" data-action="quick-return" data-id="${d.id}"><span>🏪</span>Retornou</button>`;
+        actions += `<button class="action-btn warning" data-action="quick-reschedule" data-id="${d.id}"><span>📅</span>Reagendar</button>`;
+        actions += `<button class="action-btn soft" data-action="quick-pickup" data-id="${d.id}"><span>📦</span>Retirada</button>`;
+        actions += `<button class="action-btn danger" data-action="quick-devolution" data-id="${d.id}"><span>↩</span>Devolvida</button>`;
+      }
+      actions += `<button class="action-btn ghost" data-action="edit-delivery" data-id="${d.id}"><span>✏️</span>Avançado</button>`;
+      return `<article class="delivery-action-card ${liveDelayed && !d.departureTime ? 'late':''}">
+        <div class="delivery-card-head">
+          <div><span class="delivery-card-kicker">CUPOM</span><strong>${esc(d.coupon || '—')}</strong><small>Compra ${esc(d.orderNo || '—')} • ${esc(neighborhood(d.neighborhoodId)?.name || 'Sem bairro')}</small></div>
+          <div>${statusBadge(d.status)}</div>
+        </div>
+        <div class="delivery-card-finance"><span>Taxa registrada <strong>${money(root?.fee || d.fee)}</strong></span>${refund ? `<span class="refund-chip">Reembolso ${money(refund)}</span>`:''}</div>
+        <div class="delivery-card-times">
+          <div><small>Entrada</small><strong>${d.purchaseTime || '—'}</strong></div>
+          <div><small>Espera</small><strong class="${liveDelayed?'text-danger':''}">${fmtMinutes(liveWait)}</strong></div>
+          <div><small>Até cliente</small><strong>${fmtMinutes(calc.toClient)}</strong></div>
+          <div><small>Rota total</small><strong>${fmtMinutes(calc.route)}</strong></div>
+        </div>
+        ${isFutureScheduled ? `<div class="scheduled-note">📅 Programada para ${dateBR(d.scheduledDate)} • o faturamento já foi contado no registro original.</div>`:''}
+        <div class="action-grid">${actions}</div>
+      </article>`;
+    }).join('')}</div>`;
+  }
 
   function renderDeliveries() {
     const deliveries = filteredDeliveries().slice().sort((a,b) => `${b.date}${b.purchaseTime||''}`.localeCompare(`${a.date}${a.purchaseTime||''}`));
@@ -644,14 +733,15 @@
 
   function deliveryTable(deliveries) {
     if (!deliveries.length) return emptyState('▣','Nenhuma entrega encontrada','Registre uma nova entrega ou altere o recorte de análise.');
-    return `<div class="table-wrap"><table><thead><tr><th>Data</th><th>Cupom</th><th>Bairro</th><th>Status</th><th>Taxa</th><th>Espera</th><th>Até cliente</th><th>Rota total</th><th>Atraso</th><th>Ações</th></tr></thead><tbody>${deliveries.map(d => {
+    return `<div class="table-wrap"><table><thead><tr><th>Data</th><th>Cupom</th><th>Bairro</th><th>Status</th><th>Taxa registrada</th><th>Reembolso</th><th>Espera</th><th>Até cliente</th><th>Rota total</th><th>Atraso</th><th>Ações</th></tr></thead><tbody>${deliveries.map(d => {
       const calc = deliveryCalc(d);
       return `<tr>
         <td><div class="cell-title mono">${dateBR(d.date)}</div><div class="cell-sub">Entrada ${d.purchaseTime || '—'}</div></td>
         <td><div class="cell-title">${esc(d.coupon || '—')}</div><div class="cell-sub">Compra ${esc(d.orderNo || '—')}</div></td>
         <td>${esc(neighborhood(d.neighborhoodId)?.name || '—')}</td>
         <td>${statusBadge(d.status)}</td>
-        <td>${money(d.fee)}</td>
+        <td>${money(rootDelivery(d)?.fee || d.fee)}</td>
+        <td>${money(rootDelivery(d)?.refundAmount || 0)}</td>
         <td>${fmtMinutes(calc.wait)}</td>
         <td>${fmtMinutes(calc.toClient)}</td>
         <td>${fmtMinutes(calc.route)}</td>
@@ -817,6 +907,7 @@
     return state.neighborhoods.map(n => {
       const all = deliveries.filter(d => d.neighborhoodId === n.id);
       const final = all.filter(d => d.status === 'Finalizada');
+      const purchases = all.filter(isRootPurchase);
       const devolutions = all.filter(d => d.status === 'Devolvida').length;
       const wrongAddress = all.filter(d => d.reasonId === 'ENDERECO_ERRADO').length;
       const scheduled = all.filter(d => d.scheduledDate && (d.scheduleKind || 'Programada') === 'Programada').length;
@@ -826,7 +917,7 @@
       return {
         id:n.id,name:n.name,
         deliveries:final.length,
-        revenue:sum(final.map(d=>d.fee)),
+        revenue:sum(purchases.map(d=>Number(d.fee||0)-Number(d.refundAmount||0))),
         devolutions, wrongAddress, scheduled, rescheduled, delayed, problemCount,
         totalRecords:all.length,
         returnRate:all.length ? devolutions/all.length*100 : 0,
@@ -866,7 +957,7 @@
         ${cardMetric('Registros',chain.length,'Histórico completo','▣','blue')}
         ${cardMetric('Reagendamentos',reSchedules,'Mudanças de data','↻','yellow')}
         ${cardMetric('Situação atual',chain.at(-1)?.status || '—','Último registro','•','purple')}
-        ${cardMetric('Faturamento',money(sum(final.map(d=>d.fee))),'Finalizadas','R$','green')}
+        ${cardMetric('Faturamento líquido',money(netRevenueOfRoot(chain[0])),'Registrado na compra original','R$','green')}
         ${cardMetric('Bairro',neighborhood(chain[0]?.neighborhoodId)?.name || '—','Origem','◎','blue')}
       </section>
       <div class="trace-timeline">${chain.map(d=>{const c=deliveryCalc(d); return `<div class="trace-event"><strong>${dateBR(d.date)} • ${esc(d.status)}</strong><p>Entrada ${d.purchaseTime||'—'} • Saída ${d.departureTime||'—'} • Finalização ${d.finalizationTime||'—'} • Retorno ${d.returnTime||'—'}<br>Espera ${fmtMinutes(c.wait)} • Até cliente ${fmtMinutes(c.toClient)} • Rota ${fmtMinutes(c.route)}${d.scheduledDate?`<br>${esc(d.scheduleKind||'Programada')} para ${dateBR(d.scheduledDate)} • ${esc(reason(d.reasonId)?.name || d.reasonText || '')}`:''}</p></div>`}).join('')}</div>`;
@@ -987,8 +1078,15 @@
   }
 
   function bindViewActions() {
-    $$('[data-action="new-delivery"]').forEach(b=>b.addEventListener('click',()=>openDeliveryModal()));
+    $$('[data-action="new-delivery"]').forEach(b=>b.addEventListener('click',()=>openQuickDeliveryModal()));
     $$('[data-action="edit-delivery"]').forEach(b=>b.addEventListener('click',()=>openDeliveryModal(b.dataset.id)));
+
+    $$('[data-action="quick-departure"]').forEach(b=>b.addEventListener('click',()=>quickDeparture(b.dataset.id)));
+    $$('[data-action="quick-delivered"]').forEach(b=>b.addEventListener('click',()=>quickDelivered(b.dataset.id)));
+    $$('[data-action="quick-return"]').forEach(b=>b.addEventListener('click',()=>quickReturn(b.dataset.id)));
+    $$('[data-action="quick-reschedule"]').forEach(b=>b.addEventListener('click',()=>quickReschedule(b.dataset.id)));
+    $$('[data-action="quick-pickup"]').forEach(b=>b.addEventListener('click',()=>quickPickup(b.dataset.id)));
+    $$('[data-action="quick-devolution"]').forEach(b=>b.addEventListener('click',()=>quickDevolution(b.dataset.id)));
     $$('[data-action="trace-delivery"]').forEach(b=>b.addEventListener('click',()=>{navigate('trace');setTimeout(()=>{$('#traceInput').value=b.dataset.coupon;showTrace(b.dataset.coupon);},0);}));
     $$('[data-action="start-scheduled"]').forEach(b=>b.addEventListener('click',()=>startScheduledDelivery(b.dataset.id)));
     $$('[data-action="new-cycle"]').forEach(b=>b.addEventListener('click',()=>openCycleModal()));
@@ -1020,13 +1118,87 @@
     return `<option value="">Selecione...</option>` + list.filter(x=>x.active || x.id===selected).map(x=>`<option value="${x.id}" ${x.id===selected?'selected':''}>${esc(x[label])}</option>`).join('');
   }
 
+
+  function openQuickDeliveryModal() {
+    const today = todayISO();
+    const time = currentTimeHM();
+    openModal('Registrar compra','Só o essencial agora. Os demais dados são atualizados depois com botões rápidos.',`
+      <form id="quickDeliveryForm" class="quick-entry-form">
+        <div class="quick-entry-hero">
+          <div><span>1</span><strong>Identifique a compra</strong><small>Faturamento da taxa entra no momento em que você salvar.</small></div>
+        </div>
+        <div class="quick-entry-grid">
+          <label>Data da compra<input name="date" type="date" value="${today}" required /></label>
+          <label>Nº da compra<input name="orderNo" placeholder="Ordem de chegada" /></label>
+          <label>Cupom PDV<input name="coupon" inputmode="numeric" autofocus required placeholder="Ex.: 45879" /></label>
+          <label>Hora da compra<input name="purchaseTime" type="time" value="${time}" required /></label>
+          <label class="span-2">Bairro<select name="neighborhoodId" required>${options(state.neighborhoods,'')}</select></label>
+        </div>
+
+        <div class="quick-entry-block">
+          <div class="quick-entry-title"><span>2</span><div><strong>Qual foi a taxa cobrada?</strong><small>Escolha uma opção.</small></div></div>
+          <input type="hidden" name="fee" id="quickFee" value="" />
+          <div class="choice-buttons" id="feeChoices">
+            <button type="button" class="choice-btn" data-value="6.99">R$ 6,99</button>
+            <button type="button" class="choice-btn" data-value="9.99">R$ 9,99</button>
+            <button type="button" class="choice-btn" data-value="0">Sem taxa</button>
+          </div>
+        </div>
+
+        <div class="quick-entry-block">
+          <div class="quick-entry-title"><span>3</span><div><strong>Quando será entregue?</strong><small>Hoje ou em uma data específica.</small></div></div>
+          <input type="hidden" name="deliveryMode" id="quickDeliveryMode" value="today" />
+          <div class="choice-buttons" id="deliveryModeChoices">
+            <button type="button" class="choice-btn selected" data-value="today">🚚 Entregar hoje</button>
+            <button type="button" class="choice-btn" data-value="schedule">📅 Agendar outro dia</button>
+          </div>
+          <label id="quickScheduledDateWrap" class="quick-schedule-date hidden">Data programada<input name="scheduledDate" type="date" min="${today}" /></label>
+        </div>
+
+        <div class="finance-rule-note">💡 <strong>Regra financeira:</strong> a taxa entra no faturamento agora, ao registrar a compra. Se houver retirada na loja com reembolso, o app registra o reembolso separadamente.</div>
+        <div class="form-actions"><button type="button" class="btn secondary" id="cancelQuickDeliveryBtn">Cancelar</button><button type="submit" class="btn primary large-action">Registrar compra</button></div>
+      </form>
+    `,'LANÇAMENTO RÁPIDO');
+
+    const feeButtons = $$('#feeChoices .choice-btn');
+    feeButtons.forEach(btn=>btn.addEventListener('click',()=>{
+      feeButtons.forEach(x=>x.classList.remove('selected')); btn.classList.add('selected'); $('#quickFee').value=btn.dataset.value;
+    }));
+    const modeButtons = $$('#deliveryModeChoices .choice-btn');
+    modeButtons.forEach(btn=>btn.addEventListener('click',()=>{
+      modeButtons.forEach(x=>x.classList.remove('selected')); btn.classList.add('selected'); $('#quickDeliveryMode').value=btn.dataset.value;
+      $('#quickScheduledDateWrap').classList.toggle('hidden',btn.dataset.value!=='schedule');
+    }));
+    $('#cancelQuickDeliveryBtn').addEventListener('click',closeModal);
+    $('#quickDeliveryForm').addEventListener('submit',async e=>{
+      e.preventDefault();
+      const data=Object.fromEntries(new FormData(e.target).entries());
+      if(data.fee===''){toast('Escolha a taxa de entrega.','warning');return;}
+      if(data.deliveryMode==='schedule' && !data.scheduledDate){toast('Informe a data programada.','warning');return;}
+      const id=uid('del');
+      const scheduled=data.deliveryMode==='schedule';
+      const d={
+        id,rootId:id,parentId:'',attemptNo:1,date:data.date,orderNo:data.orderNo||'',coupon:data.coupon,purchaseTime:data.purchaseTime,
+        neighborhoodId:data.neighborhoodId,fee:Number(data.fee||0),driverId:'',vehicleId:'',cycleId:'',departureTime:'',finalizationTime:'',returnTime:'',
+        status:scheduled?'Programada':'Na loja',scheduledDate:scheduled?data.scheduledDate:'',scheduleKind:'Programada',reasonId:scheduled?'CLIENTE_OUTRO_DIA':'',reasonText:'',nextAction:scheduled?'Entregar na data programada':'',notes:'',
+        refundAmount:0,refundDate:'',withdrawalDate:'',withdrawalTime:'',createdAt:nowISO(),updatedAt:nowISO(),
+        history:[{id:uid('evt'),type:'purchase_registered',at:nowISO(),fee:Number(data.fee||0)}]
+      };
+      if(scheduled)d.history.push({id:uid('evt'),type:'scheduled',from:d.date,to:d.scheduledDate,kind:'Programada',at:nowISO(),reasonId:d.reasonId});
+      state.deliveries.push(d);
+      await saveState(`Compra ${d.coupon} registrada`);
+      closeModal();toast('Compra registrada. A taxa já entrou no faturamento.','success');render();
+    });
+  }
+
   function openDeliveryModal(id='') {
+    if (!id) { openQuickDeliveryModal(); return; }
     const existing = id ? state.deliveries.find(d=>d.id===id) : null;
     const d = existing ? {...existing} : {
       id:uid('del'), rootId:'', parentId:'', attemptNo:1,
       date:todayISO(), orderNo:'', coupon:'', purchaseTime:'', neighborhoodId:'', fee:0,
       driverId:'', vehicleId:'', cycleId:'', departureTime:'', finalizationTime:'', returnTime:'',
-      status:'Na loja', scheduledDate:'', scheduleKind:'Programada', reasonId:'', reasonText:'', nextAction:'', notes:'', createdAt:nowISO(), updatedAt:nowISO(), history:[]
+      status:'Na loja', scheduledDate:'', scheduleKind:'Programada', reasonId:'', reasonText:'', nextAction:'', notes:'', refundAmount:0, refundDate:'', withdrawalDate:'', withdrawalTime:'', createdAt:nowISO(), updatedAt:nowISO(), history:[]
     };
     if (!d.rootId) d.rootId = d.id;
     const calc = deliveryCalc(d);
@@ -1056,6 +1228,16 @@
           </div>
         </div>
 
+
+
+        <div class="form-section"><div class="form-section-title">Financeiro e retirada na loja</div>
+          <div class="form-grid">
+            <div class="form-note span-2">A taxa original de <strong>${money(rootDelivery(d)?.fee || d.fee)}</strong> foi contabilizada no registro da compra. Reagendamentos não geram nova receita.</div>
+            <label>Valor reembolsado<input name="refundAmount" type="number" step="0.01" min="0" value="${Number(rootDelivery(d)?.refundAmount||0)||''}" /></label>
+            <label>Data do reembolso<input name="refundDate" type="date" value="${rootDelivery(d)?.refundDate||''}" /></label>
+          </div>
+        </div>
+
         <div class="form-section"><div class="form-section-title">Programação, reagendamento e ocorrências</div>
           <div class="form-grid">
             <label>Data programada<input name="scheduledDate" type="date" value="${d.scheduledDate || ''}" /></label>
@@ -1079,7 +1261,10 @@
       e.preventDefault();
       const data = Object.fromEntries(new FormData(e.target).entries());
       data.fee = Number(data.fee || 0);
+      data.refundAmount = Number(data.refundAmount || 0);
       const old = state.deliveries.find(x=>x.id===data.id);
+      const root = old ? rootDelivery(old) : null;
+      if (root && root.id !== old.id) { root.refundAmount = data.refundAmount; root.refundDate = data.refundDate || ''; data.refundAmount = Number(old.refundAmount||0); data.refundDate = old.refundDate||''; }
       data.rootId = old?.rootId || data.id;
       data.parentId = old?.parentId || '';
       data.attemptNo = old?.attemptNo || 1;
@@ -1108,6 +1293,120 @@
     closeModal(); toast('Registro excluído.','warning'); render();
   }
 
+
+  async function quickDelivered(id) {
+    const d=state.deliveries.find(x=>x.id===id); if(!d)return;
+    d.finalizationTime=currentTimeHM();
+    if(!d.departureTime)d.departureTime=d.finalizationTime;
+    d.status=d.returnTime?'Finalizada':'Em rota';d.updatedAt=nowISO();d.history||=[];d.history.push({id:uid('evt'),type:'delivered',at:nowISO(),time:d.finalizationTime});
+    await saveState(`Entrega ${d.coupon} marcada como entregue`);toast('Hora de entrega registrada automaticamente.','success');render();
+  }
+
+  async function quickReturn(id) {
+    const d=state.deliveries.find(x=>x.id===id); if(!d)return;
+    if(!d.finalizationTime && !confirm('A entrega ainda não tem hora de finalização no cliente. Registrar o retorno mesmo assim?'))return;
+    d.returnTime=currentTimeHM();d.status='Finalizada';d.updatedAt=nowISO();d.history||=[];d.history.push({id:uid('evt'),type:'returned_to_store',at:nowISO(),time:d.returnTime});
+    await saveState(`Retorno da entrega ${d.coupon} registrado`);toast('Retorno à loja registrado. Entrega finalizada.','success');render();
+  }
+
+  function quickDeparture(id) {
+    const d=state.deliveries.find(x=>x.id===id); if(!d)return;
+    const openCycles=state.cycles.filter(c=>c.date===todayISO()&&!c.returnTime);
+    openModal('Saiu para entrega','Escolha veículo, entregador e, se desejar, vincule ao ciclo atual.',`
+      <form id="quickDepartureForm" class="quick-action-form">
+        <div class="quick-action-summary"><strong>Cupom ${esc(d.coupon||'—')}</strong><small>${esc(neighborhood(d.neighborhoodId)?.name||'Sem bairro')} • Entrada ${d.purchaseTime||'—'}</small></div>
+        <div class="form-grid">
+          <label>Hora da saída<input name="departureTime" type="time" value="${currentTimeHM()}" required /></label>
+          <label>Veículo<select name="vehicleId" required>${options(state.vehicles,d.vehicleId)}</select></label>
+          <label>Entregador<select name="driverId" required>${options(state.employees.filter(x=>x.role==='Entregador'||x.role==='Colaborador'),d.driverId)}</select></label>
+          <label>Ciclo<select name="cycleId"><option value="">Sem ciclo</option>${openCycles.map(c=>`<option value="${c.id}">${esc(c.code)}</option>`).join('')}<option value="__new__">＋ Criar novo ciclo agora</option></select></label>
+        </div>
+        <div class="form-actions"><button type="button" class="btn secondary" id="cancelDepartureBtn">Cancelar</button><button type="submit" class="btn primary large-action">Confirmar saída</button></div>
+      </form>
+    `,'AÇÃO RÁPIDA');
+    $('#cancelDepartureBtn').addEventListener('click',closeModal);
+    $('#quickDepartureForm').addEventListener('submit',async e=>{
+      e.preventDefault();const data=Object.fromEntries(new FormData(e.target).entries());
+      let cycleId=data.cycleId;
+      if(cycleId==='__new__'){
+        const c={id:uid('cyc'),code:`CIC-${String(state.cycles.length+1).padStart(4,'0')}`,date:todayISO(),vehicleId:data.vehicleId,driverId:data.driverId,departureTime:data.departureTime,returnTime:'',kmStart:0,kmEnd:0,notes:'Criado automaticamente na saída rápida.',createdAt:nowISO(),updatedAt:nowISO()};
+        state.cycles.push(c);cycleId=c.id;
+      }
+      d.departureTime=data.departureTime;d.vehicleId=data.vehicleId;d.driverId=data.driverId;d.cycleId=cycleId||'';d.status='Em rota';d.updatedAt=nowISO();d.history||=[];d.history.push({id:uid('evt'),type:'departure',at:nowISO(),time:d.departureTime,vehicleId:d.vehicleId,driverId:d.driverId,cycleId:d.cycleId});
+      await saveState(`Saída da entrega ${d.coupon} registrada`);closeModal();toast('Saída registrada automaticamente.','success');render();
+    });
+  }
+
+  function quickReschedule(id) {
+    const d=state.deliveries.find(x=>x.id===id);if(!d)return;
+    openModal('Reagendar entrega','Escolha a nova data. O histórico anterior será preservado e não haverá novo faturamento.',`
+      <form id="quickRescheduleForm" class="quick-action-form">
+        <div class="quick-action-summary"><strong>Cupom ${esc(d.coupon||'—')}</strong><small>Taxa original ${money(rootDelivery(d)?.fee||d.fee)} • não será duplicada</small></div>
+        <div class="form-grid">
+          <label>Nova data<input name="scheduledDate" type="date" min="${todayISO()}" required /></label>
+          <label>Motivo<select name="reasonId">${options(state.reasons,d.reasonId)}</select></label>
+          <label class="span-2">Próxima ação<input name="nextAction" value="${attr(d.nextAction||'Reentregar na nova data')}" /></label>
+          <label class="full">Observação<input name="reasonText" placeholder="Opcional" /></label>
+        </div>
+        <div class="form-actions"><button type="button" class="btn secondary" id="cancelRescheduleBtn">Cancelar</button><button type="submit" class="btn primary large-action">Confirmar reagendamento</button></div>
+      </form>
+    `,'AÇÃO RÁPIDA');
+    $('#cancelRescheduleBtn').addEventListener('click',closeModal);
+    $('#quickRescheduleForm').addEventListener('submit',async e=>{
+      e.preventDefault();const data=Object.fromEntries(new FormData(e.target).entries());
+      const oldDate=d.scheduledDate||d.date;d.scheduledDate=data.scheduledDate;d.scheduleKind='Reagendada';d.status='Reagendada';d.reasonId=data.reasonId||'';d.reasonText=data.reasonText||'';d.nextAction=data.nextAction||'';d.updatedAt=nowISO();d.history||=[];d.history.push({id:uid('evt'),type:'schedule_change',from:oldDate,to:d.scheduledDate,kind:'Reagendada',at:nowISO(),reasonId:d.reasonId,reasonText:d.reasonText});
+      await saveState(`Entrega ${d.coupon} reagendada`);closeModal();toast(`Entrega reagendada para ${dateBR(d.scheduledDate)}. O faturamento não foi duplicado.`,'success');render();
+    });
+  }
+
+  function quickPickup(id) {
+    const d=state.deliveries.find(x=>x.id===id);if(!d)return;const root=rootDelivery(d);const fee=Number(root?.fee||0);
+    openModal('Cliente retirou na loja','Registre se houve ou não reembolso da taxa de entrega.',`
+      <form id="quickPickupForm" class="quick-action-form">
+        <div class="quick-action-summary"><strong>Cupom ${esc(d.coupon||'—')}</strong><small>Taxa cobrada no registro: ${money(fee)}</small></div>
+        <div class="quick-entry-block">
+          <div class="quick-entry-title"><span>↩</span><div><strong>Houve reembolso da taxa?</strong><small>O faturamento bruto permanece rastreável e o reembolso é registrado separadamente.</small></div></div>
+          <input type="hidden" name="refundMode" id="refundMode" value="none" />
+          <div class="choice-buttons" id="refundChoices">
+            <button type="button" class="choice-btn selected" data-value="none">Não houve reembolso</button>
+            <button type="button" class="choice-btn" data-value="full">Reembolso total (${money(fee)})</button>
+            <button type="button" class="choice-btn" data-value="custom">Outro valor</button>
+          </div>
+          <label id="customRefundWrap" class="quick-schedule-date hidden">Valor do reembolso<input name="customRefund" type="number" min="0" max="${fee}" step="0.01" /></label>
+        </div>
+        <div class="form-actions"><button type="button" class="btn secondary" id="cancelPickupBtn">Cancelar</button><button type="submit" class="btn primary large-action">Confirmar retirada</button></div>
+      </form>
+    `,'AÇÃO RÁPIDA');
+    const buttons=$$('#refundChoices .choice-btn');buttons.forEach(btn=>btn.addEventListener('click',()=>{buttons.forEach(x=>x.classList.remove('selected'));btn.classList.add('selected');$('#refundMode').value=btn.dataset.value;$('#customRefundWrap').classList.toggle('hidden',btn.dataset.value!=='custom');}));
+    $('#cancelPickupBtn').addEventListener('click',closeModal);
+    $('#quickPickupForm').addEventListener('submit',async e=>{
+      e.preventDefault();const data=Object.fromEntries(new FormData(e.target).entries());let amount=0;if(data.refundMode==='full')amount=fee;if(data.refundMode==='custom')amount=Number(data.customRefund||0);
+      root.refundAmount=amount;root.refundDate=amount>0?todayISO():'';root.withdrawalDate=todayISO();root.withdrawalTime=currentTimeHM();
+      d.status='Retirada na loja';d.returnTime='';d.updatedAt=nowISO();d.history||=[];d.history.push({id:uid('evt'),type:'store_pickup',at:nowISO(),refundAmount:amount});
+      await saveState(`Retirada na loja do cupom ${d.coupon} registrada`);closeModal();toast(amount>0?`Retirada registrada com reembolso de ${money(amount)}.`:'Retirada registrada sem reembolso.','success');render();
+    });
+  }
+
+  function quickDevolution(id) {
+    const d=state.deliveries.find(x=>x.id===id);if(!d)return;
+    openModal('Registrar devolução','Informe o motivo e, se já souber, uma nova data para reentrega.',`
+      <form id="quickDevolutionForm" class="quick-action-form">
+        <div class="form-grid">
+          <label>Motivo<select name="reasonId" required>${options(state.reasons,d.reasonId)}</select></label>
+          <label>Nova data (opcional)<input name="scheduledDate" type="date" min="${todayISO()}" /></label>
+          <label class="span-2">Próxima ação<input name="nextAction" placeholder="Ex.: Aguardar contato do cliente" /></label>
+          <label class="full">Observação<input name="reasonText" placeholder="Opcional" /></label>
+        </div>
+        <div class="form-actions"><button type="button" class="btn secondary" id="cancelDevolutionBtn">Cancelar</button><button type="submit" class="btn primary large-action">Salvar devolução</button></div>
+      </form>
+    `,'AÇÃO RÁPIDA');
+    $('#cancelDevolutionBtn').addEventListener('click',closeModal);
+    $('#quickDevolutionForm').addEventListener('submit',async e=>{
+      e.preventDefault();const data=Object.fromEntries(new FormData(e.target).entries());d.reasonId=data.reasonId;d.reasonText=data.reasonText||'';d.nextAction=data.nextAction||'';d.scheduledDate=data.scheduledDate||'';d.scheduleKind=data.scheduledDate?'Reagendada':d.scheduleKind;d.status=data.scheduledDate?'Reagendada':'Devolvida';d.returnTime=d.returnTime||currentTimeHM();d.updatedAt=nowISO();d.history||=[];d.history.push({id:uid('evt'),type:'devolution',at:nowISO(),reasonId:d.reasonId,scheduledDate:d.scheduledDate});
+      await saveState(`Devolução do cupom ${d.coupon} registrada`);closeModal();toast(d.scheduledDate?`Devolvida e reagendada para ${dateBR(d.scheduledDate)}.`:'Devolução registrada.','success');render();
+    });
+  }
+
   async function startScheduledDelivery(id) {
     const source = state.deliveries.find(d=>d.id===id);
     if (!source || !source.scheduledDate) return;
@@ -1118,7 +1417,7 @@
       date:source.scheduledDate, orderNo:source.orderNo, coupon:source.coupon, purchaseTime:'', neighborhoodId:source.neighborhoodId, fee:source.fee,
       driverId:source.driverId || '', vehicleId:'', cycleId:'', departureTime:'', finalizationTime:'', returnTime:'', status:'Na loja',
       scheduledDate:'', scheduleKind:'Reagendada', reasonId:'', reasonText:'', nextAction:'', notes:`Continuação automática da entrega originada em ${dateBR(source.date)}.`,
-      createdAt:nowISO(),updatedAt:nowISO(),history:[{id:uid('evt'),type:'continued_from',fromId:source.id,at:nowISO()}]
+      refundAmount:0,refundDate:'',withdrawalDate:'',withdrawalTime:'',createdAt:nowISO(),updatedAt:nowISO(),history:[{id:uid('evt'),type:'continued_from',fromId:source.id,at:nowISO()}]
     };
     source.history ||= [];
     source.history.push({id:uid('evt'),type:'continued_to',toId:child.id,at:nowISO()});
@@ -1276,13 +1575,13 @@
     const cycles=state.cycles.filter(c=>inRange(c.date,r));
     const final=deliveries.filter(d=>d.status==='Finalizada');
     const totalCosts=sum(costs.map(c=>c.value));
-    const revenue=sum(final.map(d=>d.fee));
+    const fin=financialsForRange(r);
     const km=sum(cycles.map(c=>cycleCalc(c).km));
     const sheets={
       RESUMO_EXECUTIVO:[
-        ['Indicador','Valor'],['Período',`${dateBR(r.start)} a ${dateBR(r.end)}`],['Entregas registradas',deliveries.length],['Entregas finalizadas',final.length],['Faturamento',revenue],['Custos',totalCosts],['Saldo operacional',revenue-totalCosts],['Custo por entrega',final.length?totalCosts/final.length:0],['KM total',km],['KM por entrega',final.length?km/final.length:0],['Ciclos',cycles.length],['Entregas por ciclo',cycles.length?final.filter(d=>d.cycleId).length/cycles.length:0]
+        ['Indicador','Valor'],['Período',`${dateBR(r.start)} a ${dateBR(r.end)}`],['Entregas registradas',deliveries.length],['Entregas finalizadas',final.length],['Faturamento bruto',fin.gross],['Reembolsos de taxa',fin.refundTotal],['Faturamento líquido',fin.net],['Custos',totalCosts],['Saldo operacional',fin.net-totalCosts],['Custo por entrega',final.length?totalCosts/final.length:0],['KM total',km],['KM por entrega',final.length?km/final.length:0],['Ciclos',cycles.length],['Entregas por ciclo',cycles.length?final.filter(d=>d.cycleId).length/cycles.length:0]
       ],
-      ENTREGAS:[['ID','Data','Nº Compra','Cupom','Bairro','Taxa','Entregador','Veículo','Ciclo','Entrada','Saída','Finalização','Retorno Loja','Espera Min','Até Cliente Min','Rota Min','Atrasada','Status','Data Programada','Tipo Programação','Motivo','Próxima Ação','Observações'],...deliveries.map(d=>{const c=deliveryCalc(d);return[d.id,d.date,d.orderNo,d.coupon,neighborhood(d.neighborhoodId)?.name||'',d.fee,employee(d.driverId)?.name||'',vehicle(d.vehicleId)?.name||'',cycle(d.cycleId)?.code||'',d.purchaseTime,d.departureTime,d.finalizationTime,d.returnTime,c.wait,c.toClient,c.route,c.delayed?'SIM':'NÃO',d.status,d.scheduledDate,d.scheduleKind,reason(d.reasonId)?.name||d.reasonText||'',d.nextAction,d.notes]})],
+      ENTREGAS:[['ID','Data','Nº Compra','Cupom','Bairro','Taxa registrada','Reembolso','Data reembolso','Receita líquida','Entregador','Veículo','Ciclo','Entrada','Saída','Finalização','Retorno Loja','Espera Min','Até Cliente Min','Rota Min','Atrasada','Status','Data Programada','Tipo Programação','Motivo','Próxima Ação','Observações'],...deliveries.map(d=>{const c=deliveryCalc(d);return[d.id,d.date,d.orderNo,d.coupon,neighborhood(d.neighborhoodId)?.name||'',rootDelivery(d)?.fee||d.fee,rootDelivery(d)?.refundAmount||0,rootDelivery(d)?.refundDate||'',netRevenueOfRoot(d),employee(d.driverId)?.name||'',vehicle(d.vehicleId)?.name||'',cycle(d.cycleId)?.code||'',d.purchaseTime,d.departureTime,d.finalizationTime,d.returnTime,c.wait,c.toClient,c.route,c.delayed?'SIM':'NÃO',d.status,d.scheduledDate,d.scheduleKind,reason(d.reasonId)?.name||d.reasonText||'',d.nextAction,d.notes]})],
       CUSTOS:[['Data','Hora','Veículo','Categoria','Descrição','Valor','KM Atual','Fornecedor','Comprovante','Responsável','Observações'],...costs.map(c=>[c.date,c.time,vehicle(c.vehicleId)?.name||'',category(c.categoryId)?.name||'',c.description,c.value,c.km,c.supplier,c.receiptNo,employee(c.responsibleId)?.name||'',c.notes])],
       CICLOS:[['Data','Ciclo','Veículo','Entregador','Saída','Retorno','KM Inicial','KM Final','KM Rodado','Entregas','Tempo Min','Receita'],...cycles.map(c=>{const x=cycleCalc(c);return[c.date,c.code,vehicle(c.vehicleId)?.name||'',employee(c.driverId)?.name||'',c.departureTime,c.returnTime,c.kmStart,c.kmEnd,x.km,x.deliveries,x.minutes,x.revenue]})],
       VEICULOS:buildVehicleReportRows(deliveries,costs,cycles),
@@ -1299,12 +1598,12 @@
 
   function buildVehicleReportRows(deliveries,costs,cycles) {
     const header=['Veículo','Entregas','Faturamento','Custos','Saldo','KM','Custo por Entrega','Custo por KM','Entregas por Ciclo'];
-    const rows=state.vehicles.map(v=>{const d=deliveries.filter(x=>x.vehicleId===v.id&&x.status==='Finalizada');const c=costs.filter(x=>x.vehicleId===v.id);const cy=cycles.filter(x=>x.vehicleId===v.id);const km=sum(cy.map(x=>cycleCalc(x).km));const cost=sum(c.map(x=>x.value));const rev=sum(d.map(x=>x.fee));return[v.name,d.length,rev,cost,rev-cost,km,d.length?cost/d.length:0,km?cost/km:0,cy.length?d.filter(x=>x.cycleId).length/cy.length:0]});
+    const rows=state.vehicles.map(v=>{const d=deliveries.filter(x=>x.vehicleId===v.id&&x.status==='Finalizada');const c=costs.filter(x=>x.vehicleId===v.id);const cy=cycles.filter(x=>x.vehicleId===v.id);const km=sum(cy.map(x=>cycleCalc(x).km));const cost=sum(c.map(x=>x.value));const rev=revenueAttributedTo(d);return[v.name,d.length,rev,cost,rev-cost,km,d.length?cost/d.length:0,km?cost/km:0,cy.length?d.filter(x=>x.cycleId).length/cy.length:0]});
     return [header,...rows.filter(r=>r.slice(1).some(Number))];
   }
   function buildEmployeeReportRows(deliveries) {
     const header=['Colaborador','Função','Entregas','Faturamento','Tempo Médio Rota Min','Devoluções','Atrasadas'];
-    const rows=state.employees.map(e=>{const d=deliveries.filter(x=>x.driverId===e.id);const final=d.filter(x=>x.status==='Finalizada');return[e.name,e.role,final.length,sum(final.map(x=>x.fee)),avg(d.map(x=>deliveryCalc(x).route)),d.filter(x=>x.status==='Devolvida').length,d.filter(x=>deliveryCalc(x).delayed).length]});
+    const rows=state.employees.map(e=>{const d=deliveries.filter(x=>x.driverId===e.id);const final=d.filter(x=>x.status==='Finalizada');return[e.name,e.role,final.length,revenueAttributedTo(final),avg(d.map(x=>deliveryCalc(x).route)),d.filter(x=>x.status==='Devolvida').length,d.filter(x=>deliveryCalc(x).delayed).length]});
     return [header,...rows.filter(r=>r.slice(2).some(Number))];
   }
   function buildNeighborhoodReportRows(deliveries) {
@@ -1325,8 +1624,9 @@
     const costs=state.costs.filter(c=>inRange(c.date,r));
     const cycles=state.cycles.filter(c=>inRange(c.date,r));
     const final=deliveries.filter(d=>d.status==='Finalizada');
+    const fin=financialsForRange(r);
     const nb=buildNeighborhoodRows(deliveries).slice(0,10);
-    const html=`<!doctype html><html><head><meta charset="utf-8"><title>Relatório</title><style>body{font-family:Arial,sans-serif;color:#233743;padding:28px}h1{color:#173A5E}table{border-collapse:collapse;width:100%;margin-top:15px}th,td{border:1px solid #dfe7ec;padding:7px;font-size:12px;text-align:left}th{background:#f3f6f8}.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.c{border:1px solid #dfe7ec;border-radius:10px;padding:12px}.c small{color:#71808c}.c strong{display:block;font-size:20px;margin-top:4px}@media print{button{display:none}}</style></head><body><h1>Controle de Entregas • Relatório</h1><p>${dateBR(r.start)} a ${dateBR(r.end)}</p><div class="cards"><div class="c"><small>Entregas</small><strong>${final.length}</strong></div><div class="c"><small>Faturamento</small><strong>${money(sum(final.map(d=>d.fee)))}</strong></div><div class="c"><small>Custos</small><strong>${money(sum(costs.map(c=>c.value)))}</strong></div><div class="c"><small>KM</small><strong>${number(sum(cycles.map(c=>cycleCalc(c).km)),1)}</strong></div></div><h2>Top bairros</h2><table><tr><th>Bairro</th><th>Entregas</th><th>Faturamento</th><th>Endereço errado</th><th>Reagendadas</th><th>Devoluções</th></tr>${nb.map(r=>`<tr><td>${esc(r.name)}</td><td>${r.deliveries}</td><td>${money(r.revenue)}</td><td>${r.wrongAddress}</td><td>${r.rescheduled}</td><td>${r.devolutions}</td></tr>`).join('')}</table><script>window.onload=()=>window.print()<\/script></body></html>`;
+    const html=`<!doctype html><html><head><meta charset="utf-8"><title>Relatório</title><style>body{font-family:Arial,sans-serif;color:#233743;padding:28px}h1{color:#173A5E}table{border-collapse:collapse;width:100%;margin-top:15px}th,td{border:1px solid #dfe7ec;padding:7px;font-size:12px;text-align:left}th{background:#f3f6f8}.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.c{border:1px solid #dfe7ec;border-radius:10px;padding:12px}.c small{color:#71808c}.c strong{display:block;font-size:20px;margin-top:4px}@media print{button{display:none}}</style></head><body><h1>Controle de Entregas • Relatório</h1><p>${dateBR(r.start)} a ${dateBR(r.end)}</p><div class="cards"><div class="c"><small>Entregas</small><strong>${final.length}</strong></div><div class="c"><small>Faturamento bruto</small><strong>${money(fin.gross)}</strong></div><div class="c"><small>Reembolsos</small><strong>${money(fin.refundTotal)}</strong></div><div class="c"><small>Faturamento líquido</small><strong>${money(fin.net)}</strong></div><div class="c"><small>Custos</small><strong>${money(sum(costs.map(c=>c.value)))}</strong></div><div class="c"><small>KM</small><strong>${number(sum(cycles.map(c=>cycleCalc(c).km)),1)}</strong></div></div><h2>Top bairros</h2><table><tr><th>Bairro</th><th>Entregas</th><th>Faturamento</th><th>Endereço errado</th><th>Reagendadas</th><th>Devoluções</th></tr>${nb.map(r=>`<tr><td>${esc(r.name)}</td><td>${r.deliveries}</td><td>${money(r.revenue)}</td><td>${r.wrongAddress}</td><td>${r.rescheduled}</td><td>${r.devolutions}</td></tr>`).join('')}</table><script>window.onload=()=>window.print()<\/script></body></html>`;
     const w=window.open('','_blank');w.document.write(html);w.document.close();
   }
 
