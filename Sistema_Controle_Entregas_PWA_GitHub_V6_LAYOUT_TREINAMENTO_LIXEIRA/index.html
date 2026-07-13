@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#F7FAFC" />
+  <meta name="description" content="Sistema anual de gestão de entregas, frota, custos, ciclos, programadas, pendências e relatórios." />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="stylesheet" href="styles.css" />
+  <title>NX Entregas • Operação, Frota e Inteligência</title>
+</head>
+<body>
+  <div id="bootScreen" class="boot-screen">
+    <div class="boot-card">
+      <div class="brand-mark large">NX</div>
+      <h1>NX Entregas</h1>
+      <p>Preparando sua operação...</p>
+      <div class="boot-progress"><span></span></div>
+    </div>
+  </div>
+
+  <div class="app-shell" id="appShell" aria-hidden="true">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-top">
+        <div class="brand-block">
+          <div class="brand-mark">NX</div>
+          <div class="brand-copy">
+            <strong>NX Operações</strong>
+            <small>Entregas • Frota • Inteligência</small>
+          </div>
+        </div>
+
+        <div class="connection-card" id="connectionCard">
+          <span class="connection-dot" id="connectionDot"></span>
+          <div>
+            <strong id="connectionTitle">Verificando conexão...</strong>
+            <small id="connectionSubtitle">Dados locais protegidos</small>
+          </div>
+        </div>
+
+        <div class="mode-card">
+          <div class="mode-card-head"><span>AMBIENTE</span><strong id="topModeBadge" class="top-mode-badge production">● Operação real</strong></div>
+          <div class="mode-switch"><button class="mode-choice active" data-mode="production"><span>●</span> Real</button><button class="mode-choice" data-mode="training"><span>🧪</span> Treino</button></div>
+          <small id="modeHint">Dados oficiais da operação.</small>
+        </div>
+      </div>
+
+      <nav class="main-nav" id="mainNav">
+        <p class="nav-caption">VISÃO GERAL</p>
+        <button class="nav-item active" data-view="dashboard"><span class="nav-ico">▦</span><span>Dashboard</span></button>
+        <button class="nav-item" data-view="today"><span class="nav-ico">⌂</span><span>Operação do dia</span><span class="nav-badge" id="todayPendingBadge">0</span></button>
+
+        <p class="nav-caption">OPERAÇÃO</p>
+        <button class="nav-item" data-view="deliveries"><span class="nav-ico">▣</span><span>Entregas</span></button>
+        <button class="nav-item" data-view="scheduled"><span class="nav-ico">◷</span><span>Programadas</span><span class="nav-badge" id="scheduledBadge">0</span></button>
+        <button class="nav-item" data-view="pending"><span class="nav-ico">!</span><span>Pendências</span><span class="nav-badge danger" id="pendingBadge">0</span></button>
+        <button class="nav-item" data-view="cycles"><span class="nav-ico">↻</span><span>Ciclos</span></button>
+        <button class="nav-item" data-view="odometer"><span class="nav-ico">KM</span><span>Quilometragem</span></button>
+
+        <p class="nav-caption">GESTÃO</p>
+        <button class="nav-item" data-view="costs"><span class="nav-ico">R$</span><span>Custos</span></button>
+        <button class="nav-item" data-view="neighborhoods"><span class="nav-ico">◎</span><span>Análise por bairro</span></button>
+        <button class="nav-item" data-view="trace"><span class="nav-ico">⌕</span><span>Rastrear cupom</span></button>
+        <button class="nav-item" data-view="reports"><span class="nav-ico">⇩</span><span>Relatórios</span></button>
+        <button class="nav-item" data-view="trash"><span class="nav-ico">⌫</span><span>Lixeira</span><span class="nav-badge" id="trashBadge">0</span></button>
+        <button class="nav-item" data-view="settings"><span class="nav-ico">⚙</span><span>Cadastros</span></button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div>
+          <span>Modo local + offline</span>
+          <small>Pronto para GitHub Pages</small>
+        </div>
+        <button class="mini-icon-btn" id="installBtn" title="Instalar aplicativo" hidden>⇩</button>
+      </div>
+    </aside>
+
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <main class="main-content">
+      <header class="topbar">
+        <div class="topbar-title">
+          <button class="menu-btn mobile-only" id="menuBtn" aria-label="Abrir menu">☰</button>
+          <div>
+            <h1 id="pageTitle">Dashboard</h1>
+            <p id="pageSubtitle">Visão geral da operação, custos, faturamento e produtividade.</p>
+          </div>
+        </div>
+        <div class="topbar-actions">
+          <span class="desktop-mode-chip" id="desktopModeChip">● Ambiente real</span>
+          <button class="btn secondary desktop-only" id="backupBtn">↓ Backup</button>
+          <label class="btn secondary desktop-only file-btn">↑ Restaurar<input id="restoreInput" type="file" accept=".json" hidden /></label>
+          <button class="btn primary" id="quickNewDeliveryBtn">＋ Registrar compra</button>
+        </div>
+      </header>
+
+      <section class="filter-panel card" id="globalFilterPanel">
+        <div class="filter-intro">
+          <div class="filter-icon">⌁</div>
+          <div>
+            <strong>Recorte de análise</strong>
+            <small>Escolha ano, mês, semana ou período personalizado.</small>
+          </div>
+        </div>
+        <div class="filter-fields">
+          <label>Ano<select id="filterYear"></select></label>
+          <label>Mês<select id="filterMonth">
+            <option value="">Todos</option>
+            <option value="01">Janeiro</option><option value="02">Fevereiro</option>
+            <option value="03">Março</option><option value="04">Abril</option>
+            <option value="05">Maio</option><option value="06">Junho</option>
+            <option value="07">Julho</option><option value="08">Agosto</option>
+            <option value="09">Setembro</option><option value="10">Outubro</option>
+            <option value="11">Novembro</option><option value="12">Dezembro</option>
+          </select></label>
+          <label>Semana<select id="filterWeek"><option value="">Todas</option></select></label>
+          <label>De<input id="filterStart" type="date" /></label>
+          <label>Até<input id="filterEnd" type="date" /></label>
+          <button class="btn primary compact" id="applyFiltersBtn">Aplicar</button>
+          <button class="btn secondary compact" id="clearFiltersBtn">Limpar</button>
+        </div>
+      </section>
+
+      <section id="view" class="view"></section>
+    </main>
+  </div>
+
+  <div class="modal-wrap hidden" id="modalWrap" role="dialog" aria-modal="true">
+    <div class="modal" id="modal">
+      <div class="modal-head">
+        <div>
+          <span class="modal-kicker" id="modalKicker">CADASTRO OPERACIONAL</span>
+          <h2 id="modalTitle"></h2>
+          <p id="modalSubtitle"></p>
+        </div>
+        <button class="close-modal" id="modalClose" aria-label="Fechar">✕</button>
+      </div>
+      <div id="modalBody"></div>
+    </div>
+  </div>
+
+  <div class="toast-stack" id="toastStack"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
