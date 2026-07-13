@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nx-entregas-v6-training-trash';
+const CACHE_NAME = 'nx-entregas-v7-clareza-intuitiva';
 const APP_SHELL = [
   './',
   './index.html',

@@ -1,13 +1,12 @@
-# NX Entregas V6 — Layout renovado, Treinamento e Lixeira
+# NX Entregas V7 — Clareza e facilidade de uso
 
-- Layout totalmente redesenhado.
-- Modo Operação Real e modo Treinamento com dados separados.
-- Geração de dados de exemplo para treinamento.
-- Limpeza do ambiente de treinamento sem tocar nos dados reais.
-- Exclusão de entregas, ciclos, custos e KM.
-- Lixeira com restauração e exclusão definitiva.
-- Ciclos com entregas editáveis.
-- KM diário separado dos ciclos.
-- PWA offline e relatórios.
+Principais mudanças:
+- dashboard separado em Financeiro, Operação e Frota;
+- menos cores e uso semântico de azul/verde/amarelo/vermelho;
+- número da compra em grande destaque;
+- nova compra mostra a última compra do dia e sugere o próximo número;
+- cada entrega mostra claramente Entrada, Saída, Entregue ao cliente e Retorno à loja;
+- próxima ação destacada e outras ações separadas;
+- mantém modo treinamento, lixeira, ciclos editáveis, KM diário, custos e exportação.
 
-Faça Backup JSON antes de atualizar o GitHub.
+Para atualizar no GitHub Pages, substitua todos os arquivos do repositório pelos desta versão e faça um novo commit.

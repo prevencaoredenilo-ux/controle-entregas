@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const APP_VERSION = '6.0.0';
+  const APP_VERSION = '7.0.0';
   const DB_NAME = 'controle_entregas_nx';
   const DB_VERSION = 1;
   const STORE_NAME = 'app_state';
@@ -607,16 +607,16 @@
   function emptyState(icon,title,text) { return `<div class="empty-state"><div class="empty-icon">${icon}</div><strong>${esc(title)}</strong><p>${esc(text)}</p></div>`; }
 
   function renderDashboard() {
+    const range = selectedRange();
     const deliveries = filteredDeliveries();
+    const final = deliveries.filter(d => d.status === 'Finalizada');
     const costs = filteredCosts();
     const cycles = filteredCycles();
     const odometers = filteredOdometers();
-    const final = deliveries.filter(d => d.status === 'Finalizada');
-    const range = selectedRange();
+    const activeDays = Math.max(1, unique([...deliveries.map(d=>d.date),...costs.map(c=>c.date),...cycles.map(c=>c.date),...odometers.map(o=>o.date)]).length);
     const fin = financialsForRange(range);
     const totalCosts = sum(costs.map(c => c.value));
     const totalKm = totalKmFromOdometers(odometers);
-    const activeDays = unique([...deliveries.map(d => d.date),...cycles.map(c => c.date),...odometers.map(o => o.date),...costs.map(c => c.date)]).length || 1;
     const carriedInCycles = sum(cycles.map(c => cycleCalc(c).deliveries));
     const deliveriesPerCycle = cycles.length ? carriedInCycles / cycles.length : 0;
     const costPerDelivery = final.length ? totalCosts / final.length : 0;
@@ -632,32 +632,48 @@
     const topReschedule = [...nbRows].sort((a,b) => b.rescheduled-a.rescheduled)[0];
 
     $('#view').innerHTML = `
-      <section class="hero-strip">
-        <div><span class="hero-mode-label">${currentMode()==='training'?'🧪 TREINAMENTO':'OPERAÇÃO REAL'}</span><h2>Visão executiva • ${esc(range.label)}</h2><p>O faturamento entra no momento em que a compra é registrada. Reagendamentos não duplicam receita.</p></div>
+      <section class="hero-strip simple-hero">
+        <div><span class="hero-mode-label">${currentMode()==='training'?'🧪 TREINAMENTO':'OPERAÇÃO REAL'}</span><h2>Visão executiva • ${esc(range.label)}</h2><p>As informações agora estão separadas por assunto: Financeiro, Operação e Frota. Menos cores, mais clareza.</p></div>
         <div class="hero-meta"><span class="hero-chip">${fin.purchases.length} compras</span><span class="hero-chip">${final.length} entregas finalizadas</span><span class="hero-chip">${number(totalKm,1)} km</span></div>
       </section>
 
-      <section class="metrics-grid">
-        ${cardMetric('Faturamento bruto', money(fin.gross), `${fin.purchases.length} compras registradas`, 'R$', 'green')}
-        ${cardMetric('Reembolsos de taxa', money(fin.refundTotal), `${fin.refunds.length} reembolsos`, '↩', fin.refundTotal ? 'yellow':'blue')}
-        ${cardMetric('Faturamento líquido', money(fin.net), 'Bruto menos reembolsos', '+', 'green')}
-        ${cardMetric('Custos totais', money(totalCosts), `Combustível: ${money(fuel)}`, '−', 'red')}
-        ${cardMetric('Saldo operacional', money(fin.net-totalCosts), 'Líquido menos custos registrados', '+', fin.net-totalCosts >= 0 ? 'green':'red')}
-        ${cardMetric('Custo por entrega', money(costPerDelivery), 'Custos ÷ entregas finalizadas', 'CE', 'yellow')}
-        ${cardMetric('Entregas por ciclo', number(deliveriesPerCycle,2), `${cycles.length} ciclos registrados`, '↻', 'purple')}
-        ${cardMetric('KM total', `${number(totalKm,1)} km`, `${odometers.filter(o=>odometerCalc(o).complete).length} fechamentos de KM`, 'KM', 'blue')}
-        ${cardMetric('KM médio por dia', `${number(totalKm/activeDays,1)} km`, `${activeDays} dias com movimento`, '↗', 'blue')}
-        ${cardMetric('KM médio por ciclo', `${number(cycles.length?totalKm/cycles.length:0,2)} km`, 'KM diário ÷ ciclos', '↻', 'green')}
-        ${cardMetric('KM por entrega', `${number(final.length?totalKm/final.length:0,2)} km`, 'Média das finalizadas', '▣', 'blue')}
-        ${cardMetric('Tempo médio de espera', fmtMinutes(avgWait), 'Compra → saída', '⌛', 'yellow')}
-        ${cardMetric('Tempo médio de rota', fmtMinutes(avgRoute), 'Saída → retorno à loja', '◷', 'purple')}
-        ${cardMetric('Pendências críticas', allPending().filter(d => inRange(d.date)).length, `${delayed} atrasadas • ${openSched} programadas`, '!', 'red')}
+      <section class="dashboard-group finance-group">
+        <div class="dashboard-group-head"><div><span>FINANCEIRO</span><h3>Receitas, reembolsos e custos</h3></div><small>Valores do período selecionado</small></div>
+        <div class="metrics-grid grouped five">
+          ${cardMetric('Faturamento bruto', money(fin.gross), `${fin.purchases.length} compras registradas`, 'R$', 'blue')}
+          ${cardMetric('Reembolsos de taxa', money(fin.refundTotal), `${fin.refunds.length} reembolsos`, '↩', 'blue')}
+          ${cardMetric('Faturamento líquido', money(fin.net), 'Bruto menos reembolsos', '+', 'green')}
+          ${cardMetric('Custos totais', money(totalCosts), `Combustível: ${money(fuel)}`, '−', 'red')}
+          ${cardMetric('Saldo operacional', money(fin.net-totalCosts), 'Líquido menos custos', '+', fin.net-totalCosts >= 0 ? 'green':'red')}
+        </div>
+      </section>
+
+      <section class="dashboard-group operation-group">
+        <div class="dashboard-group-head"><div><span>OPERAÇÃO</span><h3>Entregas e qualidade operacional</h3></div><small>Volume, tempos e pendências</small></div>
+        <div class="metrics-grid grouped five">
+          ${cardMetric('Entregas finalizadas', final.length, `${deliveries.length} registros no período`, '▣', 'blue')}
+          ${cardMetric('Tempo médio de espera', fmtMinutes(avgWait), 'Compra → saída', '⌛', 'blue')}
+          ${cardMetric('Tempo médio de rota', fmtMinutes(avgRoute), 'Saída → retorno à loja', '◷', 'blue')}
+          ${cardMetric('Atrasadas', delayed, `Limite de ${state.settings.delayMinutes} min úteis`, '!', delayed ? 'red':'blue')}
+          ${cardMetric('Programadas abertas', openSched, 'Ainda não concluídas', '◷', openSched ? 'yellow':'blue')}
+        </div>
+      </section>
+
+      <section class="dashboard-group fleet-group">
+        <div class="dashboard-group-head"><div><span>FROTA E EFICIÊNCIA</span><h3>KM, ciclos e produtividade</h3></div><small>Médias calculadas a partir do KM diário</small></div>
+        <div class="metrics-grid grouped five">
+          ${cardMetric('Custo por entrega', money(costPerDelivery), 'Custos ÷ finalizadas', 'CE', 'blue')}
+          ${cardMetric('Entregas por ciclo', number(deliveriesPerCycle,2), `${cycles.length} ciclos registrados`, '↻', 'blue')}
+          ${cardMetric('KM total', `${number(totalKm,1)} km`, `${odometers.filter(o=>odometerCalc(o).complete).length} fechamentos`, 'KM', 'blue')}
+          ${cardMetric('KM médio por dia', `${number(totalKm/activeDays,1)} km`, `${activeDays} dias com movimento`, '↗', 'blue')}
+          ${cardMetric('KM por entrega', `${number(final.length?totalKm/final.length:0,2)} km`, 'Média das finalizadas', '▣', 'blue')}
+        </div>
       </section>
 
       <section class="dashboard-grid">
         <article class="card section-card">
           ${sectionHeader('▥','Entregas por dia','Evolução das entregas finalizadas no período.')}
-          <div class="chart-box">${lineChartHTML(groupCountByDate(final), '#2E73B9')}</div>
+          <div class="chart-box">${lineChartHTML(groupCountByDate(final), '#315AA8')}</div>
         </article>
         <article class="card section-card">
           ${sectionHeader('★','Destaques dos bairros','Principais concentrações de volume e problemas.')}
@@ -676,7 +692,7 @@
         </article>
         <article class="card section-card">
           ${sectionHeader('◎','Top bairros por entregas','Quantidade de entregas finalizadas por bairro.')}
-          <div class="chart-box small">${horizontalBarChartHTML(nbRows.slice(0,8).map(r=>({label:r.name,value:r.deliveries})),'#2E73B9')}</div>
+          <div class="chart-box small">${horizontalBarChartHTML(nbRows.slice(0,8).map(r=>({label:r.name,value:r.deliveries})),'#315AA8')}</div>
         </article>
       </section>
 
@@ -692,7 +708,7 @@
       </section>
 
       <section class="card section-card" style="margin-top:12px">
-        ${sectionHeader('▤','Resultados semanais','Entregas, faturamento bruto/líquido, reembolsos, custos, KM e eficiência por ciclo.')}
+        ${sectionHeader('▤','Resultados semanais','Entregas, faturamento, custos, KM e eficiência por ciclo.')}
         ${weeklyTable(weeklyRows)}
       </section>
     `;
@@ -820,6 +836,25 @@
   }
   function quickKpi(label,value,sub) { return `<article class="card quick-kpi"><span>${esc(label)}</span><strong>${value}</strong><small>${esc(sub)}</small></article>`; }
 
+  function lastPurchaseSummary(date = todayISO()) {
+    const roots = scoped(state.deliveries).filter(d => d.date === date && isRootPurchase(d));
+    if (!roots.length) return { previous: null, suggested: '1' };
+    const ordered = roots.slice().sort((a,b) => `${b.createdAt||''}`.localeCompare(`${a.createdAt||''}`));
+    const previous = ordered[0];
+    const numeric = roots.map(d => Number.parseInt(String(d.orderNo||'').replace(/\D/g,''),10)).filter(Number.isFinite);
+    const suggested = numeric.length ? String(Math.max(...numeric) + 1) : '';
+    return { previous, suggested };
+  }
+
+  function deliveryStatusClass(status='') {
+    if (status === 'Finalizada') return 'is-finalized';
+    if (status === 'Em rota') return 'is-route';
+    if (status === 'Programada' || status === 'Reagendada') return 'is-scheduled';
+    if (status === 'Devolvida' || status === 'Cancelada') return 'is-problem';
+    if (status === 'Retirada na loja') return 'is-pickup';
+    return 'is-store';
+  }
+
   function workflowStep(n,title,sub,action) {
     return `<button class="workflow-step" data-action="${action}"><span class="workflow-number">${n}</span><span><strong>${esc(title)}</strong><small>${esc(sub)}</small></span></button>`;
   }
@@ -847,7 +882,7 @@
       const af = isFinal(a) ? 1 : 0, bf = isFinal(b) ? 1 : 0;
       return af-bf || `${a.purchaseTime||''}`.localeCompare(`${b.purchaseTime||''}`);
     });
-    return `<div class="operation-card-grid">${sorted.map(d => {
+    return `<div class="operation-card-grid simplified">${sorted.map(d => {
       const calc = deliveryCalc(d);
       const liveWait = currentWaitMinutes(d);
       const liveDelayed = liveWait !== null && liveWait > Number(state.settings.delayMinutes || 120);
@@ -855,31 +890,48 @@
       const refund = Number(root?.refundAmount || 0);
       const isFutureScheduled = d.scheduledDate && d.scheduledDate > todayISO() && openScheduled(d);
       const cyc = d.cycleId ? cycle(d.cycleId) : null;
-      let actions = '';
+      let mainAction = '';
       if (!isFinal(d) && !isFutureScheduled) {
-        if (!d.departureTime) actions += `<button class="action-btn primary" data-action="quick-departure" data-id="${d.id}"><span>🚚</span>Incluir em saída</button>`;
-        if (d.departureTime && !d.finalizationTime && d.status!=='Devolvida') actions += `<button class="action-btn success" data-action="quick-delivered" data-id="${d.id}"><span>✅</span>Entregue</button>`;
-        if (d.departureTime && !d.returnTime && cyc && !cyc.returnTime) actions += `<button class="action-btn navy" data-action="close-cycle" data-id="${cyc.id}"><span>🏪</span>Retorno do ciclo</button>`;
-        actions += `<button class="action-btn warning" data-action="quick-reschedule" data-id="${d.id}"><span>📅</span>Reagendar</button>`;
-        actions += `<button class="action-btn soft" data-action="quick-pickup" data-id="${d.id}"><span>📦</span>Retirada</button>`;
-        actions += `<button class="action-btn danger" data-action="quick-devolution" data-id="${d.id}"><span>↩</span>Devolvida</button>`;
+        if (!d.departureTime) mainAction = `<button class="action-btn main-next" data-action="quick-departure" data-id="${d.id}"><span>🚚</span><b>Incluir em saída</b><small>Selecionar ciclo, veículo e entregador</small></button>`;
+        else if (d.departureTime && !d.finalizationTime && d.status!=='Devolvida') mainAction = `<button class="action-btn main-next success" data-action="quick-delivered" data-id="${d.id}"><span>✅</span><b>Marcar como entregue</b><small>Grava a hora desta entrega na casa do cliente</small></button>`;
+        else if (d.departureTime && !d.returnTime && cyc && !cyc.returnTime) mainAction = `<button class="action-btn main-next" data-action="close-cycle" data-id="${cyc.id}"><span>🏪</span><b>Registrar retorno do ciclo</b><small>Fecha a saída quando o entregador volta ao mercado</small></button>`;
       }
-      actions += `<button class="action-btn ghost" data-action="edit-delivery" data-id="${d.id}"><span>✏️</span>Avançado</button>`;
-      return `<article class="delivery-action-card ${liveDelayed && !d.departureTime ? 'late':''}">
-        <div class="delivery-card-head">
-          <div><span class="delivery-card-kicker">CUPOM</span><strong>${esc(d.coupon || '—')}</strong><small>Compra ${esc(d.orderNo || '—')} • ${esc(neighborhood(d.neighborhoodId)?.name || 'Sem bairro')}</small></div>
-          <div>${statusBadge(d.status)}</div>
+      let secondaryActions = '';
+      if (!isFinal(d) && !isFutureScheduled) {
+        secondaryActions += `<button class="action-btn neutral" data-action="quick-reschedule" data-id="${d.id}">📅 Reagendar</button>`;
+        secondaryActions += `<button class="action-btn neutral" data-action="quick-pickup" data-id="${d.id}">📦 Retirada na loja</button>`;
+        secondaryActions += `<button class="action-btn neutral danger-text" data-action="quick-devolution" data-id="${d.id}">↩ Devolvida</button>`;
+      }
+      secondaryActions += `<button class="action-btn neutral" data-action="edit-delivery" data-id="${d.id}">✏️ Editar</button>`;
+
+      return `<article class="delivery-action-card clear-card ${deliveryStatusClass(d.status)} ${liveDelayed && !d.departureTime ? 'late':''}">
+        <div class="purchase-identity-row">
+          <div class="purchase-number-block"><span>COMPRA Nº</span><strong>${esc(d.orderNo || '—')}</strong></div>
+          <div class="purchase-secondary"><span>Cupom PDV</span><strong>${esc(d.coupon || '—')}</strong><small>${esc(neighborhood(d.neighborhoodId)?.name || 'Sem bairro')}</small></div>
+          <div class="purchase-status">${statusBadge(d.status)}</div>
         </div>
-        <div class="delivery-card-finance"><span>Taxa registrada <strong>${money(root?.fee || d.fee)}</strong></span>${refund ? `<span class="refund-chip">Reembolso ${money(refund)}</span>`:''}</div>
-        ${cyc ? `<div class="delivery-cycle-chip">↻ ${esc(cyc.code)} • saída ${cyc.departureTime||'—'} • ${cycleCalc(cyc).deliveries} entrega(s) levada(s)</div>`:''}
-        <div class="delivery-card-times">
-          <div><small>Entrada</small><strong>${d.purchaseTime || '—'}</strong></div>
-          <div><small>Espera</small><strong class="${liveDelayed?'text-danger':''}">${fmtMinutes(liveWait)}</strong></div>
-          <div><small>Até cliente</small><strong>${fmtMinutes(calc.toClient)}</strong></div>
-          <div><small>Rota/ciclo</small><strong>${fmtMinutes(calc.route)}</strong></div>
+
+        <div class="delivery-info-section">
+          <div class="section-mini-title">HORÁRIOS DESTA ENTREGA</div>
+          <div class="delivery-timeline-grid">
+            <div><span>1</span><small>Entrada</small><strong>${d.purchaseTime || '—'}</strong></div>
+            <div><span>2</span><small>Saída</small><strong>${d.departureTime || '—'}</strong></div>
+            <div class="client-finish"><span>3</span><small>Entregue ao cliente</small><strong>${d.finalizationTime || '—'}</strong></div>
+            <div><span>4</span><small>Retorno à loja</small><strong>${d.returnTime || '—'}</strong></div>
+          </div>
+          <div class="delivery-duration-row">
+            <span><small>Espera</small><strong class="${liveDelayed?'text-danger':''}">${fmtMinutes(liveWait)}</strong></span>
+            <span><small>Loja → cliente</small><strong>${fmtMinutes(calc.toClient)}</strong></span>
+            <span><small>Rota total</small><strong>${fmtMinutes(calc.route)}</strong></span>
+          </div>
         </div>
-        ${isFutureScheduled ? `<div class="scheduled-note">📅 Programada para ${dateBR(d.scheduledDate)} • o faturamento já foi contado no registro original.</div>`:''}
-        <div class="action-grid">${actions}</div>
+
+        <div class="delivery-finance-row"><span>Taxa registrada <strong>${money(root?.fee || d.fee)}</strong></span>${refund ? `<span class="refund-chip">Reembolso ${money(refund)}</span>`:''}</div>
+        ${cyc ? `<div class="delivery-cycle-chip">↻ ${esc(cyc.code)} • saída ${cyc.departureTime||'—'} • ${cycleCalc(cyc).deliveries} entrega(s) no ciclo</div>`:''}
+        ${isFutureScheduled ? `<div class="scheduled-note">📅 Programada para ${dateBR(d.scheduledDate)} • o faturamento já foi contado na compra original.</div>`:''}
+
+        ${mainAction ? `<div class="next-action-zone"><span class="section-mini-title">PRÓXIMA AÇÃO</span>${mainAction}</div>` : ''}
+        <div class="secondary-action-zone"><span class="section-mini-title">OUTRAS AÇÕES</span><div class="secondary-action-grid">${secondaryActions}</div></div>
       </article>`;
     }).join('')}</div>`;
   }
@@ -1407,41 +1459,49 @@
   function openQuickDeliveryModal() {
     const today = todayISO();
     const time = currentTimeHM();
-    openModal('Registrar compra','Só o essencial agora. Os demais dados são atualizados depois com botões rápidos.',`
-      <form id="quickDeliveryForm" class="quick-entry-form">
-        <div class="quick-entry-hero">
-          <div><span>1</span><strong>Identifique a compra</strong><small>Faturamento da taxa entra no momento em que você salvar.</small></div>
-        </div>
-        <div class="quick-entry-grid">
-          <label>Data da compra<input name="date" type="date" value="${today}" required /></label>
-          <label>Nº da compra<input name="orderNo" placeholder="Ordem de chegada" /></label>
-          <label>Cupom PDV<input name="coupon" inputmode="numeric" autofocus required placeholder="Ex.: 45879" /></label>
-          <label>Hora da compra<input name="purchaseTime" type="time" value="${time}" required /></label>
-          <label class="span-2">Bairro<select name="neighborhoodId" required>${options(state.neighborhoods,'')}</select></label>
+    const last = lastPurchaseSummary(today);
+    const prev = last.previous;
+    openModal('Registrar nova compra','Lançamento rápido em 3 passos. O número da compra fica em destaque para evitar erro de sequência.',`
+      <form id="quickDeliveryForm" class="quick-entry-form clear-form">
+        <div class="previous-purchase-banner">
+          <div class="previous-purchase-label"><span>ÚLTIMA COMPRA REGISTRADA HOJE</span><strong>${prev ? `Nº ${esc(prev.orderNo || '—')}` : 'Nenhuma ainda'}</strong></div>
+          <div class="previous-purchase-detail"><small>${prev ? `Cupom ${esc(prev.coupon || '—')} • ${prev.purchaseTime || '—'} • ${esc(neighborhood(prev.neighborhoodId)?.name || 'Sem bairro')}` : 'Esta será a primeira compra do dia.'}</small></div>
+          <div class="next-purchase-suggestion"><span>SUGESTÃO PARA A NOVA</span><strong>${last.suggested ? `Nº ${esc(last.suggested)}` : 'Informe manualmente'}</strong></div>
         </div>
 
-        <div class="quick-entry-block">
-          <div class="quick-entry-title"><span>2</span><div><strong>Qual foi a taxa cobrada?</strong><small>Escolha uma opção.</small></div></div>
+        <section class="quick-step-card">
+          <div class="quick-step-head"><span>1</span><div><strong>Identificação da compra</strong><small>O número da compra é o campo principal da sequência do dia.</small></div></div>
+          <div class="quick-entry-grid identity-grid">
+            <label class="purchase-number-input">Nº DA COMPRA<input name="orderNo" value="${attr(last.suggested)}" inputmode="numeric" placeholder="Ex.: 15" required /></label>
+            <label>Cupom PDV<input name="coupon" inputmode="numeric" autofocus required placeholder="Ex.: 45879" /></label>
+            <label>Data da compra<input name="date" type="date" value="${today}" required /></label>
+            <label>Hora da compra<input name="purchaseTime" type="time" value="${time}" required /></label>
+            <label class="span-2">Bairro<select name="neighborhoodId" required>${options(state.neighborhoods,'')}</select></label>
+          </div>
+        </section>
+
+        <section class="quick-step-card">
+          <div class="quick-step-head"><span>2</span><div><strong>Taxa cobrada no PDV</strong><small>O faturamento entra agora, no registro da compra.</small></div></div>
           <input type="hidden" name="fee" id="quickFee" value="" />
-          <div class="choice-buttons" id="feeChoices">
+          <div class="choice-buttons simple-choices" id="feeChoices">
             <button type="button" class="choice-btn" data-value="6.99">R$ 6,99</button>
             <button type="button" class="choice-btn" data-value="9.99">R$ 9,99</button>
             <button type="button" class="choice-btn" data-value="0">Sem taxa</button>
           </div>
-        </div>
+        </section>
 
-        <div class="quick-entry-block">
-          <div class="quick-entry-title"><span>3</span><div><strong>Quando será entregue?</strong><small>Hoje ou em uma data específica.</small></div></div>
+        <section class="quick-step-card">
+          <div class="quick-step-head"><span>3</span><div><strong>Quando será entregue?</strong><small>Escolha hoje ou informe uma data específica.</small></div></div>
           <input type="hidden" name="deliveryMode" id="quickDeliveryMode" value="today" />
-          <div class="choice-buttons" id="deliveryModeChoices">
+          <div class="choice-buttons simple-choices" id="deliveryModeChoices">
             <button type="button" class="choice-btn selected" data-value="today">🚚 Entregar hoje</button>
             <button type="button" class="choice-btn" data-value="schedule">📅 Agendar outro dia</button>
           </div>
           <label id="quickScheduledDateWrap" class="quick-schedule-date hidden">Data programada<input name="scheduledDate" type="date" min="${today}" /></label>
-        </div>
+        </section>
 
-        <div class="finance-rule-note">💡 <strong>Regra financeira:</strong> a taxa entra no faturamento agora, ao registrar a compra. Se houver retirada na loja com reembolso, o app registra o reembolso separadamente.</div>
-        <div class="form-actions"><button type="button" class="btn secondary" id="cancelQuickDeliveryBtn">Cancelar</button><button type="submit" class="btn primary large-action">Registrar compra</button></div>
+        <div class="finance-rule-note simplified-note">A taxa entra no faturamento no momento do registro. Reagendamentos não duplicam receita. Se houver retirada com reembolso, o reembolso é registrado separadamente.</div>
+        <div class="form-actions sticky-actions"><button type="button" class="btn secondary" id="cancelQuickDeliveryBtn">Cancelar</button><button type="submit" class="btn primary large-action">Registrar compra Nº ${esc(last.suggested || '')}</button></div>
       </form>
     `,'LANÇAMENTO RÁPIDO');
 
@@ -1454,12 +1514,17 @@
       modeButtons.forEach(x=>x.classList.remove('selected')); btn.classList.add('selected'); $('#quickDeliveryMode').value=btn.dataset.value;
       $('#quickScheduledDateWrap').classList.toggle('hidden',btn.dataset.value!=='schedule');
     }));
+    const orderInput = $('#quickDeliveryForm [name="orderNo"]');
+    const submitBtn = $('#quickDeliveryForm button[type="submit"]');
+    orderInput?.addEventListener('input',()=>{ submitBtn.textContent = `Registrar compra Nº ${orderInput.value || ''}`; });
     $('#cancelQuickDeliveryBtn').addEventListener('click',closeModal);
     $('#quickDeliveryForm').addEventListener('submit',async e=>{
       e.preventDefault();
       const data=Object.fromEntries(new FormData(e.target).entries());
       if(data.fee===''){toast('Escolha a taxa de entrega.','warning');return;}
       if(data.deliveryMode==='schedule' && !data.scheduledDate){toast('Informe a data programada.','warning');return;}
+      const duplicateOrder = scoped(state.deliveries).some(d => d.date===data.date && isRootPurchase(d) && String(d.orderNo||'').trim()===String(data.orderNo||'').trim());
+      if (duplicateOrder && !confirm(`Já existe uma compra Nº ${data.orderNo} nesta data. Deseja registrar mesmo assim?`)) return;
       const id=uid('del');
       const scheduled=data.deliveryMode==='schedule';
       const d={
@@ -1471,8 +1536,8 @@
       };
       if(scheduled)d.history.push({id:uid('evt'),type:'scheduled',from:d.date,to:d.scheduledDate,kind:'Programada',at:nowISO(),reasonId:d.reasonId});
       state.deliveries.push(d);
-      await saveState(`Compra ${d.coupon} registrada`);
-      closeModal();toast('Compra registrada. A taxa já entrou no faturamento.','success');render();
+      await saveState(`Compra ${d.orderNo || d.coupon} registrada`);
+      closeModal();toast(`Compra Nº ${d.orderNo || '—'} registrada. A taxa já entrou no faturamento.`,'success');render();
     });
   }
 

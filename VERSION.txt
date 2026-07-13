@@ -1,1 +1,1 @@
-NX Entregas V6.0.0 • Layout redesenhado + modo treinamento + lixeira e exclusão segura
+V7.0.0 • Layout simplificado, compras em destaque, sequência visível e horários claros por entrega.
