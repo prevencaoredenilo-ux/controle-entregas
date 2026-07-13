@@ -1,4 +1,4 @@
-const CACHE_NAME = 'controle-entregas-nx-v2-intuitivo';
+const CACHE_NAME = 'nx-entregas-v6-training-trash';
 const APP_SHELL = [
   './',
   './index.html',

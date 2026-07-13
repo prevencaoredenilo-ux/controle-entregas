@@ -3,19 +3,19 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#173A5E" />
+  <meta name="theme-color" content="#F7FAFC" />
   <meta name="description" content="Sistema anual de gestão de entregas, frota, custos, ciclos, programadas, pendências e relatórios." />
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="icons/icon-192.png" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
   <link rel="stylesheet" href="styles.css" />
-  <title>Controle de Entregas • Nova Xavantina</title>
+  <title>NX Entregas • Operação, Frota e Inteligência</title>
 </head>
 <body>
   <div id="bootScreen" class="boot-screen">
     <div class="boot-card">
-      <div class="brand-mark large">CE</div>
-      <h1>Controle de Entregas</h1>
+      <div class="brand-mark large">NX</div>
+      <h1>NX Entregas</h1>
       <p>Preparando sua operação...</p>
       <div class="boot-progress"><span></span></div>
     </div>
@@ -25,10 +25,10 @@
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-top">
         <div class="brand-block">
-          <div class="brand-mark">CE</div>
+          <div class="brand-mark">NX</div>
           <div class="brand-copy">
-            <strong>Controle de Entregas</strong>
-            <small>Nova Xavantina • MT</small>
+            <strong>NX Operações</strong>
+            <small>Entregas • Frota • Inteligência</small>
           </div>
         </div>
 
@@ -38,6 +38,12 @@
             <strong id="connectionTitle">Verificando conexão...</strong>
             <small id="connectionSubtitle">Dados locais protegidos</small>
           </div>
+        </div>
+
+        <div class="mode-card">
+          <div class="mode-card-head"><span>AMBIENTE</span><strong id="topModeBadge" class="top-mode-badge production">● Operação real</strong></div>
+          <div class="mode-switch"><button class="mode-choice active" data-mode="production"><span>●</span> Real</button><button class="mode-choice" data-mode="training"><span>🧪</span> Treino</button></div>
+          <small id="modeHint">Dados oficiais da operação.</small>
         </div>
       </div>
 
@@ -51,12 +57,14 @@
         <button class="nav-item" data-view="scheduled"><span class="nav-ico">◷</span><span>Programadas</span><span class="nav-badge" id="scheduledBadge">0</span></button>
         <button class="nav-item" data-view="pending"><span class="nav-ico">!</span><span>Pendências</span><span class="nav-badge danger" id="pendingBadge">0</span></button>
         <button class="nav-item" data-view="cycles"><span class="nav-ico">↻</span><span>Ciclos</span></button>
+        <button class="nav-item" data-view="odometer"><span class="nav-ico">KM</span><span>Quilometragem</span></button>
 
         <p class="nav-caption">GESTÃO</p>
         <button class="nav-item" data-view="costs"><span class="nav-ico">R$</span><span>Custos</span></button>
         <button class="nav-item" data-view="neighborhoods"><span class="nav-ico">◎</span><span>Análise por bairro</span></button>
         <button class="nav-item" data-view="trace"><span class="nav-ico">⌕</span><span>Rastrear cupom</span></button>
         <button class="nav-item" data-view="reports"><span class="nav-ico">⇩</span><span>Relatórios</span></button>
+        <button class="nav-item" data-view="trash"><span class="nav-ico">⌫</span><span>Lixeira</span><span class="nav-badge" id="trashBadge">0</span></button>
         <button class="nav-item" data-view="settings"><span class="nav-ico">⚙</span><span>Cadastros</span></button>
       </nav>
 
@@ -81,6 +89,7 @@
           </div>
         </div>
         <div class="topbar-actions">
+          <span class="desktop-mode-chip" id="desktopModeChip">● Ambiente real</span>
           <button class="btn secondary desktop-only" id="backupBtn">↓ Backup</button>
           <label class="btn secondary desktop-only file-btn">↑ Restaurar<input id="restoreInput" type="file" accept=".json" hidden /></label>
           <button class="btn primary" id="quickNewDeliveryBtn">＋ Registrar compra</button>
