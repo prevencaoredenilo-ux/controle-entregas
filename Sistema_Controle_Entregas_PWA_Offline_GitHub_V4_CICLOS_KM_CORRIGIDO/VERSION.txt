@@ -1,0 +1,2 @@
+4.0.0
+KM diário por expediente + ciclo automático por saída/retorno
