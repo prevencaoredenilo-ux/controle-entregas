@@ -1,1 +1,1 @@
-V9.0.0 • Paleta Nilo Supermercado • Identidade visual em azul-marinho e amarelo-dourado • Mantém funções da V8.
+V10.0.0 • Correção de legibilidade dos bairros e listas • Taxa de entrega livre com qualquer valor • Mantém todas as funções da V9.

@@ -842,3 +842,124 @@ input:focus,select:focus,textarea:focus{border-color:var(--nilo-yellow)!importan
   .topbar{background:rgba(38,54,64,.98)!important;border-bottom-color:#465C67!important}
   .filter-panel{background:#2E414B!important}
 }
+
+/* =========================================================
+   V10 • CORREÇÃO DE LEGIBILIDADE + TAXA LIVRE
+   ========================================================= */
+
+/* Corrige nomes de bairros e demais opções em campos select, inclusive no menu nativo do Windows/Chrome. */
+select{
+  color:#F7FAFB!important;
+  background-color:#293B45!important;
+  color-scheme:dark;
+  -webkit-text-fill-color:#F7FAFB!important;
+}
+select option,
+select optgroup{
+  background:#293B45!important;
+  color:#F7FAFB!important;
+  -webkit-text-fill-color:#F7FAFB!important;
+}
+select option:checked,
+select option:hover{
+  background:#425966!important;
+  color:#FFFFFF!important;
+}
+
+/* Reforço de contraste nos registros operacionais e listagens. */
+.delivery-action-card,
+.delivery-action-card .purchase-secondary,
+.delivery-action-card .purchase-secondary strong,
+.delivery-action-card .purchase-secondary small,
+.delivery-action-card .purchase-identity-row,
+.delivery-action-card .delivery-timeline-grid strong,
+.delivery-action-card .delivery-timeline-grid small,
+.delivery-picker-item,
+.delivery-picker-item strong,
+.delivery-picker-item small,
+.cycle-manager-item,
+.cycle-manager-copy strong,
+.cycle-manager-copy small,
+.list-row,
+.list-row strong,
+.list-row small{
+  color:#F2F6F8!important;
+}
+.delivery-action-card .purchase-secondary small,
+.delivery-action-card .delivery-timeline-grid small,
+.delivery-picker-item small,
+.cycle-manager-copy small,
+.list-row small{
+  color:#C1D0D6!important;
+}
+
+/* Taxa livre no lançamento rápido. */
+.fee-choice-grid{
+  display:grid!important;
+  grid-template-columns:repeat(4,minmax(0,1fr))!important;
+  gap:9px!important;
+}
+.quick-custom-fee{
+  display:block!important;
+  margin-top:11px;
+  padding:13px 14px;
+  border:1px solid #5C7180;
+  border-radius:13px;
+  background:#2B3D47;
+  color:#F4F7F8!important;
+}
+.quick-custom-fee.hidden{display:none!important}
+.quick-custom-fee>span{
+  display:block;
+  margin-bottom:8px;
+  color:#F5F7F8;
+  font-size:11px;
+  font-weight:900;
+}
+.quick-custom-fee>small{
+  display:block;
+  margin-top:7px;
+  color:#AFC0C7;
+  font-size:9px;
+}
+.money-input-wrap{
+  display:flex;
+  align-items:center;
+  overflow:hidden;
+  border:1px solid #647A86;
+  border-radius:11px;
+  background:#253640;
+}
+.money-input-wrap:focus-within{
+  border-color:var(--nilo-yellow)!important;
+  box-shadow:0 0 0 3px rgba(242,181,35,.13)!important;
+}
+.money-input-wrap strong{
+  padding:0 12px;
+  color:#FFD15B;
+  font-size:13px;
+}
+.money-input-wrap input{
+  flex:1;
+  min-width:0;
+  border:0!important;
+  border-left:1px solid #536A76!important;
+  border-radius:0!important;
+  background:#293B45!important;
+  color:#FFFFFF!important;
+  font-size:16px!important;
+  font-weight:850!important;
+  box-shadow:none!important;
+}
+.fee-custom-choice.selected{
+  background:#5A4A28!important;
+  color:#FFD970!important;
+  border-color:#8B7133!important;
+}
+
+@media(max-width:760px){
+  .fee-choice-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+}
+@media(max-width:460px){
+  .fee-choice-grid{grid-template-columns:1fr 1fr!important}
+}

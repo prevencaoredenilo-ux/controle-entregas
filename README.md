@@ -1,31 +1,14 @@
-# NX Entregas V8 — Foco Médio-Escuro e Operação Ágil
+# Controle de Entregas • Nilo Supermercado • V10
 
-Versão com fundo escuro moderado, paleta reduzida para favorecer concentração e hierarquia visual mais clara.
+Versão com identidade visual do Nilo Supermercado, modo escuro moderado e foco em operação rápida.
 
-## Conceitos preservados
-- operação real e modo treinamento separados;
-- lixeira com restauração e exclusão definitiva;
-- registro rápido de compra com número anterior e sugestão do próximo número;
-- número da compra em destaque;
-- horários individuais por entrega: entrada, saída, finalização no cliente e retorno à loja;
-- ciclos editáveis, com inclusão e retirada de entregas;
-- KM inicial e KM final por veículo no expediente;
-- KM diário, semanal, mensal e anual;
-- média de KM por ciclo e por entrega;
-- faturamento no momento do registro da compra;
-- reembolso de taxa em retirada na loja;
-- programadas, reagendadas, pendências, custos, bairros, relatórios e exportação para Excel;
-- PWA offline para GitHub Pages.
+## Novidades da V10
+- correção de contraste nos nomes dos bairros, selects, registros e listas operacionais;
+- campo de bairro legível também no menu nativo do navegador;
+- nova opção **Taxa livre** no lançamento rápido;
+- aceita qualquer valor de taxa, com vírgula ou ponto, por exemplo `12,50` ou `12.50`;
+- mantém as opções R$ 6,99, R$ 9,99 e Sem taxa;
+- mantém modo treinamento, lixeira, ciclos editáveis, KM diário, custos, bairros, relatórios, exportação e PWA offline.
 
-## Paleta de foco
-- fundo grafite azulado moderado;
-- verde-petróleo para ações principais;
-- azul suave para informação;
-- amarelo somente para atenção;
-- vermelho somente para erros e situações críticas;
-- verde somente para concluído.
-
-
-## V9 — Paleta Nilo Supermercado
-
-A interface usa azul-marinho, azul institucional e amarelo-dourado inspirados na identidade visual pública do Nilo Supermercado, preservando o modo escuro moderado e a concentração visual. Verde é reservado para sucesso e vermelho para erro/risco.
+## Regra financeira
+A taxa é contabilizada no momento do registro da compra. Reagendamentos não duplicam receita. Reembolsos são registrados separadamente.

@@ -7,7 +7,7 @@
   }
   'use strict';
 
-  const APP_VERSION = '9.0.0';
+  const APP_VERSION = '10.0.0';
   const DB_NAME = 'controle_entregas_nx';
   const DB_VERSION = 1;
   const STORE_NAME = 'app_state';
@@ -63,6 +63,15 @@
   function attr(value) { return esc(value); }
   function money(value) {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value || 0));
+  }
+  function parseMoneyInput(value) {
+    const raw = String(value ?? '').trim().replace(/\s/g, '').replace(/R\$/gi, '');
+    if (!raw) return null;
+    let normalized = raw;
+    if (normalized.includes(',') && normalized.includes('.')) normalized = normalized.replace(/\./g, '').replace(',', '.');
+    else normalized = normalized.replace(',', '.');
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
   }
   function number(value, digits = 0) {
     return new Intl.NumberFormat('pt-BR', { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(Number(value || 0));
@@ -1489,11 +1498,18 @@
         <section class="quick-step-card">
           <div class="quick-step-head"><span>2</span><div><strong>Taxa cobrada no PDV</strong><small>O faturamento entra agora, no registro da compra.</small></div></div>
           <input type="hidden" name="fee" id="quickFee" value="" />
-          <div class="choice-buttons simple-choices" id="feeChoices">
+          <input type="hidden" name="feeMode" id="quickFeeMode" value="" />
+          <div class="choice-buttons simple-choices fee-choice-grid" id="feeChoices">
             <button type="button" class="choice-btn" data-value="6.99">R$ 6,99</button>
             <button type="button" class="choice-btn" data-value="9.99">R$ 9,99</button>
             <button type="button" class="choice-btn" data-value="0">Sem taxa</button>
+            <button type="button" class="choice-btn fee-custom-choice" data-value="custom">✎ Taxa livre</button>
           </div>
+          <label id="quickCustomFeeWrap" class="quick-custom-fee hidden">
+            <span>Valor livre da taxa</span>
+            <div class="money-input-wrap"><strong>R$</strong><input id="quickCustomFee" name="customFee" type="text" inputmode="decimal" autocomplete="off" placeholder="Ex.: 12,50" /></div>
+            <small>Digite qualquer valor. Você pode usar vírgula ou ponto.</small>
+          </label>
         </section>
 
         <section class="quick-step-card">
@@ -1512,9 +1528,26 @@
     `,'LANÇAMENTO RÁPIDO');
 
     const feeButtons = $$('#feeChoices .choice-btn');
+    const customFeeWrap = $('#quickCustomFeeWrap');
+    const customFeeInput = $('#quickCustomFee');
     feeButtons.forEach(btn=>btn.addEventListener('click',()=>{
-      feeButtons.forEach(x=>x.classList.remove('selected')); btn.classList.add('selected'); $('#quickFee').value=btn.dataset.value;
+      feeButtons.forEach(x=>x.classList.remove('selected'));
+      btn.classList.add('selected');
+      const isCustom = btn.dataset.value === 'custom';
+      $('#quickFeeMode').value = isCustom ? 'custom' : 'fixed';
+      customFeeWrap?.classList.toggle('hidden', !isCustom);
+      if (isCustom) {
+        $('#quickFee').value = '';
+        setTimeout(()=>customFeeInput?.focus(), 40);
+      } else {
+        $('#quickFee').value = btn.dataset.value;
+        if (customFeeInput) customFeeInput.value = '';
+      }
     }));
+    customFeeInput?.addEventListener('input',()=>{
+      const parsed = parseMoneyInput(customFeeInput.value);
+      $('#quickFee').value = parsed === null ? '' : String(parsed);
+    });
     const modeButtons = $$('#deliveryModeChoices .choice-btn');
     modeButtons.forEach(btn=>btn.addEventListener('click',()=>{
       modeButtons.forEach(x=>x.classList.remove('selected')); btn.classList.add('selected'); $('#quickDeliveryMode').value=btn.dataset.value;
@@ -1527,7 +1560,9 @@
     $('#quickDeliveryForm').addEventListener('submit',async e=>{
       e.preventDefault();
       const data=Object.fromEntries(new FormData(e.target).entries());
-      if(data.fee===''){toast('Escolha a taxa de entrega.','warning');return;}
+      const parsedFee = data.feeMode === 'custom' ? parseMoneyInput(data.customFee) : parseMoneyInput(data.fee);
+      if(parsedFee === null){toast(data.feeMode === 'custom' ? 'Informe um valor válido para a taxa livre.' : 'Escolha a taxa de entrega.','warning');return;}
+      data.fee = String(parsedFee);
       if(data.deliveryMode==='schedule' && !data.scheduledDate){toast('Informe a data programada.','warning');return;}
       const duplicateOrder = scoped(state.deliveries).some(d => d.date===data.date && isRootPurchase(d) && String(d.orderNo||'').trim()===String(data.orderNo||'').trim());
       if (duplicateOrder && !confirm(`Já existe uma compra Nº ${data.orderNo} nesta data. Deseja registrar mesmo assim?`)) return;
