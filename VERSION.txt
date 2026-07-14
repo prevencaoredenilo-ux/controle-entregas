@@ -1,1 +1,2 @@
-V10.0.0 • Correção de legibilidade dos bairros e listas • Taxa de entrega livre com qualquer valor • Mantém todas as funções da V9.
+V11.0.0 — Central de Operação Inteligente
+Central única, linha do tempo, próxima ação, pendências por prioridade e encerramento do dia.

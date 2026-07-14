@@ -7,7 +7,7 @@
   }
   'use strict';
 
-  const APP_VERSION = '10.0.0';
+  const APP_VERSION = '11.0.0';
   const DB_NAME = 'controle_entregas_nx';
   const DB_VERSION = 1;
   const STORE_NAME = 'app_state';
@@ -21,13 +21,13 @@
 
   let state = null;
   let dbHandle = null;
-  let currentView = 'dashboard';
+  let currentView = 'today';
   let configTab = 'vehicles';
   let deferredInstallPrompt = null;
 
   const pageMeta = {
     dashboard: ['Dashboard', 'Visão geral da operação, custos, faturamento e produtividade.'],
-    today: ['Operação do dia', 'Entregas do dia, programadas, pendências e ciclos em andamento.'],
+    today: ['Central de Operação', 'O que está acontecendo agora, o que precisa de ação e qual é o próximo passo.'],
     deliveries: ['Entregas', 'Cadastro completo e histórico anual de todas as entregas.'],
     scheduled: ['Programadas e Reagendadas', 'Agenda automática pela data programada, sem perder o histórico da origem.'],
     pending: ['Central de Pendências', 'Tudo que exige ação antes de encerrar a operação.'],
@@ -150,6 +150,7 @@
       odometerLogs: [],
       costs: [],
       audit: [],
+      dayClosures: [],
       trash: []
     };
   }
@@ -159,11 +160,11 @@
     const merged = Object.assign(base, data || {});
     merged.meta = Object.assign(base.meta, data?.meta || {});
     merged.settings = Object.assign(base.settings, data?.settings || {});
-    for (const key of ['vehicles','neighborhoods','employees','costCategories','reasons','deliveries','cycles','odometerLogs','costs','audit','trash']) {
+    for (const key of ['vehicles','neighborhoods','employees','costCategories','reasons','deliveries','cycles','odometerLogs','costs','audit','dayClosures','trash']) {
       if (!Array.isArray(merged[key])) merged[key] = base[key];
     }
     merged.settings.appMode = merged.settings.appMode === 'training' ? 'training' : 'production';
-    for (const key of ['deliveries','cycles','odometerLogs','costs']) {
+    for (const key of ['deliveries','cycles','odometerLogs','costs','dayClosures']) {
       merged[key].forEach(item => { if (!item.mode) item.mode = 'production'; });
     }
     // Migração automática da V2: se existirem ciclos antigos com KM inicial/final,
@@ -575,14 +576,179 @@
   function scheduledOpen() { return scoped(state.deliveries).filter(openScheduled); }
   function scheduledForDate(date) { return scheduledOpen().filter(d => d.scheduledDate === date); }
 
+
+  function elapsedMinutesToNow(date, time) {
+    if (!date || !time) return 0;
+    const start = toDateTime(date, time);
+    if (!start || Number.isNaN(start.getTime())) return 0;
+    return Math.max(0, Math.round((Date.now() - start.getTime()) / 60000));
+  }
+
+  function issueSeverityForReason(text = '') {
+    if (/vencida|Em rota sem retorno|Saiu sem veículo|Saiu sem entregador/i.test(text)) return 'critical';
+    if (/Atrasada|Devolvida|iniciado e não concluído/i.test(text)) return 'warning';
+    return 'info';
+  }
+
+  function systemIssues({ date = '', includeInfo = true } = {}) {
+    const issues = [];
+    const push = issue => {
+      if (!includeInfo && issue.severity === 'info') return;
+      if (date && issue.date !== date && issue.relatedDate !== date) return;
+      issues.push(issue);
+    };
+
+    const deliveries = scoped(state.deliveries);
+    deliveries.forEach(d => {
+      pendingReasons(d).forEach(reasonText => {
+        // Em ciclos, o retorno é tratado uma vez no nível do ciclo para evitar dezenas de alertas iguais.
+        if (reasonText === 'Em rota sem retorno' && d.cycleId) return;
+        push({
+          id:`delivery_${d.id}_${reasonText}`,
+          severity:issueSeverityForReason(reasonText),
+          type:'delivery',
+          title:`Compra Nº ${d.orderNo || '—'} • Cupom ${d.coupon || '—'}`,
+          detail:reasonText,
+          date:d.date,
+          relatedDate:d.scheduledDate || '',
+          action:'edit-delivery',
+          recordId:d.id,
+          meta:neighborhood(d.neighborhoodId)?.name || 'Sem bairro'
+        });
+      });
+    });
+
+    const cycles = scoped(state.cycles);
+    cycles.forEach(c => {
+      if (c.returnTime) return;
+      const linked = deliveries.filter(d => d.cycleId === c.id);
+      const resolvedStatuses = ['Finalizada','Devolvida','Retirada na loja','Cancelada','Reagendada','Programada'];
+      const allResolved = linked.length > 0 && linked.every(d => d.finalizationTime || resolvedStatuses.includes(d.status));
+      if (!linked.length) push({id:`cycle_empty_${c.id}`,severity:'critical',type:'cycle',title:`${c.code} sem entregas`,detail:'O ciclo está aberto, mas não possui nenhuma entrega vinculada.',date:c.date,action:'edit-cycle',recordId:c.id,meta:vehicle(c.vehicleId)?.name || 'Sem veículo'});
+      if (c.date < todayISO()) push({id:`cycle_old_${c.id}`,severity:'critical',type:'cycle',title:`${c.code} ainda aberto`,detail:`Ciclo de ${dateBR(c.date)} permaneceu sem retorno.`,date:c.date,action:'close-cycle',recordId:c.id,meta:vehicle(c.vehicleId)?.name || 'Sem veículo'});
+      else if (allResolved) push({id:`cycle_resolved_${c.id}`,severity:'critical',type:'cycle',title:`${c.code} pronto para fechar`,detail:`Todas as ${linked.length} entregas já têm resultado, mas o retorno à loja não foi registrado.`,date:c.date,action:'close-cycle',recordId:c.id,meta:vehicle(c.vehicleId)?.name || 'Sem veículo'});
+      else if (elapsedMinutesToNow(c.date, c.departureTime) > 180) push({id:`cycle_long_${c.id}`,severity:'warning',type:'cycle',title:`${c.code} em rota há muito tempo`,detail:`Saída às ${c.departureTime || '—'} e ainda sem retorno registrado.`,date:c.date,action:'close-cycle',recordId:c.id,meta:`${linked.length} entrega(s)`});
+    });
+
+    scoped(state.odometerLogs).forEach(o => {
+      const calc = odometerCalc(o);
+      if (calc.invalid) push({id:`odo_invalid_${o.id}`,severity:'critical',type:'odometer',title:`KM inválido • ${vehicle(o.vehicleId)?.name || 'Veículo'}`,detail:'O KM final está menor que o KM inicial.',date:o.date,action:'edit-odometer',recordId:o.id,meta:`${o.kmStart || '—'} → ${o.kmEnd || '—'}`});
+      else if (Number(o.kmStart || 0) > 0 && !Number(o.kmEnd || 0)) push({id:`odo_open_${o.id}`,severity:o.date < todayISO() ? 'warning' : 'info',type:'odometer',title:`KM final pendente • ${vehicle(o.vehicleId)?.name || 'Veículo'}`,detail:'O expediente do veículo foi aberto, mas ainda não foi fechado.',date:o.date,action:'edit-odometer',recordId:o.id,meta:`KM inicial ${number(o.kmStart,1)}`});
+    });
+
+    // Duplicidades: compra e cupom no mesmo dia.
+    const roots = deliveries.filter(isRootPurchase);
+    const duplicateGroups = (field) => {
+      const map = new Map();
+      roots.forEach(d => {
+        const value = String(d[field] || '').trim();
+        if (!value) return;
+        const key = `${d.date}|${value.toLowerCase()}`;
+        if (!map.has(key)) map.set(key, []);
+        map.get(key).push(d);
+      });
+      return [...map.values()].filter(group => group.length > 1);
+    };
+    duplicateGroups('orderNo').forEach(group => push({id:`dup_order_${group[0].date}_${group[0].orderNo}`,severity:'warning',type:'delivery',title:`Compra Nº ${group[0].orderNo} repetida`,detail:`Existem ${group.length} registros com o mesmo número nesta data.`,date:group[0].date,action:'edit-delivery',recordId:group[0].id,meta:group.map(d=>d.coupon || '—').join(', ')}));
+    duplicateGroups('coupon').forEach(group => push({id:`dup_coupon_${group[0].date}_${group[0].coupon}`,severity:'critical',type:'delivery',title:`Cupom ${group[0].coupon} repetido`,detail:`Existem ${group.length} compras com o mesmo cupom nesta data. Confirme se é duplicidade real.`,date:group[0].date,action:'edit-delivery',recordId:group[0].id,meta:group.map(d=>`Nº ${d.orderNo || '—'}`).join(', ')}));
+
+    // Conflitos de veículo ou entregador em mais de um ciclo aberto.
+    const openCycles = cycles.filter(c => !c.returnTime);
+    const conflictBy = (field, label, resolver) => {
+      const map = new Map();
+      openCycles.forEach(c => {
+        const value = c[field]; if (!value) return;
+        if (!map.has(value)) map.set(value, []);
+        map.get(value).push(c);
+      });
+      [...map.entries()].filter(([,group]) => group.length > 1).forEach(([id,group]) => push({id:`conflict_${field}_${id}`,severity:'critical',type:'cycle',title:`${label} em dois ciclos abertos`,detail:`${resolver(id)} aparece simultaneamente em ${group.map(c=>c.code).join(' e ')}.`,date:group[0].date,action:'edit-cycle',recordId:group[0].id,meta:'Conflito operacional'}));
+    };
+    conflictBy('vehicleId','Veículo',id=>vehicle(id)?.name || 'Veículo');
+    conflictBy('driverId','Entregador',id=>employee(id)?.name || 'Entregador');
+
+    const seen = new Set();
+    return issues.filter(issue => {
+      if (seen.has(issue.id)) return false;
+      seen.add(issue.id); return true;
+    }).sort((a,b) => {
+      const weight = {critical:0,warning:1,info:2};
+      return weight[a.severity]-weight[b.severity] || String(a.date||'').localeCompare(String(b.date||''));
+    });
+  }
+
+  function dayClosure(date = todayISO()) {
+    return scoped(state.dayClosures || []).find(x => x.date === date) || null;
+  }
+
+  function dayClosingChecks(date = todayISO()) {
+    const blockers = [], warnings = [];
+    const deliveries = scoped(state.deliveries).filter(d => d.date === date || d.scheduledDate === date);
+    const cycles = scoped(state.cycles).filter(c => c.date === date);
+    const odometers = scoped(state.odometerLogs).filter(o => o.date === date);
+    const openCycles = cycles.filter(c => !c.returnTime);
+    const inRoute = deliveries.filter(d => d.status === 'Em rota');
+    const usedVehicleIds = unique(cycles.map(c=>c.vehicleId).filter(Boolean));
+
+    if (openCycles.length) blockers.push({icon:'↻',text:`${openCycles.length} ciclo(s) ainda aberto(s): ${openCycles.map(c=>c.code).join(', ')}.`});
+    if (inRoute.length) blockers.push({icon:'🚚',text:`${inRoute.length} entrega(s) ainda aparecem em rota.`});
+
+    usedVehicleIds.forEach(vehicleId => {
+      const log = odometers.find(o => o.vehicleId === vehicleId);
+      if (!log || !Number(log.kmStart || 0)) blockers.push({icon:'KM',text:`${vehicle(vehicleId)?.name || 'Veículo'} trabalhou hoje sem KM inicial registrado.`});
+      else if (odometerCalc(log).invalid) blockers.push({icon:'KM',text:`${vehicle(vehicleId)?.name || 'Veículo'} possui KM final menor que o inicial.`});
+      else if (!Number(log.kmEnd || 0)) blockers.push({icon:'KM',text:`Falta registrar o KM final de ${vehicle(vehicleId)?.name || 'veículo'}.`});
+    });
+
+    const overdue = scheduledOpen().filter(d => d.scheduledDate && d.scheduledDate <= date);
+    if (overdue.length) warnings.push({icon:'◷',text:`${overdue.length} entrega(s) programada(s) continuam em aberto até esta data.`});
+    const missingNeighborhood = deliveries.filter(d => !d.neighborhoodId);
+    if (missingNeighborhood.length) warnings.push({icon:'◎',text:`${missingNeighborhood.length} entrega(s) estão sem bairro informado.`});
+    const devolvedWithoutAction = deliveries.filter(d => d.status === 'Devolvida' && !d.scheduledDate && !d.nextAction);
+    if (devolvedWithoutAction.length) warnings.push({icon:'↩',text:`${devolvedWithoutAction.length} devolução(ões) ainda não têm próxima ação definida.`});
+
+    const importantIssues = systemIssues({date,includeInfo:false});
+    const duplicateIssues = importantIssues.filter(i => i.id.startsWith('dup_'));
+    if (duplicateIssues.length) warnings.push({icon:'⧉',text:`${duplicateIssues.length} possível(is) duplicidade(s) precisa(m) de conferência.`});
+
+    return { blockers, warnings, importantIssues };
+  }
+
+  function operationRecommendation(date, deliveries, cycles, issues, odometers) {
+    const critical = issues.filter(i => i.severity === 'critical');
+    if (critical.length) return {tone:'danger',icon:'!',title:`Resolva ${critical.length} situação(ões) crítica(s)`,text:critical[0].detail,action:'go-pending',button:'Abrir Central de Erros'};
+
+    const openCycles = cycles.filter(c => !c.returnTime);
+    const readyToClose = openCycles.find(c => {
+      const linked = scoped(state.deliveries).filter(d => d.cycleId === c.id);
+      const resolved = ['Finalizada','Devolvida','Retirada na loja','Cancelada','Reagendada','Programada'];
+      return linked.length && linked.every(d => d.finalizationTime || resolved.includes(d.status));
+    });
+    if (readyToClose) return {tone:'warning',icon:'↻',title:`${readyToClose.code} está pronto para retorno`,text:'Todas as entregas desse ciclo já possuem resultado. Falta registrar o retorno à loja.',action:'close-cycle',recordId:readyToClose.id,button:'Registrar retorno'};
+
+    const unresolvedInRoute = deliveries.filter(d => d.status === 'Em rota' && !d.finalizationTime);
+    if (unresolvedInRoute.length) return {tone:'info',icon:'🚚',title:`Finalize ${unresolvedInRoute.length} entrega(s) em rota`,text:'Cada entrega precisa do seu próprio horário de conclusão na casa do cliente.',action:'scroll-deliveries',button:'Ver entregas em rota'};
+
+    const waiting = deliveries.filter(d => !isFinal(d) && !d.departureTime && !(d.scheduledDate && openScheduled(d)));
+    if (waiting.length) return {tone:'focus',icon:'＋',title:`${waiting.length} entrega(s) aguardando saída`,text:'Monte uma saída selecionando uma ou várias entregas. O sistema criará um único ciclo.',action:'start-cycle',button:'Montar nova saída'};
+
+    const usedVehicleIds = unique(cycles.map(c=>c.vehicleId).filter(Boolean));
+    const missingKm = usedVehicleIds.find(id => {
+      const o = odometers.find(x=>x.vehicleId===id);
+      return !o || !Number(o.kmStart||0) || !Number(o.kmEnd||0);
+    });
+    if (missingKm) return {tone:'warning',icon:'KM',title:`Complete a quilometragem de ${vehicle(missingKm)?.name || 'veículo'}`,text:'O KM diário é essencial para calcular KM por ciclo e KM por entrega.',action:'scroll-odometer',button:'Ver quilometragem'};
+
+    return {tone:'success',icon:'✓',title:'Operação sob controle',text:'Neste momento não há ação crítica. Continue registrando as compras e acompanhe os próximos movimentos.',action:'new-delivery',button:'Registrar nova compra'};
+  }
+
   function updateBadges() {
     if (!state) return;
-    const pending = allPending();
+    const issues = systemIssues({includeInfo:false});
     const sched = scheduledOpen();
-    const todayPending = pending.filter(d => d.date === todayISO() || d.scheduledDate === todayISO());
-    $('#pendingBadge').textContent = pending.length;
+    const todayIssues = issues.filter(i => i.date === todayISO() || i.relatedDate === todayISO());
+    $('#pendingBadge').textContent = issues.length;
     $('#scheduledBadge').textContent = sched.length;
-    $('#todayPendingBadge').textContent = todayPending.length;
+    $('#todayPendingBadge').textContent = todayIssues.length;
     const trashBadge = $('#trashBadge');
     if (trashBadge) trashBadge.textContent = state.trash.filter(x => (x.mode || 'production') === currentMode()).length;
   }
@@ -590,6 +756,8 @@
   function render() {
     refreshYearOptions();
     updateBadges();
+    const filterPanel = $('#globalFilterPanel');
+    if (filterPanel) filterPanel.classList.toggle('hidden', ['today','pending','scheduled','settings','trash','trace'].includes(currentView));
     const view = $('#view');
     view.innerHTML = '';
     if (currentView === 'dashboard') renderDashboard();
@@ -645,88 +813,64 @@
     const topDelivery = nbRows[0];
     const topWrong = [...nbRows].sort((a,b) => b.wrongAddress-a.wrongAddress)[0];
     const topReschedule = [...nbRows].sort((a,b) => b.rescheduled-a.rescheduled)[0];
+    const issuesInRange = systemIssues({includeInfo:false}).filter(i => inRange(i.date, range) || inRange(i.relatedDate, range));
+    const criticalCount = issuesInRange.filter(i=>i.severity==='critical').length;
 
     $('#view').innerHTML = `
-      <section class="hero-strip simple-hero">
-        <div><span class="hero-mode-label">${currentMode()==='training'?'🧪 TREINAMENTO':'OPERAÇÃO REAL'}</span><h2>Visão executiva • ${esc(range.label)}</h2><p>As informações agora estão separadas por assunto: Financeiro, Operação e Frota. Menos cores, mais clareza.</p></div>
-        <div class="hero-meta"><span class="hero-chip">${fin.purchases.length} compras</span><span class="hero-chip">${final.length} entregas finalizadas</span><span class="hero-chip">${number(totalKm,1)} km</span></div>
+      <section class="hero-strip v11-dashboard-hero">
+        <div><span class="hero-mode-label">${currentMode()==='training'?'🧪 TREINAMENTO':'OPERAÇÃO REAL'}</span><h2>Resumo gerencial • ${esc(range.label)}</h2><p>Primeiro, os 5 indicadores essenciais. Depois, detalhes por assunto. Sem excesso de cards concorrendo pela sua atenção.</p></div>
+        <div class="hero-meta"><span class="hero-chip">${fin.purchases.length} compras</span><span class="hero-chip">${cycles.length} ciclos</span><span class="hero-chip">${number(totalKm,1)} km</span></div>
       </section>
 
-      <section class="dashboard-group finance-group">
-        <div class="dashboard-group-head"><div><span>FINANCEIRO</span><h3>Receitas, reembolsos e custos</h3></div><small>Valores do período selecionado</small></div>
-        <div class="metrics-grid grouped five">
-          ${cardMetric('Faturamento bruto', money(fin.gross), `${fin.purchases.length} compras registradas`, 'R$', 'blue')}
-          ${cardMetric('Reembolsos de taxa', money(fin.refundTotal), `${fin.refunds.length} reembolsos`, '↩', 'blue')}
-          ${cardMetric('Faturamento líquido', money(fin.net), 'Bruto menos reembolsos', '+', 'green')}
-          ${cardMetric('Custos totais', money(totalCosts), `Combustível: ${money(fuel)}`, '−', 'red')}
-          ${cardMetric('Saldo operacional', money(fin.net-totalCosts), 'Líquido menos custos', '+', fin.net-totalCosts >= 0 ? 'green':'red')}
-        </div>
+      <section class="executive-primary-grid">
+        ${executiveMetric('Faturamento líquido',money(fin.net),'Bruto menos reembolsos','R$','focus')}
+        ${executiveMetric('Entregas finalizadas',final.length,`${deliveries.length} registros no período`,'▣','info')}
+        ${executiveMetric('Pendências críticas',criticalCount,criticalCount?'Exigem ação':'Sem críticas abertas','! ',criticalCount?'danger':'success')}
+        ${executiveMetric('KM rodado',`${number(totalKm,1)} km`,`${activeDays} dia(s) com movimento`,'KM','info')}
+        ${executiveMetric('Custo por entrega',money(costPerDelivery),`${money(totalCosts)} em custos`,'CE','warning')}
       </section>
 
-      <section class="dashboard-group operation-group">
-        <div class="dashboard-group-head"><div><span>OPERAÇÃO</span><h3>Entregas e qualidade operacional</h3></div><small>Volume, tempos e pendências</small></div>
-        <div class="metrics-grid grouped five">
-          ${cardMetric('Entregas finalizadas', final.length, `${deliveries.length} registros no período`, '▣', 'blue')}
-          ${cardMetric('Tempo médio de espera', fmtMinutes(avgWait), 'Compra → saída', '⌛', 'blue')}
-          ${cardMetric('Tempo médio de rota', fmtMinutes(avgRoute), 'Saída → retorno à loja', '◷', 'blue')}
-          ${cardMetric('Atrasadas', delayed, `Limite de ${state.settings.delayMinutes} min úteis`, '!', delayed ? 'red':'blue')}
-          ${cardMetric('Programadas abertas', openSched, 'Ainda não concluídas', '◷', openSched ? 'yellow':'blue')}
-        </div>
-      </section>
-
-      <section class="dashboard-group fleet-group">
-        <div class="dashboard-group-head"><div><span>FROTA E EFICIÊNCIA</span><h3>KM, ciclos e produtividade</h3></div><small>Médias calculadas a partir do KM diário</small></div>
-        <div class="metrics-grid grouped five">
-          ${cardMetric('Custo por entrega', money(costPerDelivery), 'Custos ÷ finalizadas', 'CE', 'blue')}
-          ${cardMetric('Entregas por ciclo', number(deliveriesPerCycle,2), `${cycles.length} ciclos registrados`, '↻', 'blue')}
-          ${cardMetric('KM total', `${number(totalKm,1)} km`, `${odometers.filter(o=>odometerCalc(o).complete).length} fechamentos`, 'KM', 'blue')}
-          ${cardMetric('KM médio por dia', `${number(totalKm/activeDays,1)} km`, `${activeDays} dias com movimento`, '↗', 'blue')}
-          ${cardMetric('KM por entrega', `${number(final.length?totalKm/final.length:0,2)} km`, 'Média das finalizadas', '▣', 'blue')}
-        </div>
-      </section>
-
-      <section class="dashboard-grid">
-        <article class="card section-card">
-          ${sectionHeader('▥','Entregas por dia','Evolução das entregas finalizadas no período.')}
-          <div class="chart-box">${lineChartHTML(groupCountByDate(final), '#315AA8')}</div>
-        </article>
-        <article class="card section-card">
-          ${sectionHeader('★','Destaques dos bairros','Principais concentrações de volume e problemas.')}
-          <div class="stat-list">
-            ${statRow('Mais entregas', topDelivery?.name || '—', topDelivery ? `${topDelivery.deliveries} entregas` : 'Sem dados')}
-            ${statRow('Mais endereço errado', topWrong?.name || '—', topWrong ? `${topWrong.wrongAddress} ocorrências` : 'Sem dados')}
-            ${statRow('Mais reagendamentos', topReschedule?.name || '—', topReschedule ? `${topReschedule.rescheduled} reagendamentos` : 'Sem dados')}
-          </div>
-        </article>
+      <section class="management-panel-grid">
+        ${managementPanel('R$','Financeiro','O que entrou e o que saiu',[
+          ['Faturamento bruto',money(fin.gross),`${fin.purchases.length} compras`],
+          ['Reembolsos',money(fin.refundTotal),`${fin.refunds.length} ocorrências`],
+          ['Custos totais',money(totalCosts),`Combustível ${money(fuel)}`],
+          ['Saldo operacional',money(fin.net-totalCosts),'Líquido menos custos']
+        ])}
+        ${managementPanel('▣','Operação','Volume, tempos e qualidade',[
+          ['Tempo médio de espera',fmtMinutes(avgWait),'Compra → saída'],
+          ['Tempo médio de rota',fmtMinutes(avgRoute),'Saída → retorno'],
+          ['Entregas atrasadas',String(delayed),`Limite ${state.settings.delayMinutes} min úteis`],
+          ['Programadas abertas',String(openSched),'Ainda não concluídas']
+        ])}
+        ${managementPanel('↻','Frota e eficiência','Produtividade dos ciclos',[
+          ['Entregas por ciclo',number(deliveriesPerCycle,2),`${cycles.length} ciclos`],
+          ['KM médio por dia',`${number(totalKm/activeDays,1)} km`,`${activeDays} dias`],
+          ['KM por entrega',`${number(final.length?totalKm/final.length:0,2)} km`,'Média das finalizadas'],
+          ['KM médio por ciclo',`${number(cycles.length?totalKm/cycles.length:0,2)} km`,'A partir do KM diário']
+        ])}
       </section>
 
       <section class="dashboard-grid equal">
-        <article class="card section-card">
-          ${sectionHeader('R$','Faturamento líquido x custos por semana','Receita registrada, reembolsos e gastos da operação.')}
-          <div class="chart-box small">${groupedBarChartHTML(weeklyRows.map(r => ({label:r.label,a:r.netRevenue,b:r.costs})), 'Faturamento líquido','Custos')}</div>
-        </article>
-        <article class="card section-card">
-          ${sectionHeader('◎','Top bairros por entregas','Quantidade de entregas finalizadas por bairro.')}
-          <div class="chart-box small">${horizontalBarChartHTML(nbRows.slice(0,8).map(r=>({label:r.name,value:r.deliveries})),'#315AA8')}</div>
-        </article>
+        <article class="card section-card">${sectionHeader('▥','Entregas por dia','Evolução das entregas finalizadas no período.')}<div class="chart-box">${lineChartHTML(groupCountByDate(final), '#F2B523')}</div></article>
+        <article class="card section-card">${sectionHeader('★','Destaques dos bairros','Volume e principais ocorrências.')}<div class="stat-list">${statRow('Mais entregas',topDelivery?.name || '—',topDelivery?`${topDelivery.deliveries} entregas`:'Sem dados')}${statRow('Mais endereço errado',topWrong?.name || '—',topWrong?`${topWrong.wrongAddress} ocorrências`:'Sem dados')}${statRow('Mais reagendamentos',topReschedule?.name || '—',topReschedule?`${topReschedule.rescheduled} reagendamentos`:'Sem dados')}</div></article>
       </section>
 
       <section class="dashboard-grid equal">
-        <article class="card section-card">
-          ${sectionHeader('◉','Custos por categoria','Combustível, manutenção e demais gastos.')}
-          <div class="chart-box small">${donutChartHTML(buildCostCategoryRows(costs))}</div>
-        </article>
-        <article class="card section-card">
-          ${sectionHeader('!','Problemas por bairro','Endereço errado, devolução, agendamento e reagendamento.')}
-          <div class="chart-box small">${problemNeighborhoodChartHTML(nbRows.slice().sort((a,b)=>b.problemCount-a.problemCount).slice(0,8))}</div>
-        </article>
+        <article class="card section-card">${sectionHeader('R$','Faturamento líquido x custos por semana','Compare resultado e gasto por semana.')}<div class="chart-box small">${groupedBarChartHTML(weeklyRows.map(r => ({label:r.label,a:r.netRevenue,b:r.costs})), 'Faturamento líquido','Custos')}</div></article>
+        <article class="card section-card">${sectionHeader('◎','Top bairros por entregas','Quantidade de entregas finalizadas por bairro.')}<div class="chart-box small">${horizontalBarChartHTML(nbRows.slice(0,8).map(r=>({label:r.name,value:r.deliveries})),'#F2B523')}</div></article>
       </section>
 
-      <section class="card section-card" style="margin-top:12px">
-        ${sectionHeader('▤','Resultados semanais','Entregas, faturamento, custos, KM e eficiência por ciclo.')}
-        ${weeklyTable(weeklyRows)}
-      </section>
+      <section class="card section-card" style="margin-top:12px">${sectionHeader('▤','Resultados semanais','Entregas, faturamento, custos, KM e eficiência por ciclo.')}${weeklyTable(weeklyRows)}</section>
     `;
+  }
+
+  function executiveMetric(label,value,sub,icon='•',tone='info') {
+    return `<article class="executive-metric ${tone}"><div class="executive-metric-icon">${icon}</div><div><span>${esc(label)}</span><strong>${value}</strong><small>${esc(sub)}</small></div></article>`;
+  }
+
+  function managementPanel(icon,title,subtitle,rows) {
+    return `<article class="card management-panel"><div class="management-panel-head"><span>${icon}</span><div><strong>${esc(title)}</strong><small>${esc(subtitle)}</small></div></div><div class="management-panel-rows">${rows.map(([label,value,sub])=>`<div class="management-row"><div><span>${esc(label)}</span><small>${esc(sub)}</small></div><strong>${value}</strong></div>`).join('')}</div></article>`;
   }
 
   function statRow(label,value,sub) { return `<div class="stat-row"><div><strong>${esc(label)}</strong><small>${esc(sub)}</small></div><div class="stat-number">${esc(value)}</div></div>`; }
@@ -775,80 +919,94 @@
     const deliveries = scoped(state.deliveries).filter(d => d.date === date);
     const purchases = deliveries.filter(isRootPurchase);
     const scheduled = scheduledForDate(date);
-    const pending = allPending().filter(d => d.date === date || d.scheduledDate === date);
-    const final = deliveries.filter(d => d.status === 'Finalizada');
     const costs = scoped(state.costs).filter(c => c.date === date);
     const cycles = scoped(state.cycles).filter(c => c.date === date);
-    const openCycles = cycles.filter(c => !c.returnTime);
     const odometers = scoped(state.odometerLogs).filter(o => o.date === date);
+    const issues = systemIssues({date,includeInfo:false});
+    const critical = issues.filter(i=>i.severity==='critical');
+    const warning = issues.filter(i=>i.severity==='warning');
+    const openCycles = cycles.filter(c => !c.returnTime);
+    const waiting = deliveries.filter(d => !isFinal(d) && !d.departureTime && !(d.scheduledDate && openScheduled(d)));
+    const inRoute = deliveries.filter(d => d.status === 'Em rota');
     const totalDayKm = totalKmFromOdometers(odometers);
-    const carriedToday = sum(cycles.map(c => cycleCalc(c).deliveries));
-    const fin = financialsForRange({start:date,end:date});
+    const recommendation = operationRecommendation(date, deliveries, cycles, issues, odometers);
+    const closure = dayClosure(date);
+    const closeChecks = dayClosingChecks(date);
+
     $('#view').innerHTML = `
-      <section class="today-hero premium-flow-hero">
-        <div><span class="eyebrow">OPERAÇÃO GUIADA</span><h2>Operação de hoje</h2><p>O fluxo foi simplificado: registre a compra, abra o KM inicial, monte a saída, dê baixa nas entregas, registre o retorno e feche o KM final.</p></div>
-        <div class="today-date-chip">${dateBR(date)}</div>
+      <section class="v11-operation-hero ${closure?'closed-day':''}">
+        <div class="v11-operation-hero-copy"><span class="eyebrow">CENTRAL DE OPERAÇÃO</span><h2>${closure?'Dia encerrado':'O que está acontecendo agora'}</h2><p>${closure?`Encerrado em ${dateTimeBR(closure.closedAt)}. Correções continuam permitidas e ficam no histórico.`:'Abra esta tela e veja imediatamente o que aguarda saída, o que está em rota e o que precisa de ação.'}</p></div>
+        <div class="v11-operation-hero-actions"><div class="today-date-chip">${dateBR(date)}</div><button class="btn ${closure?'secondary':'primary'}" data-action="${closure?'reopen-day':'close-day'}">${closure?'↺ Reabrir dia':'✓ Encerrar operação do dia'}</button></div>
       </section>
 
-      <section class="workflow-strip">
-        ${workflowStep('1','Registrar compra','A taxa já entra no faturamento','new-delivery')}
-        ${workflowStep('2','KM inicial','Uma vez por veículo no início do expediente','new-odometer')}
-        ${workflowStep('3','Montar saída','Selecione uma ou várias entregas e abra 1 ciclo','start-cycle')}
-        ${workflowStep('4','Entregar','Marque cada entrega quando chegar ao cliente','scroll-deliveries')}
-        ${workflowStep('5','Retornar','Feche o ciclo quando o entregador voltar','scroll-cycles')}
-        ${workflowStep('6','KM final','Feche o odômetro no fim do expediente','scroll-odometer')}
+      <section class="operation-pulse-grid">
+        ${operationPulseCard('Aguardando saída',waiting.length,waiting.length?'Compras prontas para montar saída':'Nenhuma compra parada','▣',waiting.length?'focus':'success','scroll-deliveries')}
+        ${operationPulseCard('Em rota',inRoute.length,`${openCycles.length} ciclo(s) aberto(s)`,'🚚',inRoute.length?'info':'success','scroll-cycles')}
+        ${operationPulseCard('Precisa de atenção',critical.length+warning.length,`${critical.length} crítica(s) • ${warning.length} atenção`,'!',critical.length?'danger':warning.length?'warning':'success','go-pending')}
+        ${operationPulseCard('Programadas para hoje',scheduled.length,scheduled.length?'Aguardando atendimento':'Nenhuma programação hoje','◷',scheduled.length?'warning':'info','scroll-scheduled')}
+        ${operationPulseCard('KM rodado hoje',`${number(totalDayKm,1)} km`,`${odometers.filter(o=>odometerCalc(o).complete).length} veículo(s) fechado(s)`,'KM','info','scroll-odometer')}
       </section>
 
-      <section class="quick-kpis">
-        ${quickKpi('Compras registradas', purchases.length, 'Faturam no registro')}
-        ${quickKpi('Finalizadas', final.length, 'Concluídas')}
-        ${quickKpi('Em rota', deliveries.filter(d=>d.status==='Em rota').length, `${openCycles.length} ciclo(s) aberto(s)`)}
-        ${quickKpi('Entregas levadas', carriedToday, `${cycles.length} ciclos no dia`)}
-        ${quickKpi('Entregas por ciclo', number(cycles.length?carriedToday/cycles.length:0,2), 'Média do dia')}
-        ${quickKpi('Faturamento bruto', money(fin.gross), 'No registro da compra')}
-        ${quickKpi('Faturamento líquido', money(fin.net), `Reembolsos ${money(fin.refundTotal)}`)}
-        ${quickKpi('KM rodado hoje', `${number(totalDayKm,1)} km`, `${cycles.length} ciclos • ${number(cycles.length?totalDayKm/cycles.length:0,2)} km/ciclo`)}
+      <section class="next-best-action ${recommendation.tone}">
+        <div class="next-best-icon">${recommendation.icon}</div>
+        <div class="next-best-copy"><span>PRÓXIMA AÇÃO RECOMENDADA</span><h3>${esc(recommendation.title)}</h3><p>${esc(recommendation.text)}</p></div>
+        <button class="btn primary" data-action="${recommendation.action}" ${recommendation.recordId?`data-id="${recommendation.recordId}"`:''}>${esc(recommendation.button)}</button>
       </section>
 
-      <section class="card section-card odometer-today-panel" id="todayOdometerSection">
-        ${sectionHeader('KM','1. Quilometragem diária dos veículos','Registre o KM inicial antes do veículo começar a trabalhar e o KM final ao encerrar o expediente. Nunca informe KM em cada ciclo.', `<button class="btn primary small" data-action="new-odometer">＋ Registrar KM inicial/final</button>`)}
-        ${odometerDayCards(date)}
-      </section>
-
-      <section class="card section-card active-cycle-panel" id="todayCyclesSection">
-        ${sectionHeader('↻','2. Saídas e ciclos do dia','Cada saída da loja até o retorno ao mercado é exatamente 1 ciclo. Se levar 5 entregas na mesma saída, são 5 entregas dentro de 1 ciclo.', `<button class="btn primary small" data-action="start-cycle">🚚 Montar nova saída</button>`)}
-        ${activeCycleCards(cycles)}
-      </section>
-
-      <section class="two-column">
-        <article class="card section-card">
-          ${sectionHeader('◷','Programadas para hoje','Puxadas automaticamente pela Data Programada.', `<button class="btn primary small" data-action="new-delivery">＋ Registrar compra</button>`)}
-          ${scheduledTable(scheduled, true)}
-        </article>
-        <article class="card section-card">
-          ${sectionHeader('!','Atenções do dia','Pendências e alertas que precisam de ação.')}
-          ${pendingAlertList(pending)}
+      <section class="v11-separated-section" id="todayDeliveriesSection">
+        <div class="v11-section-number">1</div>
+        <article class="card section-card v11-section-card">
+          ${sectionHeader('▣','Entregas e próximas ações','Cada compra mostra uma linha do tempo clara. O botão principal muda automaticamente para a próxima ação correta.', `<button class="btn primary small" data-action="new-delivery">＋ Registrar compra</button>`)}
+          ${operationCards(deliveries)}
         </article>
       </section>
 
-      <section class="dashboard-grid equal">
-        <article class="card section-card">
-          ${sectionHeader('↻','Resumo de ciclos','Quantidade de saídas, entregas levadas e duração.', `<button class="btn secondary small" data-action="start-cycle">🚚 Nova saída</button>`)}
-          ${cycleMiniTable(cycles)}
-        </article>
-        <article class="card section-card">
-          ${sectionHeader('R$','Custos de hoje','Combustível, manutenção e outros gastos.', `<button class="btn secondary small" data-action="new-cost">＋ Registrar custo</button>`)}
-          ${costMiniTable(costs)}
+      <section class="v11-separated-section" id="todayCyclesSection">
+        <div class="v11-section-number">2</div>
+        <article class="card section-card v11-section-card">
+          ${sectionHeader('↻','Saídas e ciclos','Uma saída da loja até o retorno ao mercado é 1 ciclo. Cada ciclo pode levar várias entregas.', `<button class="btn primary small" data-action="start-cycle">🚚 Montar nova saída</button>`)}
+          ${activeCycleCards(cycles)}
         </article>
       </section>
 
-      <article class="card section-card" style="margin-top:12px" id="todayDeliveriesSection">
-        ${sectionHeader('▣','Entregas de hoje','Use Saiu para iniciar uma saída com uma ou mais entregas; depois marque Entregue/Devolvida e feche o ciclo no retorno.', `<button class="btn primary small" data-action="new-delivery">＋ Registrar compra</button>`)}
-        ${operationCards(deliveries)}
-      </article>
+      <section class="v11-separated-section" id="todayOdometerSection">
+        <div class="v11-section-number">3</div>
+        <article class="card section-card v11-section-card">
+          ${sectionHeader('KM','Quilometragem diária','KM inicial uma vez antes do veículo trabalhar; KM final uma vez no encerramento do expediente.', `<button class="btn primary small" data-action="new-odometer">＋ Registrar KM</button>`)}
+          ${odometerDayCards(date)}
+        </article>
+      </section>
+
+      <section class="v11-separated-section" id="todayIssuesSection">
+        <div class="v11-section-number">4</div>
+        <article class="card section-card v11-section-card">
+          ${sectionHeader('!','Erros e pendências por prioridade','Vermelho significa crítica; amarelo significa atenção. O sistema mostra primeiro o que mais pode afetar a operação.', `<button class="btn secondary small" data-action="go-pending">Abrir central completa</button>`)}
+          ${issueSummaryList(issues)}
+        </article>
+      </section>
+
+      <section class="two-column v11-secondary-grid" id="todayScheduledSection">
+        <article class="card section-card">${sectionHeader('◷','Programadas para hoje','Puxadas automaticamente pela data programada.')}${scheduledTable(scheduled,true)}</article>
+        <article class="card section-card">${sectionHeader('R$','Custos de hoje','Combustível, manutenção e outros gastos.', `<button class="btn secondary small" data-action="new-cost">＋ Registrar custo</button>`)}${costMiniTable(costs)}</article>
+      </section>
+
+      <section class="day-close-checkpoint ${closeChecks.blockers.length?'has-blockers':'ready'}">
+        <div><span>CHECKPOINT DO ENCERRAMENTO</span><h3>${closeChecks.blockers.length?`${closeChecks.blockers.length} bloqueio(s) antes de encerrar`:'Dia pronto para conferência final'}</h3><p>${closeChecks.blockers.length?'Resolva os pontos críticos para evitar ciclos, KM ou entregas com pontas soltas.':'Quando terminar o expediente, use o botão Encerrar operação do dia.'}</p></div>
+        <button class="btn ${closeChecks.blockers.length?'secondary':'primary'}" data-action="close-day">Conferir encerramento</button>
+      </section>
     `;
     bindViewActions();
   }
+
+  function operationPulseCard(label,value,sub,icon,tone='info',action='') {
+    return `<button class="operation-pulse-card ${tone}" ${action?`data-action="${action}"`:''}><span class="operation-pulse-icon">${icon}</span><span class="operation-pulse-copy"><small>${esc(label)}</small><strong>${value}</strong><em>${esc(sub)}</em></span></button>`;
+  }
+
+  function issueSummaryList(issues) {
+    if (!issues.length) return emptyState('✓','Nenhuma pendência importante agora','A operação está sem situações críticas ou de atenção para hoje.');
+    return `<div class="issue-summary-list">${issues.slice(0,8).map(issue=>systemIssueCard(issue,true)).join('')}</div>`;
+  }
+
   function quickKpi(label,value,sub) { return `<article class="card quick-kpi"><span>${esc(label)}</span><strong>${value}</strong><small>${esc(sub)}</small></article>`; }
 
   function lastPurchaseSummary(date = todayISO()) {
@@ -891,13 +1049,32 @@
   }
 
 
+  function deliveryJourneyTimeline(d, cyc = null) {
+    const returnTime = d.returnTime || cyc?.returnTime || '';
+    const steps = [
+      {label:'Compra',time:d.purchaseTime,done:!!d.purchaseTime,active:!d.departureTime && !isFinal(d)},
+      {label:'Saída',time:d.departureTime,done:!!d.departureTime,active:!!d.departureTime && !d.finalizationTime && !['Devolvida','Retirada na loja','Cancelada'].includes(d.status)},
+      {label:d.status==='Retirada na loja'?'Retirada':'Entregue ao cliente',time:d.finalizationTime || d.withdrawalTime || '',done:!!(d.finalizationTime || d.withdrawalTime || ['Devolvida','Retirada na loja','Cancelada'].includes(d.status)),active:!!d.departureTime && !d.finalizationTime && !['Devolvida','Retirada na loja','Cancelada'].includes(d.status)},
+      {label:'Retorno à loja',time:returnTime,done:!!returnTime,active:!!d.finalizationTime && !returnTime && !!cyc && !cyc.returnTime}
+    ];
+    return `<div class="journey-timeline">${steps.map((step,index)=>`<div class="journey-step ${step.done?'done':''} ${step.active?'active':''}"><div class="journey-dot">${step.done?'✓':index+1}</div><div class="journey-step-copy"><small>${esc(step.label)}</small><strong>${step.time || (step.active?'Agora':'—')}</strong></div></div>`).join('')}</div>`;
+  }
+
   function operationCards(deliveries) {
     if (!deliveries.length) return emptyState('▣','Nenhuma compra registrada hoje','Clique em Registrar compra para começar.');
     const sorted = deliveries.slice().sort((a,b) => {
-      const af = isFinal(a) ? 1 : 0, bf = isFinal(b) ? 1 : 0;
-      return af-bf || `${a.purchaseTime||''}`.localeCompare(`${b.purchaseTime||''}`);
+      const priority = d => {
+        if (d.status==='Em rota' && !d.finalizationTime) return 0;
+        if (!isFinal(d) && !d.departureTime) return 1;
+        if (d.departureTime && d.finalizationTime && !d.returnTime) return 2;
+        return 3;
+      };
+      const delayedA = currentWaitMinutes(a) > Number(state.settings.delayMinutes||120) ? -1 : 0;
+      const delayedB = currentWaitMinutes(b) > Number(state.settings.delayMinutes||120) ? -1 : 0;
+      return priority(a)-priority(b) || delayedA-delayedB || `${a.purchaseTime||''}`.localeCompare(`${b.purchaseTime||''}`);
     });
-    return `<div class="operation-card-grid simplified">${sorted.map(d => {
+
+    return `<div class="operation-card-grid v11-operation-cards">${sorted.map(d => {
       const calc = deliveryCalc(d);
       const liveWait = currentWaitMinutes(d);
       const liveDelayed = liveWait !== null && liveWait > Number(state.settings.delayMinutes || 120);
@@ -907,10 +1084,11 @@
       const cyc = d.cycleId ? cycle(d.cycleId) : null;
       let mainAction = '';
       if (!isFinal(d) && !isFutureScheduled) {
-        if (!d.departureTime) mainAction = `<button class="action-btn main-next" data-action="quick-departure" data-id="${d.id}"><span>🚚</span><b>Incluir em saída</b><small>Selecionar ciclo, veículo e entregador</small></button>`;
-        else if (d.departureTime && !d.finalizationTime && d.status!=='Devolvida') mainAction = `<button class="action-btn main-next success" data-action="quick-delivered" data-id="${d.id}"><span>✅</span><b>Marcar como entregue</b><small>Grava a hora desta entrega na casa do cliente</small></button>`;
-        else if (d.departureTime && !d.returnTime && cyc && !cyc.returnTime) mainAction = `<button class="action-btn main-next" data-action="close-cycle" data-id="${cyc.id}"><span>🏪</span><b>Registrar retorno do ciclo</b><small>Fecha a saída quando o entregador volta ao mercado</small></button>`;
+        if (!d.departureTime) mainAction = `<button class="v11-primary-action" data-action="quick-departure" data-id="${d.id}"><span>🚚</span><div><b>Incluir em uma saída</b><small>Monte um ciclo com uma ou várias entregas</small></div><i>→</i></button>`;
+        else if (d.departureTime && !d.finalizationTime && d.status!=='Devolvida') mainAction = `<button class="v11-primary-action success" data-action="quick-delivered" data-id="${d.id}"><span>✓</span><div><b>Marcar como entregue</b><small>Registra a hora individual na casa do cliente</small></div><i>→</i></button>`;
+        else if (d.departureTime && !d.returnTime && cyc && !cyc.returnTime) mainAction = `<button class="v11-primary-action" data-action="close-cycle" data-id="${cyc.id}"><span>↻</span><div><b>Registrar retorno do ciclo</b><small>Use quando o entregador voltar ao mercado</small></div><i>→</i></button>`;
       }
+
       let secondaryActions = '';
       if (!isFinal(d) && !isFutureScheduled) {
         secondaryActions += `<button class="action-btn neutral" data-action="quick-reschedule" data-id="${d.id}">📅 Reagendar</button>`;
@@ -918,38 +1096,34 @@
         secondaryActions += `<button class="action-btn neutral danger-text" data-action="quick-devolution" data-id="${d.id}">↩ Devolvida</button>`;
       }
       secondaryActions += `<button class="action-btn neutral" data-action="edit-delivery" data-id="${d.id}">✏️ Editar</button>`;
+      secondaryActions += `<button class="action-btn neutral danger-text" data-action="delete-record" data-type="delivery" data-id="${d.id}">🗑 Apagar</button>`;
 
-      return `<article class="delivery-action-card clear-card ${deliveryStatusClass(d.status)} ${liveDelayed && !d.departureTime ? 'late':''}">
-        <div class="purchase-identity-row">
-          <div class="purchase-number-block"><span>COMPRA Nº</span><strong>${esc(d.orderNo || '—')}</strong></div>
-          <div class="purchase-secondary"><span>Cupom PDV</span><strong>${esc(d.coupon || '—')}</strong><small>${esc(neighborhood(d.neighborhoodId)?.name || 'Sem bairro')}</small></div>
-          <div class="purchase-status">${statusBadge(d.status)}</div>
+      return `<article class="delivery-action-card clear-card v11-delivery-card ${deliveryStatusClass(d.status)} ${liveDelayed && !d.departureTime ? 'late':''}">
+        <div class="v11-delivery-head">
+          <div class="v11-order-number"><span>COMPRA</span><strong>Nº ${esc(d.orderNo || '—')}</strong></div>
+          <div class="v11-delivery-identification"><small>CUPOM PDV</small><strong>${esc(d.coupon || '—')}</strong><em>${esc(neighborhood(d.neighborhoodId)?.name || 'Sem bairro')}</em></div>
+          <div class="v11-delivery-head-status">${statusBadge(d.status)}${liveDelayed && !d.departureTime?'<span class="badge red">Atrasada</span>':''}</div>
         </div>
 
-        <div class="delivery-info-section">
-          <div class="section-mini-title">HORÁRIOS DESTA ENTREGA</div>
-          <div class="delivery-timeline-grid">
-            <div><span>1</span><small>Entrada</small><strong>${d.purchaseTime || '—'}</strong></div>
-            <div><span>2</span><small>Saída</small><strong>${d.departureTime || '—'}</strong></div>
-            <div class="client-finish"><span>3</span><small>Entregue ao cliente</small><strong>${d.finalizationTime || '—'}</strong></div>
-            <div><span>4</span><small>Retorno à loja</small><strong>${d.returnTime || '—'}</strong></div>
-          </div>
-          <div class="delivery-duration-row">
-            <span><small>Espera</small><strong class="${liveDelayed?'text-danger':''}">${fmtMinutes(liveWait)}</strong></span>
-            <span><small>Loja → cliente</small><strong>${fmtMinutes(calc.toClient)}</strong></span>
-            <span><small>Rota total</small><strong>${fmtMinutes(calc.route)}</strong></span>
-          </div>
+        ${deliveryJourneyTimeline(d,cyc)}
+
+        <div class="v11-delivery-insights">
+          <div><small>Espera</small><strong class="${liveDelayed?'text-danger':''}">${fmtMinutes(liveWait)}</strong></div>
+          <div><small>Loja → cliente</small><strong>${fmtMinutes(calc.toClient)}</strong></div>
+          <div><small>Rota total</small><strong>${fmtMinutes(calc.route)}</strong></div>
+          <div><small>Taxa</small><strong>${money(root?.fee || d.fee)}</strong></div>
         </div>
 
-        <div class="delivery-finance-row"><span>Taxa registrada <strong>${money(root?.fee || d.fee)}</strong></span>${refund ? `<span class="refund-chip">Reembolso ${money(refund)}</span>`:''}</div>
-        ${cyc ? `<div class="delivery-cycle-chip">↻ ${esc(cyc.code)} • saída ${cyc.departureTime||'—'} • ${cycleCalc(cyc).deliveries} entrega(s) no ciclo</div>`:''}
-        ${isFutureScheduled ? `<div class="scheduled-note">📅 Programada para ${dateBR(d.scheduledDate)} • o faturamento já foi contado na compra original.</div>`:''}
+        ${cyc ? `<div class="v11-cycle-reference"><span>↻</span><div><strong>${esc(cyc.code)}</strong><small>${cycleCalc(cyc).deliveries} entrega(s) • saída ${cyc.departureTime||'—'} • ${esc(vehicle(cyc.vehicleId)?.name||'Sem veículo')}</small></div></div>`:''}
+        ${isFutureScheduled ? `<div class="scheduled-note">📅 Programada para ${dateBR(d.scheduledDate)}. O faturamento já foi contado na compra original.</div>`:''}
+        ${refund ? `<div class="refund-chip">Reembolso registrado: ${money(refund)}</div>`:''}
 
-        ${mainAction ? `<div class="next-action-zone"><span class="section-mini-title">PRÓXIMA AÇÃO</span>${mainAction}</div>` : ''}
-        <div class="secondary-action-zone"><span class="section-mini-title">OUTRAS AÇÕES</span><div class="secondary-action-grid">${secondaryActions}</div></div>
+        ${mainAction ? `<div class="v11-next-action"><span>PRÓXIMA AÇÃO</span>${mainAction}</div>` : `<div class="v11-complete-state">✓ Nenhuma ação operacional pendente nesta entrega</div>`}
+        <details class="v11-more-actions"><summary>Outras ações e correções</summary><div class="secondary-action-grid">${secondaryActions}</div></details>
       </article>`;
     }).join('')}</div>`;
   }
+
   function renderDeliveries() {
     const deliveries = filteredDeliveries().slice().sort((a,b) => `${b.date}${b.purchaseTime||''}`.localeCompare(`${a.date}${a.purchaseTime||''}`));
     $('#view').innerHTML = `<article class="card section-card">${sectionHeader('▣','Histórico de entregas',`${deliveries.length} registros no recorte atual.`, `<button class="btn primary small" data-action="new-delivery">＋ Nova entrega</button>`)}${deliveryTable(deliveries)}</article>`;
@@ -1009,21 +1183,40 @@
   }
 
   function renderPending() {
-    const list = allPending().slice().sort((a,b) => (a.scheduledDate || a.date).localeCompare(b.scheduledDate || b.date));
-    $('#view').innerHTML = `<article class="card section-card">${sectionHeader('!','Central automática de pendências','Você não digita aqui: clique em Resolver para abrir o registro correto.')}${pendingTable(list)}</article>`;
+    const list = systemIssues({includeInfo:true});
+    const critical = list.filter(i=>i.severity==='critical');
+    const warning = list.filter(i=>i.severity==='warning');
+    const info = list.filter(i=>i.severity==='info');
+    $('#view').innerHTML = `
+      <section class="pending-severity-overview">
+        ${severitySummary('Críticas',critical.length,'Precisam de ação imediata','critical')}
+        ${severitySummary('Atenção',warning.length,'Devem ser conferidas','warning')}
+        ${severitySummary('Informativas',info.length,'Acompanhamento e lembretes','info')}
+      </section>
+      <section class="pending-severity-groups">
+        ${issueGroup('critical','Críticas','Erros e situações que podem comprometer a operação ou os indicadores.',critical)}
+        ${issueGroup('warning','Atenção','Itens que precisam de conferência para evitar pendências futuras.',warning)}
+        ${issueGroup('info','Informativas','Lembretes operacionais e situações em acompanhamento.',info)}
+      </section>
+    `;
     bindViewActions();
   }
 
-  function pendingTable(list) {
-    if (!list.length) return emptyState('✓','Nenhuma pendência aberta','A operação está sem pendências registradas.');
-    return `<div class="table-wrap"><table><thead><tr><th>Data</th><th>Cupom</th><th>Status</th><th>Pendências</th><th>Bairro</th><th>Ação</th></tr></thead><tbody>${list.map(d => `<tr>
-      <td><div class="cell-title">${dateBR(d.date)}</div>${d.scheduledDate ? `<div class="cell-sub">Prog. ${dateBR(d.scheduledDate)}</div>`:''}</td>
-      <td><div class="cell-title">${esc(d.coupon || '—')}</div></td>
-      <td>${statusBadge(d.status)}</td>
-      <td>${pendingReasons(d).map(x => `<span class="badge ${x.includes('vencida') || x.includes('Atrasada') ? 'red':'yellow'}">${esc(x)}</span>`).join(' ')}</td>
-      <td>${esc(neighborhood(d.neighborhoodId)?.name || '—')}</td>
-      <td><button class="btn primary small" data-action="edit-delivery" data-id="${d.id}">Resolver</button></td>
-    </tr>`).join('')}</tbody></table></div>`;
+  function severitySummary(label,count,sub,tone) {
+    return `<article class="severity-summary ${tone}"><span>${tone==='critical'?'!':tone==='warning'?'△':'i'}</span><div><small>${esc(label)}</small><strong>${count}</strong><em>${esc(sub)}</em></div></article>`;
+  }
+
+  function issueGroup(tone,title,subtitle,issues) {
+    return `<article class="card issue-group ${tone}"><div class="issue-group-head"><div><span>${esc(title.toUpperCase())}</span><h3>${esc(title)}</h3><p>${esc(subtitle)}</p></div><strong>${issues.length}</strong></div>${issues.length?`<div class="system-issue-grid">${issues.map(issue=>systemIssueCard(issue,false)).join('')}</div>`:emptyState('✓',`Nenhuma pendência ${title.toLowerCase()}`,'Não há itens nesta prioridade.')}</article>`;
+  }
+
+  function systemIssueCard(issue,compact=false) {
+    let actionHtml = '';
+    if (issue.action === 'edit-delivery') actionHtml = `<button class="btn secondary small" data-action="edit-delivery" data-id="${issue.recordId}">Resolver</button>`;
+    else if (issue.action === 'close-cycle') actionHtml = `<button class="btn primary small" data-action="close-cycle" data-id="${issue.recordId}">Registrar retorno</button>`;
+    else if (issue.action === 'edit-cycle') actionHtml = `<button class="btn secondary small" data-action="edit-cycle" data-id="${issue.recordId}">Abrir ciclo</button>`;
+    else if (issue.action === 'edit-odometer') actionHtml = `<button class="btn secondary small" data-action="edit-odometer" data-id="${issue.recordId}">Corrigir KM</button>`;
+    return `<div class="system-issue-card ${issue.severity} ${compact?'compact':''}"><div class="system-issue-indicator">${issue.severity==='critical'?'!':issue.severity==='warning'?'△':'i'}</div><div class="system-issue-copy"><strong>${esc(issue.title)}</strong><p>${esc(issue.detail)}</p><small>${dateBR(issue.relatedDate || issue.date)}${issue.meta?` • ${esc(issue.meta)}`:''}</small></div>${actionHtml}</div>`;
   }
 
   function pendingAlertList(list) {
@@ -1421,6 +1614,52 @@
     return '—';
   }
 
+
+  function closeDayChecklistHTML(checks) {
+    const row = (item,tone) => `<div class="close-day-check ${tone}"><span>${item.icon}</span><p>${esc(item.text)}</p></div>`;
+    return `<div class="close-day-checklist">${checks.blockers.map(x=>row(x,'blocker')).join('')}${checks.warnings.map(x=>row(x,'warning')).join('')}${!checks.blockers.length&&!checks.warnings.length?`<div class="close-day-all-good"><span>✓</span><div><strong>Tudo conferido</strong><p>Não encontramos ciclos abertos, entregas em rota ou KM pendente dos veículos que trabalharam.</p></div></div>`:''}</div>`;
+  }
+
+  function openCloseDayModal(date = todayISO()) {
+    const existing = dayClosure(date);
+    if (existing) {
+      openModal('Operação já encerrada',`O dia ${dateBR(date)} foi encerrado em ${dateTimeBR(existing.closedAt)}.`,`
+        <div class="close-day-closed-state"><span>✓</span><div><strong>Dia encerrado</strong><p>Você ainda pode corrigir registros. Reabra o dia para voltar ao fluxo operacional normal.</p></div></div>
+        <div class="form-actions"><button type="button" class="btn secondary" id="cancelCloseDayBtn">Fechar</button><button type="button" class="btn primary" id="reopenDayBtn">↺ Reabrir operação do dia</button></div>
+      `,'ENCERRAMENTO DO DIA');
+      $('#cancelCloseDayBtn').addEventListener('click',closeModal);
+      $('#reopenDayBtn').addEventListener('click',()=>reopenDay(date));
+      return;
+    }
+
+    const checks = dayClosingChecks(date);
+    openModal('Conferir encerramento do dia',checks.blockers.length?'Ainda existem bloqueios que precisam ser resolvidos.':'A operação pode ser encerrada com segurança.',`
+      <div class="close-day-summary ${checks.blockers.length?'blocked':'ready'}"><span>${checks.blockers.length?'!':'✓'}</span><div><strong>${checks.blockers.length?`${checks.blockers.length} bloqueio(s) encontrado(s)`:'Checklist principal concluído'}</strong><p>${checks.blockers.length?'Corrija os pontos abaixo e volte a conferir.':'Confira os avisos, se houver, e encerre o expediente.'}</p></div></div>
+      ${closeDayChecklistHTML(checks)}
+      <div class="form-actions"><button type="button" class="btn secondary" id="cancelCloseDayBtn">Voltar</button>${checks.blockers.length?'':`<button type="button" class="btn primary" id="confirmCloseDayBtn">✓ Encerrar operação de ${dateBR(date)}</button>`}</div>
+    `,'CHECKPOINT OPERACIONAL');
+    $('#cancelCloseDayBtn').addEventListener('click',closeModal);
+    $('#confirmCloseDayBtn')?.addEventListener('click',async()=>{
+      const snapshot = {
+        deliveries:scoped(state.deliveries).filter(d=>d.date===date).length,
+        cycles:scoped(state.cycles).filter(c=>c.date===date).length,
+        km:totalKmFromOdometers(scoped(state.odometerLogs).filter(o=>o.date===date)),
+        warnings:checks.warnings.length
+      };
+      state.dayClosures.push({id:uid('close'),date,mode:currentMode(),closedAt:nowISO(),snapshot});
+      await saveState(`Operação de ${dateBR(date)} encerrada`);
+      closeModal(); toast('Operação do dia encerrada com sucesso.','success'); render();
+    });
+  }
+
+  async function reopenDay(date = todayISO()) {
+    const closure = dayClosure(date); if (!closure) return;
+    if (!confirm(`Reabrir a operação de ${dateBR(date)}?`)) return;
+    state.dayClosures = state.dayClosures.filter(x => x.id !== closure.id);
+    await saveState(`Operação de ${dateBR(date)} reaberta`);
+    closeModal(); toast('Operação do dia reaberta.','success'); render();
+  }
+
   function bindViewActions() {
     $$('[data-action="new-delivery"]').forEach(b=>b.addEventListener('click',()=>openQuickDeliveryModal()));
     $$('[data-action="edit-delivery"]').forEach(b=>b.addEventListener('click',()=>openDeliveryModal(b.dataset.id)));
@@ -1446,6 +1685,10 @@
     $$('[data-action="scroll-deliveries"]').forEach(b=>b.addEventListener('click',()=>$('#todayDeliveriesSection')?.scrollIntoView({behavior:'smooth',block:'start'})));
     $$('[data-action="scroll-cycles"]').forEach(b=>b.addEventListener('click',()=>$('#todayCyclesSection')?.scrollIntoView({behavior:'smooth',block:'start'})));
     $$('[data-action="scroll-odometer"]').forEach(b=>b.addEventListener('click',()=>$('#todayOdometerSection')?.scrollIntoView({behavior:'smooth',block:'start'})));
+    $$('[data-action="scroll-scheduled"]').forEach(b=>b.addEventListener('click',()=>$('#todayScheduledSection')?.scrollIntoView({behavior:'smooth',block:'start'})));
+    $$('[data-action="go-pending"]').forEach(b=>b.addEventListener('click',()=>navigate('pending')));
+    $$('[data-action="close-day"]').forEach(b=>b.addEventListener('click',()=>openCloseDayModal(todayISO())));
+    $$('[data-action="reopen-day"]').forEach(b=>b.addEventListener('click',()=>reopenDay(todayISO())));
   }
   function bindSettingsActions() {
     $$('[data-action="new-config"]').forEach(b=>b.addEventListener('click',()=>openConfigModal()));
@@ -1564,8 +1807,10 @@
       if(parsedFee === null){toast(data.feeMode === 'custom' ? 'Informe um valor válido para a taxa livre.' : 'Escolha a taxa de entrega.','warning');return;}
       data.fee = String(parsedFee);
       if(data.deliveryMode==='schedule' && !data.scheduledDate){toast('Informe a data programada.','warning');return;}
-      const duplicateOrder = scoped(state.deliveries).some(d => d.date===data.date && isRootPurchase(d) && String(d.orderNo||'').trim()===String(data.orderNo||'').trim());
-      if (duplicateOrder && !confirm(`Já existe uma compra Nº ${data.orderNo} nesta data. Deseja registrar mesmo assim?`)) return;
+      const duplicateOrder = scoped(state.deliveries).find(d => d.date===data.date && isRootPurchase(d) && String(d.orderNo||'').trim()===String(data.orderNo||'').trim());
+      if (duplicateOrder && !confirm(`Atenção: já existe a Compra Nº ${data.orderNo} nesta data (Cupom ${duplicateOrder.coupon||'—'}).\n\nDeseja continuar mesmo assim?`)) return;
+      const duplicateCoupon = scoped(state.deliveries).find(d => d.date===data.date && isRootPurchase(d) && String(d.coupon||'').trim()===String(data.coupon||'').trim());
+      if (duplicateCoupon && !confirm(`Possível duplicidade: o Cupom ${data.coupon} já está na Compra Nº ${duplicateCoupon.orderNo||'—'}.\n\nConfira antes de continuar. Deseja registrar mesmo assim?`)) return;
       const id=uid('del');
       const scheduled=data.deliveryMode==='schedule';
       const d={
@@ -1716,7 +1961,11 @@
       if (d.date !== date || isFinal(d) || d.departureTime) return false;
       if (d.scheduledDate && openScheduled(d)) return false;
       return true;
-    }).sort((a,b)=>(a.purchaseTime||'').localeCompare(b.purchaseTime||''));
+    }).sort((a,b)=>{
+      const aw=currentWaitMinutes(a)??0,bw=currentWaitMinutes(b)??0;
+      const ad=aw>Number(state.settings.delayMinutes||120)?0:1,bd=bw>Number(state.settings.delayMinutes||120)?0:1;
+      return ad-bd || bw-aw || (a.purchaseTime||'').localeCompare(b.purchaseTime||'');
+    });
   }
 
   function nextCycleCode(date = todayISO()) {
@@ -1743,7 +1992,7 @@
         </div>
         <div class="delivery-picker-head"><div><strong>Quais entregas serão levadas nesta saída?</strong><small>Selecione uma ou várias. Todas receberão a mesma hora de saída, veículo, entregador e ciclo.</small></div><span id="selectedDeliveryCount" class="badge blue">0 selecionadas</span></div>
         <div class="delivery-picker-list">
-          ${available.map(d=>`<label class="delivery-picker-item"><input type="checkbox" name="deliveryIds" value="${d.id}" ${d.id===preselectDeliveryId?'checked':''}/><span><strong>Cupom ${esc(d.coupon||'—')}</strong><small>${esc(neighborhood(d.neighborhoodId)?.name||'Sem bairro')} • entrada ${d.purchaseTime||'—'} • taxa ${money(rootDelivery(d)?.fee||d.fee)}</small></span></label>`).join('')}
+          ${available.map(d=>{const wait=currentWaitMinutes(d);const delayed=wait!==null&&wait>Number(state.settings.delayMinutes||120);return `<label class="delivery-picker-item v11-picker-item ${delayed?'late':''}"><input type="checkbox" name="deliveryIds" value="${d.id}" ${d.id===preselectDeliveryId?'checked':''}/><span class="v11-picker-number">Nº ${esc(d.orderNo||'—')}</span><span class="v11-picker-copy"><strong>Cupom ${esc(d.coupon||'—')} • ${esc(neighborhood(d.neighborhoodId)?.name||'Sem bairro')}</strong><small>Entrada ${d.purchaseTime||'—'} • espera ${fmtMinutes(wait)} • taxa ${money(rootDelivery(d)?.fee||d.fee)}</small></span>${delayed?'<span class="badge red">Atrasada</span>':''}</label>`;}).join('')}
         </div>
         <div class="form-actions"><button type="button" class="btn secondary" id="cancelCycleDepartureBtn">Cancelar</button><button type="submit" class="btn primary large-action">🚚 Confirmar saída e abrir ciclo</button></div>
       </form>
@@ -2231,7 +2480,7 @@
       COLABORADORES:buildEmployeeReportRows(deliveries),
       BAIRROS:buildNeighborhoodReportRows(deliveries),
       PROGRAMADAS:[['Origem','Data Programada','Tipo','Cupom','Bairro','Motivo','Próxima Ação'],...deliveries.filter(openScheduled).map(d=>[d.date,d.scheduledDate,d.scheduleKind,d.coupon,neighborhood(d.neighborhoodId)?.name||'',reason(d.reasonId)?.name||d.reasonText||'',d.nextAction])],
-      PENDENCIAS:[['Data','Cupom','Status','Pendências','Bairro'],...deliveries.filter(d=>pendingReasons(d).length).map(d=>[d.date,d.coupon,d.status,pendingReasons(d).join('; '),neighborhood(d.neighborhoodId)?.name||''])],
+      PENDENCIAS:[['Prioridade','Data','Tipo','Título','Detalhe','Meta'],...systemIssues({includeInfo:true}).filter(i=>inRange(i.date,r)||inRange(i.relatedDate,r)).map(i=>[i.severity==='critical'?'CRÍTICA':i.severity==='warning'?'ATENÇÃO':'INFORMATIVA',i.relatedDate||i.date,i.type,i.title,i.detail,i.meta||''])],
       HISTORICO:[['ID','Cupom','Data','Status','Pai','Raiz','Tentativa','Criado em','Atualizado em'],...deliveries.map(d=>[d.id,d.coupon,d.date,d.status,d.parentId,d.rootId,d.attemptNo,d.createdAt,d.updatedAt])]
     };
     const xml=buildSpreadsheetML(sheets);

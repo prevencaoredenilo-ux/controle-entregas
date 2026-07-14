@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nx-entregas-v10-bairros-taxa-livre';
+const CACHE_NAME = 'controle-entregas-v11';
 const APP_SHELL = [
   './',
   './index.html',
