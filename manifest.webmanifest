@@ -1,12 +1,12 @@
 {
-  "name": "NX Entregas • Operação rápida e focada",
-  "short_name": "NX Entregas",
+  "name": "Controle de Entregas • Nilo Supermercado",
+  "short_name": "Nilo Entregas",
   "description": "Sistema anual de entregas, frota e custos com interface de foco médio-escuro, modo treinamento, ciclos editáveis, relatórios e exportação.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#26343D",
-  "theme_color": "#26343D",
+  "background_color": "#263640",
+  "theme_color": "#1F466A",
   "orientation": "any",
   "icons": [
     {

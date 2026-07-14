@@ -24,3 +24,8 @@ Versão com fundo escuro moderado, paleta reduzida para favorecer concentração
 - amarelo somente para atenção;
 - vermelho somente para erros e situações críticas;
 - verde somente para concluído.
+
+
+## V9 — Paleta Nilo Supermercado
+
+A interface usa azul-marinho, azul institucional e amarelo-dourado inspirados na identidade visual pública do Nilo Supermercado, preservando o modo escuro moderado e a concentração visual. Verde é reservado para sucesso e vermelho para erro/risco.

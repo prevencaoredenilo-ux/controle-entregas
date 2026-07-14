@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nx-entregas-v8-foco-escuro-agil';
+const CACHE_NAME = 'nx-entregas-v9-foco-escuro-agil';
 const APP_SHELL = [
   './',
   './index.html',
