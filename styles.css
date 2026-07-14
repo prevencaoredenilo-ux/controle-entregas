@@ -1313,3 +1313,17 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   .v11-order-number strong{font-size:30px!important}
   td{font-size:12px!important}
 }
+
+/* V13 — Ciclos automáticos: identificação visual de alto contraste */
+.auto-cycle-label{
+  display:block;
+  margin-top:5px;
+  color:#F8D44A !important;
+  font-size:.72rem;
+  font-weight:800;
+  letter-spacing:.02em;
+}
+.cycle-status-card .auto-cycle-label,
+.cycle-status-card .cycle-status-head small{
+  opacity:1;
+}

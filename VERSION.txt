@@ -1,2 +1,2 @@
-V12.0.0 — Visibilidade Total + Foco Operacional
-Mantém a V11 e corrige contraste, legibilidade de bairros, tabelas, formulários, cards, modais e textos em todo o sistema.
+V13.0.0 — Ciclos Automáticos por Saída Conjunta
+Todas as entregas que saem juntas, com a mesma hora, veículo e entregador, são identificadas e agrupadas automaticamente no mesmo ciclo.

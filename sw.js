@@ -1,4 +1,4 @@
-const CACHE_NAME = 'controle-entregas-v12-visibilidade';
+const CACHE_NAME = 'controle-entregas-v13-ciclos-automaticos';
 const APP_SHELL = [
   './',
   './index.html',
