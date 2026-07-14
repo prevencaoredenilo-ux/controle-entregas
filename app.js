@@ -1,7 +1,13 @@
 (() => {
+  // V8: tema visual de foco médio-escuro, com gráficos legíveis e cores reduzidas.
+  if (typeof Chart !== 'undefined') {
+    Chart.defaults.color = '#D8E4E6';
+    Chart.defaults.borderColor = 'rgba(216,228,230,.12)';
+    Chart.defaults.font.family = 'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif';
+  }
   'use strict';
 
-  const APP_VERSION = '7.0.0';
+  const APP_VERSION = '8.0.0';
   const DB_NAME = 'controle_entregas_nx';
   const DB_VERSION = 1;
   const STORE_NAME = 'app_state';

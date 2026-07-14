@@ -1,1 +1,1 @@
-V7.0.0 • Layout simplificado, compras em destaque, sequência visível e horários claros por entrega.
+V8.0.0 • Tema médio-escuro de foco, menos cores concorrentes, interface mais rápida, clara e ágil.
