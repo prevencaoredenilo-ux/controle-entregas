@@ -1,12 +1,12 @@
 {
   "name": "Controle de Entregas • Nilo Supermercado",
   "short_name": "Nilo Entregas",
-  "description": "Sistema anual de entregas, frota e custos com interface de foco médio-escuro, modo treinamento, ciclos editáveis, relatórios e exportação.",
+  "description": "Sistema anual de entregas, frota e custos com interface de alta legibilidade, modo treinamento, ciclos editáveis, relatórios e exportação.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#263640",
-  "theme_color": "#1F466A",
+  "background_color": "#223540",
+  "theme_color": "#173B5B",
   "orientation": "any",
   "icons": [
     {

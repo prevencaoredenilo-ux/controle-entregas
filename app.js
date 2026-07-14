@@ -7,7 +7,7 @@
   }
   'use strict';
 
-  const APP_VERSION = '11.0.0';
+  const APP_VERSION = '12.0.0';
   const DB_NAME = 'controle_entregas_nx';
   const DB_VERSION = 1;
   const STORE_NAME = 'app_state';

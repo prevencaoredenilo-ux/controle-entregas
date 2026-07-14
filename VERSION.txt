@@ -1,2 +1,2 @@
-V11.0.0 — Central de Operação Inteligente
-Central única, linha do tempo, próxima ação, pendências por prioridade e encerramento do dia.
+V12.0.0 — Visibilidade Total + Foco Operacional
+Mantém a V11 e corrige contraste, legibilidade de bairros, tabelas, formulários, cards, modais e textos em todo o sistema.

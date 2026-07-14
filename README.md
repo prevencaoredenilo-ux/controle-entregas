@@ -1,3 +1,7 @@
+# Controle de Entregas • Nilo Supermercado — V12
+
+Versão com visibilidade total e foco operacional, baseada na V11.
+
 # Controle de Entregas • Nilo Supermercado — V11
 
 Versão focada em simplicidade operacional e prevenção de erros.
