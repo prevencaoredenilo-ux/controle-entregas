@@ -1,0 +1,9 @@
+<resources>
+    <style name="Theme.NiloEntregas" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">#F3C72E</item>
+        <item name="android:statusBarColor">#173B5B</item>
+        <item name="android:navigationBarColor">#173B5B</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>

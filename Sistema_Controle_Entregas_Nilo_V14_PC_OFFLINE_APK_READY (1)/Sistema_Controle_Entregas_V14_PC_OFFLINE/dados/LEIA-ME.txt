@@ -1,0 +1,3 @@
+Esta pasta guarda a memória central do sistema no PC.
+O arquivo principal será criado automaticamente com o nome: estado.json
+Não apague esta pasta. Faça cópias de segurança periódicas.

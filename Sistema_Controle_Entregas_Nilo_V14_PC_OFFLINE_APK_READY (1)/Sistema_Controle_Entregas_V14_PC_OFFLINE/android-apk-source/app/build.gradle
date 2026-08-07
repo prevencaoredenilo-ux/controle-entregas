@@ -1,0 +1,23 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'br.com.nilosupermercado.entregas'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'br.com.nilosupermercado.entregas'
+        minSdk 24
+        targetSdk 35
+        versionCode 14
+        versionName '14.0.0'
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+}

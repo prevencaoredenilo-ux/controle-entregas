@@ -1,0 +1,2 @@
+Os backups automáticos do servidor serão guardados aqui.
+O servidor mantém até 100 arquivos JSON de backup.

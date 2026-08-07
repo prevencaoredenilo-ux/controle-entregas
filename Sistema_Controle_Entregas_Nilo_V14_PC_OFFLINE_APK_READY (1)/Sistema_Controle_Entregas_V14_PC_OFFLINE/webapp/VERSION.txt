@@ -1,0 +1,2 @@
+V14.0.0 — APK-ready + Memória Offline no PC + Calendário 2024–2050+ automático
+O app mantém cópia local no aparelho e pode usar um servidor local no PC como memória central, sem depender de internet.
