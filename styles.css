@@ -1365,3 +1365,29 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   box-shadow:0 0 0 4px rgba(255,209,91,.28),0 8px 20px rgba(8,25,35,.25)!important;
 }
 .quick-entry-grid label>small{color:#D6E3E8!important;font-size:10px!important;font-weight:700!important}
+
+/* V14.3.2 — pesquisa do histórico por identificação, caixa e dia */
+.delivery-search-panel{
+  display:grid;
+  grid-template-columns:minmax(150px,.85fr) minmax(190px,1.35fr) minmax(120px,.75fr) minmax(150px,.9fr) auto auto;
+  gap:10px;
+  align-items:end;
+  margin-bottom:14px;
+  padding:14px;
+  background:#2A414D;
+  border:1px solid #4B6572;
+  border-radius:16px;
+  box-shadow:0 8px 24px rgba(8,25,35,.13);
+}
+.delivery-search-intro{align-self:center}
+.delivery-search-intro strong{display:block;color:#FFFFFF;font-size:13px}
+.delivery-search-intro small{display:block;color:#B9CAD1;font-size:10px;margin-top:4px}
+@media(max-width:1080px){
+  .delivery-search-panel{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .delivery-search-intro{grid-column:1/-1}
+}
+@media(max-width:620px){
+  .delivery-search-panel{grid-template-columns:1fr 1fr}
+  .delivery-search-intro,.delivery-search-panel label{grid-column:1/-1}
+  .delivery-search-panel .btn{width:100%}
+}

@@ -1,9 +1,10 @@
-# Controle de Entregas • Nilo Supermercado — V14.3.1
+# Controle de Entregas • Nilo Supermercado — V14.3.2
 
 Versão focada em **segurança dos dados, confiabilidade dos indicadores e acessibilidade**, mantendo os ciclos automáticos e todas as melhorias operacionais da V13.
 
 ## Novidades da V14.3
 
+- Na V14.3.2, a tela **Entregas** pesquisa todo o histórico por número da compra, DOC, caixa ou dia, separadamente ou combinando os filtros.
 - Na V14.3.1, o número da compra é preenchido automaticamente, não pode ser alterado por engano e acompanha a data escolhida.
 - O campo do número usa o mesmo fundo azul-escuro dos demais campos, com número amarelo de alto contraste.
 - Confirmação visual dos campos **Cupom PDV**, **Nº do DOC**, **Nº do caixa**, **nome do cliente** e **telefone** no lançamento rápido.

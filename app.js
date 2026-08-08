@@ -7,7 +7,7 @@
   }
   'use strict';
 
-  const APP_VERSION = '14.3.1';
+  const APP_VERSION = '14.3.2';
   const DB_NAME = 'controle_entregas_nx';
   const DB_VERSION = 1;
   const STORE_NAME = 'app_state';
@@ -29,6 +29,7 @@
   let deferredInstallPrompt = null;
   let lastFocusedElement = null;
   let preUpdateBackup = null;
+  let deliverySearch = { identifier: '', cashier: '', date: '' };
 
   const pageMeta = {
     dashboard: ['Dashboard', 'Visão geral da operação, custos, faturamento e produtividade.'],
@@ -287,7 +288,7 @@
 
   function initPWA() {
     if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-      navigator.serviceWorker.register('./sw.js?v=14.3.1').catch(console.warn);
+      navigator.serviceWorker.register('./sw.js?v=14.3.2').catch(console.warn);
     }
     window.addEventListener('beforeinstallprompt', (event) => {
       event.preventDefault();
@@ -357,6 +358,7 @@
       $('#filterWeek').value = '';
       $('#filterStart').value = '';
       $('#filterEnd').value = '';
+      deliverySearch = { identifier: '', cashier: '', date: '' };
       render();
     });
     $('#filterYear').addEventListener('change', refreshWeekOptions);
@@ -435,6 +437,26 @@
   function filteredCycles() { const r = selectedRange(); return scoped(state.cycles).filter(d => inRange(d.date, r)); }
   function filteredOdometers() { const r = selectedRange(); return scoped(state.odometerLogs).filter(d => inRange(d.date, r)); }
   function filteredCosts() { const r = selectedRange(); return scoped(state.costs).filter(d => inRange(d.date, r)); }
+
+  function normalizeDeliverySearch(value) {
+    return String(value ?? '').trim().toLocaleLowerCase('pt-BR');
+  }
+
+  function deliveryMatchesSearch(delivery, search = deliverySearch) {
+    const identifier = normalizeDeliverySearch(search.identifier);
+    const cashier = normalizeDeliverySearch(search.cashier);
+    const date = String(search.date || '').trim();
+    const identifiers = [delivery.orderNo, delivery.docNo].map(normalizeDeliverySearch);
+    return (!identifier || identifiers.includes(identifier))
+      && (!cashier || normalizeDeliverySearch(delivery.cashierNo) === cashier)
+      && (!date || delivery.date === date);
+  }
+
+  function searchedDeliveries() {
+    const active = Object.values(deliverySearch).some(value => String(value || '').trim());
+    const source = active ? scoped(state.deliveries) : filteredDeliveries();
+    return source.filter(delivery => deliveryMatchesSearch(delivery));
+  }
 
   function startOfWeek(dateStr) {
     const date = new Date(`${dateStr}T12:00:00`);
@@ -1164,13 +1186,37 @@
   }
 
   function renderDeliveries() {
-    const deliveries = filteredDeliveries().slice().sort((a,b) => `${b.date}${b.purchaseTime||''}`.localeCompare(`${a.date}${a.purchaseTime||''}`));
-    $('#view').innerHTML = `<article class="card section-card">${sectionHeader('▣','Histórico de entregas',`${deliveries.length} registros no recorte atual.`, `<button class="btn primary small" data-action="new-delivery">＋ Nova entrega</button>`)}${deliveryTable(deliveries)}</article>`;
+    const deliveries = searchedDeliveries().slice().sort((a,b) => `${b.date}${b.purchaseTime||''}`.localeCompare(`${a.date}${a.purchaseTime||''}`));
+    const searchActive = Object.values(deliverySearch).some(value => String(value || '').trim());
+    const resultLabel = searchActive ? `${deliveries.length} resultado(s) encontrado(s) em todo o histórico.` : `${deliveries.length} registros no recorte atual.`;
+    $('#view').innerHTML = `
+      <form id="deliverySearchForm" class="delivery-search-panel" role="search">
+        <div class="delivery-search-intro"><strong>Pesquisar entregas</strong><small>Use um campo ou combine vários.</small></div>
+        <label>Nº da compra ou DOC<input id="deliverySearchIdentifier" inputmode="numeric" value="${attr(deliverySearch.identifier)}" placeholder="Ex.: 17 ou 102548" /></label>
+        <label>Nº do caixa<input id="deliverySearchCashier" inputmode="numeric" value="${attr(deliverySearch.cashier)}" placeholder="Ex.: 3" /></label>
+        <label>Dia da compra<input id="deliverySearchDate" type="date" value="${attr(deliverySearch.date)}" /></label>
+        <button class="btn primary compact" type="submit">Pesquisar</button>
+        <button class="btn secondary compact" type="button" id="clearDeliverySearchBtn">Limpar</button>
+      </form>
+      <article class="card section-card">${sectionHeader('▣','Histórico de entregas',resultLabel, `<button class="btn primary small" data-action="new-delivery">＋ Nova entrega</button>`)}${deliveryTable(deliveries, searchActive)}</article>`;
+    $('#deliverySearchForm')?.addEventListener('submit', event => {
+      event.preventDefault();
+      deliverySearch = {
+        identifier: $('#deliverySearchIdentifier')?.value.trim() || '',
+        cashier: $('#deliverySearchCashier')?.value.trim() || '',
+        date: $('#deliverySearchDate')?.value || ''
+      };
+      render();
+    });
+    $('#clearDeliverySearchBtn')?.addEventListener('click', () => {
+      deliverySearch = { identifier: '', cashier: '', date: '' };
+      render();
+    });
     bindViewActions();
   }
 
-  function deliveryTable(deliveries) {
-    if (!deliveries.length) return emptyState('▣','Nenhuma entrega encontrada','Registre uma nova entrega ou altere o recorte de análise.');
+  function deliveryTable(deliveries, searchActive = false) {
+    if (!deliveries.length) return emptyState('▣','Nenhuma entrega encontrada',searchActive ? 'Confira os dados pesquisados ou clique em Limpar.' : 'Registre uma nova entrega ou altere o recorte de análise.');
     return `<div class="table-wrap"><table><thead><tr><th>Data</th><th>Cupom</th><th>Cliente</th><th>Bairro</th><th>Status</th><th>Taxa registrada</th><th>Reembolso</th><th>Espera</th><th>Até cliente</th><th>Rota total</th><th>Atraso</th><th>Ações</th></tr></thead><tbody>${deliveries.map(d => {
       const calc = deliveryCalc(d);
       return `<tr>
