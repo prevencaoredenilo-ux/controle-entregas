@@ -7,7 +7,7 @@
   }
   'use strict';
 
-  const APP_VERSION = '14.3.2';
+  const APP_VERSION = '14.3.3';
   const DB_NAME = 'controle_entregas_nx';
   const DB_VERSION = 1;
   const STORE_NAME = 'app_state';
@@ -41,7 +41,7 @@
     odometer: ['Quilometragem da frota', 'KM inicial e final do dia por veículo, com médias por dia, semana, mês, entrega e ciclo.'],
     costs: ['Custos da frota', 'Combustível, manutenção e outros gastos registrados individualmente.'],
     neighborhoods: ['Análise por bairro', 'Entregas, faturamento, endereço errado, reagendamentos, devoluções e problemas por bairro.'],
-    trace: ['Rastrear cupom', 'Histórico completo da compra até a conclusão, incluindo reagendamentos.'],
+    trace: ['Rastrear nº do cupom', 'Histórico completo da compra até a conclusão, incluindo reagendamentos.'],
     reports: ['Relatórios e Exportação', 'Baixe dados por dia, semana, mês, ano ou período personalizado.'],
     settings: ['Cadastros e Configurações', 'Adicione, edite, desative e reative veículos, bairros e colaboradores.'],
     trash: ['Lixeira', 'Restaure registros apagados por engano ou exclua definitivamente.']
@@ -288,7 +288,7 @@
 
   function initPWA() {
     if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-      navigator.serviceWorker.register('./sw.js?v=14.3.2').catch(console.warn);
+      navigator.serviceWorker.register('./sw.js?v=14.3.3').catch(console.warn);
     }
     window.addEventListener('beforeinstallprompt', (event) => {
       event.preventDefault();
@@ -446,7 +446,7 @@
     const identifier = normalizeDeliverySearch(search.identifier);
     const cashier = normalizeDeliverySearch(search.cashier);
     const date = String(search.date || '').trim();
-    const identifiers = [delivery.orderNo, delivery.docNo].map(normalizeDeliverySearch);
+    const identifiers = [delivery.orderNo, delivery.coupon, delivery.docNo].map(normalizeDeliverySearch);
     return (!identifier || identifiers.includes(identifier))
       && (!cashier || normalizeDeliverySearch(delivery.cashierNo) === cashier)
       && (!date || delivery.date === date);
@@ -667,7 +667,7 @@
           id:`delivery_${d.id}_${reasonText}`,
           severity:issueSeverityForReason(reasonText),
           type:'delivery',
-          title:`Compra Nº ${d.orderNo || '—'} • Cupom ${d.coupon || '—'}`,
+          title:`Compra Nº ${d.orderNo || '—'} • Nº do cupom ${d.coupon || '—'}`,
           detail:reasonText,
           date:d.date,
           relatedDate:d.scheduledDate || '',
@@ -710,7 +710,7 @@
       return [...map.values()].filter(group => group.length > 1);
     };
     duplicateGroups('orderNo').forEach(group => push({id:`dup_order_${group[0].date}_${group[0].orderNo}`,severity:'warning',type:'delivery',title:`Compra Nº ${group[0].orderNo} repetida`,detail:`Existem ${group.length} registros com o mesmo número nesta data.`,date:group[0].date,action:'edit-delivery',recordId:group[0].id,meta:group.map(d=>d.coupon || '—').join(', ')}));
-    duplicateGroups('coupon').forEach(group => push({id:`dup_coupon_${group[0].date}_${group[0].coupon}`,severity:'critical',type:'delivery',title:`Cupom ${group[0].coupon} repetido`,detail:`Existem ${group.length} compras com o mesmo cupom nesta data. Confirme se é duplicidade real.`,date:group[0].date,action:'edit-delivery',recordId:group[0].id,meta:group.map(d=>`Nº ${d.orderNo || '—'}`).join(', ')}));
+    duplicateGroups('coupon').forEach(group => push({id:`dup_coupon_${group[0].date}_${group[0].coupon}`,severity:'critical',type:'delivery',title:`Nº do cupom ${group[0].coupon} repetido`,detail:`Existem ${group.length} compras com o mesmo número de cupom nesta data. Confirme se é duplicidade real.`,date:group[0].date,action:'edit-delivery',recordId:group[0].id,meta:group.map(d=>`Nº ${d.orderNo || '—'}`).join(', ')}));
 
     // Conflitos de veículo ou entregador em mais de um ciclo aberto.
     const openCycles = cycles.filter(c => !c.returnTime);
@@ -1162,7 +1162,7 @@
       return `<article class="delivery-action-card clear-card v11-delivery-card ${deliveryStatusClass(d.status)} ${liveDelayed && !d.departureTime ? 'late':''}">
         <div class="v11-delivery-head">
           <div class="v11-order-number"><span>COMPRA</span><strong>Nº ${esc(d.orderNo || '—')}</strong></div>
-          <div class="v11-delivery-identification"><small>CUPOM PDV</small><strong>${esc(d.coupon || '—')}</strong><em>DOC ${esc(d.docNo || '—')} • Caixa ${esc(d.cashierNo || '—')} • ${esc(neighborhood(d.neighborhoodId)?.name || 'Sem bairro')}</em>${d.customerName || d.customerPhone ? `<em>Cliente: ${esc(d.customerName || 'Não informado')}${d.customerPhone ? ` • ${esc(d.customerPhone)}` : ''}</em>` : ''}</div>
+          <div class="v11-delivery-identification"><small>Nº DO CUPOM</small><strong>${esc(d.coupon || '—')}</strong><em>DOC ${esc(d.docNo || '—')} • Caixa ${esc(d.cashierNo || '—')} • ${esc(neighborhood(d.neighborhoodId)?.name || 'Sem bairro')}</em>${d.customerName || d.customerPhone ? `<em>Cliente: ${esc(d.customerName || 'Não informado')}${d.customerPhone ? ` • ${esc(d.customerPhone)}` : ''}</em>` : ''}</div>
           <div class="v11-delivery-head-status">${statusBadge(d.status)}${liveDelayed && !d.departureTime?'<span class="badge red">Atrasada</span>':''}</div>
         </div>
 
@@ -1192,7 +1192,7 @@
     $('#view').innerHTML = `
       <form id="deliverySearchForm" class="delivery-search-panel" role="search">
         <div class="delivery-search-intro"><strong>Pesquisar entregas</strong><small>Use um campo ou combine vários.</small></div>
-        <label>Nº da compra ou DOC<input id="deliverySearchIdentifier" inputmode="numeric" value="${attr(deliverySearch.identifier)}" placeholder="Ex.: 17 ou 102548" /></label>
+        <label>Nº da compra, Nº do cupom ou DOC<input id="deliverySearchIdentifier" inputmode="numeric" value="${attr(deliverySearch.identifier)}" placeholder="Ex.: 17, 45879 ou 102548" /></label>
         <label>Nº do caixa<input id="deliverySearchCashier" inputmode="numeric" value="${attr(deliverySearch.cashier)}" placeholder="Ex.: 3" /></label>
         <label>Dia da compra<input id="deliverySearchDate" type="date" value="${attr(deliverySearch.date)}" /></label>
         <button class="btn primary compact" type="submit">Pesquisar</button>
@@ -1217,7 +1217,7 @@
 
   function deliveryTable(deliveries, searchActive = false) {
     if (!deliveries.length) return emptyState('▣','Nenhuma entrega encontrada',searchActive ? 'Confira os dados pesquisados ou clique em Limpar.' : 'Registre uma nova entrega ou altere o recorte de análise.');
-    return `<div class="table-wrap"><table><thead><tr><th>Data</th><th>Cupom</th><th>Cliente</th><th>Bairro</th><th>Status</th><th>Taxa registrada</th><th>Reembolso</th><th>Espera</th><th>Até cliente</th><th>Rota total</th><th>Atraso</th><th>Ações</th></tr></thead><tbody>${deliveries.map(d => {
+    return `<div class="table-wrap"><table><thead><tr><th>Data</th><th>Nº do cupom</th><th>Cliente</th><th>Bairro</th><th>Status</th><th>Taxa registrada</th><th>Reembolso</th><th>Espera</th><th>Até cliente</th><th>Rota total</th><th>Atraso</th><th>Ações</th></tr></thead><tbody>${deliveries.map(d => {
       const calc = deliveryCalc(d);
       return `<tr>
         <td><div class="cell-title mono">${dateBR(d.date)}</div><div class="cell-sub">Entrada ${d.purchaseTime || '—'}</div></td>
@@ -1259,7 +1259,7 @@
     return `<div class="table-wrap"><table><thead><tr><th>Data programada</th><th>Tipo</th><th>Identificação</th><th>Cliente</th><th>Origem</th><th>Bairro</th><th>Motivo</th><th>Próxima ação</th>${actions?'<th>Ações</th>':''}</tr></thead><tbody>${list.map(d => `<tr>
       <td><div class="cell-title mono">${dateBR(d.scheduledDate)}</div>${d.scheduledDate < todayISO() ? '<div class="cell-sub" style="color:#B54141">Vencida</div>':''}</td>
       <td>${statusBadge(d.scheduleKind || 'Programada')}</td>
-      <td><div class="cell-title">Cupom ${esc(d.coupon || '—')}</div><div class="cell-sub">DOC ${esc(d.docNo || '—')} • Caixa ${esc(d.cashierNo || '—')}</div></td>
+      <td><div class="cell-title">Nº do cupom ${esc(d.coupon || '—')}</div><div class="cell-sub">DOC ${esc(d.docNo || '—')} • Caixa ${esc(d.cashierNo || '—')}</div></td>
       <td><div class="cell-title">${esc(d.customerName || '—')}</div><div class="cell-sub">${esc(d.customerPhone || 'Telefone não informado')}</div></td>
       <td>${dateBR(d.date)}</td>
       <td>${esc(neighborhood(d.neighborhoodId)?.name || '—')}</td>
@@ -1313,7 +1313,7 @@
 
   function pendingAlertList(list) {
     if (!list.length) return emptyState('✓','Nenhuma atenção aberta','A operação de hoje não tem pendências registradas.');
-    return `<div class="alert-list">${list.slice(0,12).map(d => `<div class="alert-item ${pendingReasons(d).some(x=>x.includes('Atrasada')||x.includes('vencida'))?'red':'blue'}"><strong>Cupom ${esc(d.coupon || '—')}</strong><p>${esc(pendingReasons(d).join(' • '))}</p></div>`).join('')}</div>`;
+    return `<div class="alert-list">${list.slice(0,12).map(d => `<div class="alert-item ${pendingReasons(d).some(x=>x.includes('Atrasada')||x.includes('vencida'))?'red':'blue'}"><strong>Nº do cupom ${esc(d.coupon || '—')}</strong><p>${esc(pendingReasons(d).join(' • '))}</p></div>`).join('')}</div>`;
   }
 
   function renderCycles() {
@@ -1504,7 +1504,7 @@
   }
 
   function renderTrace() {
-    $('#view').innerHTML = `<article class="card section-card">${sectionHeader('⌕','Rastrear cupom','Digite o número do cupom para visualizar a linha do tempo completa.')}
+    $('#view').innerHTML = `<article class="card section-card">${sectionHeader('⌕','Rastrear nº do cupom','Digite o número do cupom para visualizar a linha do tempo completa.')}
       <div class="trace-search"><input id="traceInput" placeholder="Ex.: 45879" inputmode="numeric" /><button class="btn primary" id="traceButton">Pesquisar</button></div>
       <div id="traceResult"></div>
     </article>`;
@@ -1515,7 +1515,7 @@
   function showTrace(coupon) {
     const box = $('#traceResult');
     const list = scoped(state.deliveries).filter(d => String(d.coupon || '').trim() === coupon).sort((a,b)=>`${a.date}${a.purchaseTime||''}`.localeCompare(`${b.date}${b.purchaseTime||''}`));
-    if (!coupon || !list.length) { box.innerHTML = emptyState('⌕','Cupom não encontrado','Verifique o número informado e tente novamente.'); return; }
+    if (!coupon || !list.length) { box.innerHTML = emptyState('⌕','Nº do cupom não encontrado','Verifique o número informado e tente novamente.'); return; }
     const rootIds = unique(list.map(d=>d.rootId || d.id));
     const chain = scoped(state.deliveries).filter(d => rootIds.includes(d.rootId || d.id) || list.some(x=>x.id===d.id)).sort((a,b)=>`${a.date}${a.purchaseTime||''}`.localeCompare(`${b.date}${b.purchaseTime||''}`));
     const final = chain.filter(d=>d.status==='Finalizada');
@@ -1530,7 +1530,7 @@
       </section>
       <div class="form-note trace-identification">
         <strong>Identificação da compra</strong><br>
-        Cupom PDV: ${esc(chain[0]?.coupon || '—')} • Nº DOC: ${esc(chain[0]?.docNo || '—')} • Nº caixa: ${esc(chain[0]?.cashierNo || '—')}<br>
+        Nº DO CUPOM: ${esc(chain[0]?.coupon || '—')} • Nº DOC: ${esc(chain[0]?.docNo || '—')} • Nº caixa: ${esc(chain[0]?.cashierNo || '—')}<br>
         Cliente: ${esc(chain[0]?.customerName || 'Não informado')} • Telefone: ${esc(chain[0]?.customerPhone || 'Não informado')}
       </div>
       <div class="trace-timeline">${chain.map(d=>{const c=deliveryCalc(d); return `<div class="trace-event"><strong>${dateBR(d.date)} • ${esc(d.status)}</strong><p>Entrada ${d.purchaseTime||'—'} • Saída ${d.departureTime||'—'} • Finalização ${d.finalizationTime||'—'} • Retorno ${d.returnTime||'—'}<br>Espera ${fmtMinutes(c.wait)} • Até cliente ${fmtMinutes(c.toClient)} • Rota ${fmtMinutes(c.route)}${d.scheduledDate?`<br>${esc(d.scheduleKind||'Programada')} para ${dateBR(d.scheduledDate)} • ${esc(reason(d.reasonId)?.name || d.reasonText || '')}`:''}</p></div>`}).join('')}</div>`;
@@ -1871,7 +1871,7 @@
       <form id="quickDeliveryForm" class="quick-entry-form clear-form">
         <div class="previous-purchase-banner">
           <div class="previous-purchase-label"><span>ÚLTIMA COMPRA REGISTRADA HOJE</span><strong>${prev ? `Nº ${esc(prev.orderNo || '—')}` : 'Nenhuma ainda'}</strong></div>
-          <div class="previous-purchase-detail"><small>${prev ? `Cupom ${esc(prev.coupon || '—')} • DOC ${esc(prev.docNo || '—')} • Caixa ${esc(prev.cashierNo || '—')} • ${prev.purchaseTime || '—'} • ${esc(neighborhood(prev.neighborhoodId)?.name || 'Sem bairro')}` : 'Esta será a primeira compra do dia.'}</small></div>
+          <div class="previous-purchase-detail"><small>${prev ? `Nº do cupom ${esc(prev.coupon || '—')} • DOC ${esc(prev.docNo || '—')} • Caixa ${esc(prev.cashierNo || '—')} • ${prev.purchaseTime || '—'} • ${esc(neighborhood(prev.neighborhoodId)?.name || 'Sem bairro')}` : 'Esta será a primeira compra do dia.'}</small></div>
           <div class="next-purchase-suggestion"><span>NÚMERO AUTOMÁTICO PARA A NOVA</span><strong id="nextPurchaseSuggestedNumber">Nº ${esc(last.suggested || '1')}</strong></div>
         </div>
 
@@ -1879,7 +1879,7 @@
           <div class="quick-step-head"><span>1</span><div><strong>Identificação da compra</strong><small>O número da compra é o campo principal da sequência do dia.</small></div></div>
           <div class="quick-entry-grid identity-grid">
             <label class="purchase-number-input">Nº DA COMPRA <small>(automático)</small><input name="orderNo" value="${attr(last.suggested)}" inputmode="numeric" readonly aria-readonly="true" required /></label>
-            <label>Cupom PDV<input name="coupon" inputmode="numeric" autofocus required placeholder="Ex.: 45879" /></label>
+            <label>Nº DO CUPOM<input name="coupon" inputmode="numeric" autofocus required placeholder="Ex.: 45879" /></label>
             <label>Nº DO DOC <small>(obrigatório)</small><input name="docNo" inputmode="numeric" required placeholder="Ex.: 102548" /></label>
             <label>Nº DO CAIXA <small>(obrigatório)</small><input name="cashierNo" inputmode="numeric" required placeholder="Ex.: 3" /></label>
             <label>Data da compra<input name="date" type="date" value="${today}" required /></label>
@@ -1970,9 +1970,9 @@
       data.fee = String(parsedFee);
       if(data.deliveryMode==='schedule' && !data.scheduledDate){toast('Informe a data programada.','warning');return;}
       const duplicateOrder = scoped(state.deliveries).find(d => d.date===data.date && isRootPurchase(d) && String(d.orderNo||'').trim()===String(data.orderNo||'').trim());
-      if (duplicateOrder && !confirm(`Atenção: já existe a Compra Nº ${data.orderNo} nesta data (Cupom ${duplicateOrder.coupon||'—'}).\n\nDeseja continuar mesmo assim?`)) return;
+      if (duplicateOrder && !confirm(`Atenção: já existe a Compra Nº ${data.orderNo} nesta data (Nº do cupom ${duplicateOrder.coupon||'—'}).\n\nDeseja continuar mesmo assim?`)) return;
       const duplicateCoupon = scoped(state.deliveries).find(d => d.date===data.date && isRootPurchase(d) && String(d.coupon||'').trim()===String(data.coupon||'').trim());
-      if (duplicateCoupon && !confirm(`Possível duplicidade: o Cupom ${data.coupon} já está na Compra Nº ${duplicateCoupon.orderNo||'—'}.\n\nConfira antes de continuar. Deseja registrar mesmo assim?`)) return;
+      if (duplicateCoupon && !confirm(`Possível duplicidade: o Nº do cupom ${data.coupon} já está na Compra Nº ${duplicateCoupon.orderNo||'—'}.\n\nConfira antes de continuar. Deseja registrar mesmo assim?`)) return;
       const duplicateDoc = scoped(state.deliveries).find(d => d.date===data.date && isRootPurchase(d) && String(d.docNo||'').trim()===data.docNo && String(d.cashierNo||'').trim()===data.cashierNo);
       if (duplicateDoc && !confirm(`Possível duplicidade: o DOC ${data.docNo} do Caixa ${data.cashierNo} já está na Compra Nº ${duplicateDoc.orderNo||'—'}.\n\nConfira antes de continuar. Deseja registrar mesmo assim?`)) return;
       const id=uid('del');
@@ -2009,7 +2009,7 @@
         <div class="form-grid">
           <label>Data<input name="date" type="date" value="${d.date}" required /></label>
           <label>Nº da compra<input name="orderNo" value="${attr(d.orderNo)}" placeholder="Ordem de chegada" /></label>
-          <label>Cupom PDV<input name="coupon" value="${attr(d.coupon)}" required /></label>
+          <label>Nº DO CUPOM<input name="coupon" value="${attr(d.coupon)}" required /></label>
           <label>Nº do DOC<input name="docNo" value="${attr(d.docNo)}" inputmode="numeric" placeholder="Não informado em registros antigos" /></label>
           <label>Nº do caixa<input name="cashierNo" value="${attr(d.cashierNo)}" inputmode="numeric" placeholder="Não informado em registros antigos" /></label>
           <label>Nome do cliente <small>(opcional)</small><input name="customerName" value="${attr(d.customerName)}" autocomplete="name" /></label>
@@ -2106,7 +2106,7 @@
     const bundle=[d,...descendants];
     const message=descendants.length ? `Apagar esta entrega e também ${descendants.length} tentativa(s) ligada(s) a ela? Tudo irá para a Lixeira.` : 'Apagar este registro? Ele irá para a Lixeira e poderá ser restaurado.';
     if(!confirm(message))return;
-    await moveToTrash('delivery_bundle',bundle,`Entrega • Cupom ${d.coupon||'—'}`);
+    await moveToTrash('delivery_bundle',bundle,`Entrega • Nº do cupom ${d.coupon||'—'}`);
     const ids=new Set(bundle.map(x=>x.id)); state.deliveries=state.deliveries.filter(x=>!ids.has(x.id));
     await saveState(`Entrega ${d.coupon||d.id} apagada`); closeModal();toast('Entrega enviada para a Lixeira.','success');render();
   }
@@ -2257,7 +2257,7 @@
         </div>
         <div class="delivery-picker-head"><div><strong>Quais entregas serão levadas nesta saída?</strong><small>Selecione uma ou várias. Todas receberão a mesma hora de saída, veículo, entregador e ciclo.</small></div><span id="selectedDeliveryCount" class="badge blue">0 selecionadas</span></div>
         <div class="delivery-picker-list">
-          ${available.map(d=>{const wait=currentWaitMinutes(d);const delayed=wait!==null&&wait>Number(state.settings.delayMinutes||120);return `<label class="delivery-picker-item v11-picker-item ${delayed?'late':''}"><input type="checkbox" name="deliveryIds" value="${d.id}" ${d.id===preselectDeliveryId?'checked':''}/><span class="v11-picker-number">Nº ${esc(d.orderNo||'—')}</span><span class="v11-picker-copy"><strong>Cupom ${esc(d.coupon||'—')} • ${esc(neighborhood(d.neighborhoodId)?.name||'Sem bairro')}</strong><small>Entrada ${d.purchaseTime||'—'} • espera ${fmtMinutes(wait)} • taxa ${money(rootDelivery(d)?.fee||d.fee)}</small></span>${delayed?'<span class="badge red">Atrasada</span>':''}</label>`;}).join('')}
+          ${available.map(d=>{const wait=currentWaitMinutes(d);const delayed=wait!==null&&wait>Number(state.settings.delayMinutes||120);return `<label class="delivery-picker-item v11-picker-item ${delayed?'late':''}"><input type="checkbox" name="deliveryIds" value="${d.id}" ${d.id===preselectDeliveryId?'checked':''}/><span class="v11-picker-number">Nº ${esc(d.orderNo||'—')}</span><span class="v11-picker-copy"><strong>Nº do cupom ${esc(d.coupon||'—')} • ${esc(neighborhood(d.neighborhoodId)?.name||'Sem bairro')}</strong><small>Entrada ${d.purchaseTime||'—'} • espera ${fmtMinutes(wait)} • taxa ${money(rootDelivery(d)?.fee||d.fee)}</small></span>${delayed?'<span class="badge red">Atrasada</span>':''}</label>`;}).join('')}
         </div>
         <div class="form-actions"><button type="button" class="btn secondary" id="cancelCycleDepartureBtn">Cancelar</button><button type="submit" class="btn primary large-action">🚚 Confirmar saída e criar ciclo automático</button></div>
       </form>
@@ -2422,7 +2422,7 @@
       <input type="checkbox" name="managedDeliveryIds" value="${d.id}" ${checked?'checked':''} />
       <span class="cycle-manager-check">✓</span>
       <span class="cycle-manager-copy">
-        <strong>Cupom ${esc(d.coupon||'—')}</strong>
+        <strong>Nº do cupom ${esc(d.coupon||'—')}</strong>
         <small>${esc(neighborhood(d.neighborhoodId)?.name||'Sem bairro')} • ${statusBadge(status)} • entrada ${d.purchaseTime||'—'}</small>
       </span>
       <span class="cycle-manager-time">${calc.wait!=null?fmtMinutes(calc.wait):'—'}</span>
@@ -2437,7 +2437,7 @@
     if(unresolved.length){
       openModal('Antes do retorno, dê baixa em todas as entregas','Para não deixar ponta solta, cada entrega levada deve estar marcada como Entregue, Devolvida, Reagendada, Retirada ou Cancelada antes de fechar o ciclo.',`
         <div class="cycle-blocked-box"><span>!</span><div><strong>${unresolved.length} entrega(s) ainda sem baixa</strong><small>Feche esta janela, marque o resultado de cada uma e depois registre o retorno do ciclo.</small></div></div>
-        <div class="list-stack">${unresolved.map(d=>`<div class="list-row"><div><strong>Cupom ${esc(d.coupon||'—')}</strong><small>${esc(neighborhood(d.neighborhoodId)?.name||'Sem bairro')}</small></div><span class="badge yellow">Sem baixa</span></div>`).join('')}</div>
+        <div class="list-stack">${unresolved.map(d=>`<div class="list-row"><div><strong>Nº do cupom ${esc(d.coupon||'—')}</strong><small>${esc(neighborhood(d.neighborhoodId)?.name||'Sem bairro')}</small></div><span class="badge yellow">Sem baixa</span></div>`).join('')}</div>
         <div class="form-actions"><button class="btn primary" type="button" id="closeBlockedCycleBtn">Entendi</button></div>
       `,'RETORNO À LOJA');
       $('#closeBlockedCycleBtn').addEventListener('click',closeModal); return;
@@ -2467,7 +2467,7 @@
     const d=state.deliveries.find(x=>x.id===id);if(!d)return;
     openModal('Reagendar entrega','Escolha a nova data. O histórico anterior será preservado e não haverá novo faturamento.',`
       <form id="quickRescheduleForm" class="quick-action-form">
-        <div class="quick-action-summary"><strong>Cupom ${esc(d.coupon||'—')}</strong><small>Taxa original ${money(rootDelivery(d)?.fee||d.fee)} • não será duplicada</small></div>
+        <div class="quick-action-summary"><strong>Nº do cupom ${esc(d.coupon||'—')}</strong><small>Taxa original ${money(rootDelivery(d)?.fee||d.fee)} • não será duplicada</small></div>
         <div class="form-grid">
           <label>Nova data<input name="scheduledDate" type="date" min="${todayISO()}" required /></label>
           <label>Motivo<select name="reasonId">${options(state.reasons,d.reasonId)}</select></label>
@@ -2489,7 +2489,7 @@
     const d=state.deliveries.find(x=>x.id===id);if(!d)return;const root=rootDelivery(d);const fee=Number(root?.fee||0);
     openModal('Cliente retirou na loja','Registre se houve ou não reembolso da taxa de entrega.',`
       <form id="quickPickupForm" class="quick-action-form">
-        <div class="quick-action-summary"><strong>Cupom ${esc(d.coupon||'—')}</strong><small>Taxa cobrada no registro: ${money(fee)}</small></div>
+        <div class="quick-action-summary"><strong>Nº do cupom ${esc(d.coupon||'—')}</strong><small>Taxa cobrada no registro: ${money(fee)}</small></div>
         <div class="quick-entry-block">
           <div class="quick-entry-title"><span>↩</span><div><strong>Houve reembolso da taxa?</strong><small>O faturamento bruto permanece rastreável e o reembolso é registrado separadamente.</small></div></div>
           <input type="hidden" name="refundMode" id="refundMode" value="none" />
@@ -2509,7 +2509,7 @@
       e.preventDefault();const data=Object.fromEntries(new FormData(e.target).entries());let amount=0;if(data.refundMode==='full')amount=fee;if(data.refundMode==='custom')amount=Number(data.customRefund||0);
       root.refundAmount=amount;root.refundDate=amount>0?todayISO():'';root.withdrawalDate=todayISO();root.withdrawalTime=currentTimeHM();
       d.status='Retirada na loja';d.returnTime='';d.updatedAt=nowISO();d.history||=[];d.history.push({id:uid('evt'),type:'store_pickup',at:nowISO(),refundAmount:amount});
-      await saveState(`Retirada na loja do cupom ${d.coupon} registrada`);closeModal();toast(amount>0?`Retirada registrada com reembolso de ${money(amount)}.`:'Retirada registrada sem reembolso.','success');render();
+      await saveState(`Retirada na loja do nº do cupom ${d.coupon} registrada`);closeModal();toast(amount>0?`Retirada registrada com reembolso de ${money(amount)}.`:'Retirada registrada sem reembolso.','success');render();
     });
   }
 
@@ -2529,7 +2529,7 @@
     $('#cancelDevolutionBtn').addEventListener('click',closeModal);
     $('#quickDevolutionForm').addEventListener('submit',async e=>{
       e.preventDefault();const data=Object.fromEntries(new FormData(e.target).entries());d.reasonId=data.reasonId;d.reasonText=data.reasonText||'';d.nextAction=data.nextAction||'';d.scheduledDate=data.scheduledDate||'';d.scheduleKind=data.scheduledDate?'Reagendada':d.scheduleKind;d.status=data.scheduledDate?'Reagendada':'Devolvida';d.returnTime=d.returnTime||currentTimeHM();d.updatedAt=nowISO();d.history||=[];d.history.push({id:uid('evt'),type:'devolution',at:nowISO(),reasonId:d.reasonId,scheduledDate:d.scheduledDate});
-      await saveState(`Devolução do cupom ${d.coupon} registrada`);closeModal();toast(d.scheduledDate?`Devolvida e reagendada para ${dateBR(d.scheduledDate)}.`:'Devolução registrada.','success');render();
+      await saveState(`Devolução do nº do cupom ${d.coupon} registrada`);closeModal();toast(d.scheduledDate?`Devolvida e reagendada para ${dateBR(d.scheduledDate)}.`:'Devolução registrada.','success');render();
     });
   }
 
@@ -2548,7 +2548,7 @@
     source.history ||= [];
     source.history.push({id:uid('evt'),type:'continued_to',toId:child.id,at:nowISO()});
     state.deliveries.push(child);
-    await saveState(`Atendimento programado do cupom ${source.coupon} iniciado`);
+    await saveState(`Atendimento programado do nº do cupom ${source.coupon} iniciado`);
     toast('Atendimento criado no dia programado.','success');
     openDeliveryModal(child.id);
   }
@@ -2822,7 +2822,7 @@
       ['Faturamento líquido','Taxas registradas menos reembolsos','Mostrar a receita efetiva das entregas'],
       ['Cliente recorrente','Mesmo telefone ou, sem telefone, mesmo nome em mais de uma compra','Identificar repetição de atendimento'],
       ['Nota de qualidade','100 menos a média das taxas de atraso e problemas','Comparar qualidade entre bairros, equipe, veículos e caixas'],
-      ['Identificação completa','Cupom, DOC, caixa, bairro e hora de entrada preenchidos','Medir qualidade dos cadastros'],
+      ['Identificação completa','Nº do cupom, DOC, caixa, bairro e hora de entrada preenchidos','Medir qualidade dos cadastros'],
       ['Comparativo','Período selecionado contra período anterior com a mesma quantidade de dias','Mostrar evolução ou queda'],
       ['Previsão da agenda','Entregas programadas agrupadas pela data prevista','Antecipar carga de trabalho'],
       ['KM por entrega','KM diário dividido pelas entregas finalizadas','Avaliar eficiência da frota']
@@ -2862,17 +2862,17 @@
 
     const departed=deliveries.filter(d=>d.departureTime);
     const qualityDefinitions=[
-      ['Cupom PDV',roots,d=>d.coupon,'Obrigatório nos novos registros'],['Nº DOC',roots,d=>d.docNo,'Obrigatório a partir da V14.1'],['Nº Caixa',roots,d=>d.cashierNo,'Obrigatório a partir da V14.1'],['Nome do cliente',roots,d=>d.customerName,'Opcional'],['Telefone do cliente',roots,d=>d.customerPhone,'Opcional'],['Bairro',roots,d=>d.neighborhoodId,'Identificação operacional'],['Hora de entrada',roots,d=>d.purchaseTime,'Cálculo de espera'],['Entregador nas saídas',departed,d=>d.driverId,'Registros que já saíram'],['Veículo nas saídas',departed,d=>d.vehicleId,'Registros que já saíram'],['Ciclo nas saídas',departed,d=>d.cycleId,'Registros que já saíram']
+      ['Nº do cupom',roots,d=>d.coupon,'Obrigatório nos novos registros'],['Nº DOC',roots,d=>d.docNo,'Obrigatório a partir da V14.1'],['Nº Caixa',roots,d=>d.cashierNo,'Obrigatório a partir da V14.1'],['Nome do cliente',roots,d=>d.customerName,'Opcional'],['Telefone do cliente',roots,d=>d.customerPhone,'Opcional'],['Bairro',roots,d=>d.neighborhoodId,'Identificação operacional'],['Hora de entrada',roots,d=>d.purchaseTime,'Cálculo de espera'],['Entregador nas saídas',departed,d=>d.driverId,'Registros que já saíram'],['Veículo nas saídas',departed,d=>d.vehicleId,'Registros que já saíram'],['Ciclo nas saídas',departed,d=>d.cycleId,'Registros que já saíram']
     ];
     const qualityRows=[['Campo','Base analisada','Preenchidos','Ausentes','Completude %','Observação'],...qualityDefinitions.map(([label,base,test,note])=>{const filled=base.filter(test).length;return[label,base.length,filled,base.length-filled,percentage(filled,base.length),note];})];
 
-    const inconsistencyRows=[['Tipo','Data','Compra/Cupom','DOC','Caixa','Detalhe']];
+    const inconsistencyRows=[['Tipo','Data','Compra/Nº do cupom','DOC','Caixa','Detalhe']];
     const couponDuplicates=groupItems(roots.filter(d=>d.coupon),d=>`${d.date}|${String(d.coupon).trim()}`);
-    [...couponDuplicates.values()].filter(rows=>rows.length>1).forEach(rows=>inconsistencyRows.push(['Cupom duplicado',rows[0].date,rows.map(d=>d.orderNo||d.coupon).join(', '),'','',`${rows.length} registros com o cupom ${rows[0].coupon}`]));
+    [...couponDuplicates.values()].filter(rows=>rows.length>1).forEach(rows=>inconsistencyRows.push(['Nº do cupom duplicado',rows[0].date,rows.map(d=>d.orderNo||d.coupon).join(', '),'','',`${rows.length} registros com o número de cupom ${rows[0].coupon}`]));
     const docDuplicates=groupItems(roots.filter(d=>d.docNo&&d.cashierNo),d=>`${d.date}|${String(d.cashierNo).trim()}|${String(d.docNo).trim()}`);
     [...docDuplicates.values()].filter(rows=>rows.length>1).forEach(rows=>inconsistencyRows.push(['DOC duplicado',rows[0].date,rows.map(d=>d.orderNo||d.coupon).join(', '),rows[0].docNo,rows[0].cashierNo,`${rows.length} registros com o mesmo DOC e caixa` ]));
     roots.forEach(root=>{
-      const missing=[['Cupom',root.coupon],['DOC',root.docNo],['Caixa',root.cashierNo],['Bairro',root.neighborhoodId],['Hora entrada',root.purchaseTime]].filter(([,value])=>!value).map(([label])=>label);
+      const missing=[['Nº do cupom',root.coupon],['DOC',root.docNo],['Caixa',root.cashierNo],['Bairro',root.neighborhoodId],['Hora entrada',root.purchaseTime]].filter(([,value])=>!value).map(([label])=>label);
       if(missing.length)inconsistencyRows.push(['Campos obrigatórios ausentes',root.date,root.orderNo||root.coupon||'—',root.docNo||'',root.cashierNo||'',missing.join(', ')]);
     });
     deliveries.forEach(d=>{
@@ -2972,8 +2972,8 @@
       STATUS:[['Status','Quantidade','Percentual dos registros','Faturamento atribuído','Espera média min','Até cliente média min','Rota média min','Atrasadas'],...statusRows],
       RANKING_OPERACIONAL:rankingRows,
       METODOLOGIA:methodologyRows,
-      ENTREGAS:[['ID','ID raiz','ID anterior','Tentativa','Data','Nº Compra','Cupom PDV','Nº DOC','Nº Caixa','Nome do cliente','Telefone','Bairro','Taxa registrada','Reembolso','Data reembolso','Receita líquida','Entregador','Veículo','Ciclo','Entrada','Saída','Finalização','Retorno Loja','Espera Min','Até Cliente Min','Rota Min','Atrasada','Status','Data Programada','Tipo Programação','Motivo padronizado','Motivo complementar','Próxima Ação','Observações','Criado em','Atualizado em'],...deliveries.map(d=>{const c=deliveryCalc(d);return[d.id,d.rootId||d.id,d.parentId||'',d.attemptNo||1,d.date,d.orderNo,d.coupon,d.docNo||'',d.cashierNo||'',d.customerName||'',d.customerPhone||'',neighborhood(d.neighborhoodId)?.name||'',rootDelivery(d)?.fee||d.fee,rootDelivery(d)?.refundAmount||0,rootDelivery(d)?.refundDate||'',netRevenueOfRoot(d),employee(d.driverId)?.name||'',vehicle(d.vehicleId)?.name||'',cycle(d.cycleId)?.code||'',d.purchaseTime,d.departureTime,d.finalizationTime,d.returnTime,c.wait,c.toClient,c.route,c.delayed?'SIM':'NÃO',d.status,d.scheduledDate,d.scheduleKind,reason(d.reasonId)?.name||'',d.reasonText||'',d.nextAction,d.notes,d.createdAt,d.updatedAt]})],
-      CONTATOS_CLIENTES:[['Data','Nº Compra','Cupom PDV','Nº DOC','Nº Caixa','Nome do cliente','Telefone','Bairro','Status','Data Programada','Próxima Ação','Observações'],...roots.map(d=>[d.date,d.orderNo,d.coupon,d.docNo||'',d.cashierNo||'',d.customerName||'',d.customerPhone||'',neighborhood(d.neighborhoodId)?.name||'',d.status,d.scheduledDate,d.nextAction,d.notes])],
+      ENTREGAS:[['ID','ID raiz','ID anterior','Tentativa','Data','Nº Compra','Nº do cupom','Nº DOC','Nº Caixa','Nome do cliente','Telefone','Bairro','Taxa registrada','Reembolso','Data reembolso','Receita líquida','Entregador','Veículo','Ciclo','Entrada','Saída','Finalização','Retorno Loja','Espera Min','Até Cliente Min','Rota Min','Atrasada','Status','Data Programada','Tipo Programação','Motivo padronizado','Motivo complementar','Próxima Ação','Observações','Criado em','Atualizado em'],...deliveries.map(d=>{const c=deliveryCalc(d);return[d.id,d.rootId||d.id,d.parentId||'',d.attemptNo||1,d.date,d.orderNo,d.coupon,d.docNo||'',d.cashierNo||'',d.customerName||'',d.customerPhone||'',neighborhood(d.neighborhoodId)?.name||'',rootDelivery(d)?.fee||d.fee,rootDelivery(d)?.refundAmount||0,rootDelivery(d)?.refundDate||'',netRevenueOfRoot(d),employee(d.driverId)?.name||'',vehicle(d.vehicleId)?.name||'',cycle(d.cycleId)?.code||'',d.purchaseTime,d.departureTime,d.finalizationTime,d.returnTime,c.wait,c.toClient,c.route,c.delayed?'SIM':'NÃO',d.status,d.scheduledDate,d.scheduleKind,reason(d.reasonId)?.name||'',d.reasonText||'',d.nextAction,d.notes,d.createdAt,d.updatedAt]})],
+      CONTATOS_CLIENTES:[['Data','Nº Compra','Nº do cupom','Nº DOC','Nº Caixa','Nome do cliente','Telefone','Bairro','Status','Data Programada','Próxima Ação','Observações'],...roots.map(d=>[d.date,d.orderNo,d.coupon,d.docNo||'',d.cashierNo||'',d.customerName||'',d.customerPhone||'',neighborhood(d.neighborhoodId)?.name||'',d.status,d.scheduledDate,d.nextAction,d.notes])],
       CLIENTES:customerRows,
       CAIXAS_PDV:cashierRows,
       OCORRENCIAS:occurrenceRows,
@@ -2986,10 +2986,10 @@
       VEICULOS:buildVehicleReportRows(deliveries,costs,cycles,odometers),
       COLABORADORES:buildEmployeeReportRows(deliveries),
       BAIRROS:buildNeighborhoodReportRows(deliveries),
-      PROGRAMADAS:[['Origem','Data Programada','Tipo','Nº Compra','Cupom PDV','Nº DOC','Nº Caixa','Nome do cliente','Telefone','Bairro','Status','Motivo padronizado','Motivo complementar','Próxima Ação','Observações'],...deliveries.filter(openScheduled).map(d=>[d.date,d.scheduledDate,d.scheduleKind,d.orderNo,d.coupon,d.docNo||'',d.cashierNo||'',d.customerName||'',d.customerPhone||'',neighborhood(d.neighborhoodId)?.name||'',d.status,reason(d.reasonId)?.name||'',d.reasonText||'',d.nextAction,d.notes])],
+      PROGRAMADAS:[['Origem','Data Programada','Tipo','Nº Compra','Nº do cupom','Nº DOC','Nº Caixa','Nome do cliente','Telefone','Bairro','Status','Motivo padronizado','Motivo complementar','Próxima Ação','Observações'],...deliveries.filter(openScheduled).map(d=>[d.date,d.scheduledDate,d.scheduleKind,d.orderNo,d.coupon,d.docNo||'',d.cashierNo||'',d.customerName||'',d.customerPhone||'',neighborhood(d.neighborhoodId)?.name||'',d.status,reason(d.reasonId)?.name||'',d.reasonText||'',d.nextAction,d.notes])],
       PENDENCIAS:[['Prioridade','Data','Tipo','Título','Detalhe','Meta'],...systemIssues({includeInfo:true}).filter(i=>inRange(i.date,r)||inRange(i.relatedDate,r)).map(i=>[i.severity==='critical'?'CRÍTICA':i.severity==='warning'?'ATENÇÃO':'INFORMATIVA',i.relatedDate||i.date,i.type,i.title,i.detail,i.meta||''])],
       FECHAMENTOS_DIA:[['Data','Encerrado em','Entregas no encerramento','Ciclos no encerramento','KM no encerramento','Avisos'],...closures.map(c=>[c.date,c.closedAt,c.snapshot?.deliveries||0,c.snapshot?.cycles||0,c.snapshot?.km||0,c.snapshot?.warnings||0])],
-      HISTORICO:[['ID','ID raiz','ID anterior','Tentativa','Data','Nº Compra','Cupom PDV','Nº DOC','Nº Caixa','Cliente','Telefone','Status','Criado em','Atualizado em'],...deliveries.map(d=>[d.id,d.rootId||d.id,d.parentId||'',d.attemptNo||1,d.date,d.orderNo,d.coupon,d.docNo||'',d.cashierNo||'',d.customerName||'',d.customerPhone||'',d.status,d.createdAt,d.updatedAt])]
+      HISTORICO:[['ID','ID raiz','ID anterior','Tentativa','Data','Nº Compra','Nº do cupom','Nº DOC','Nº Caixa','Cliente','Telefone','Status','Criado em','Atualizado em'],...deliveries.map(d=>[d.id,d.rootId||d.id,d.parentId||'',d.attemptNo||1,d.date,d.orderNo,d.coupon,d.docNo||'',d.cashierNo||'',d.customerName||'',d.customerPhone||'',d.status,d.createdAt,d.updatedAt])]
     };
     const xml=buildSpreadsheetML(sheets);
     downloadBlob(new Blob(['\ufeff'+xml],{type:'application/vnd.ms-excel;charset=utf-8'}),`Relatorio_Controle_Entregas_${r.label}.xls`);
@@ -3049,7 +3049,7 @@
       <h2>Comparação com o período anterior</h2><table><thead><tr>${comparisonRows[0].map(value=>`<th>${esc(value)}</th>`).join('')}</tr></thead><tbody>${comparisonRows.slice(1).map(row=>`<tr><td>${esc(row[0])}</td><td>${typeof row[1]==='number'?number(row[1],1):esc(row[1])}</td><td>${typeof row[2]==='number'?number(row[2],1):esc(row[2])}</td><td>${typeof row[3]==='number'?number(row[3],1):esc(row[3])}</td><td>${typeof row[4]==='number'?`${number(row[4],1)}%`:esc(row[4])}</td></tr>`).join('')}</tbody></table>
       <h2>Ranking operacional</h2><table><thead><tr>${rankingRows[0].map(value=>`<th>${esc(value)}</th>`).join('')}</tr></thead><tbody>${rankingRows.slice(1,16).map(row=>`<tr>${row.map((value,index)=>`<td>${typeof value==='number'?number(value,index===11?1:0):esc(value)}</td>`).join('')}</tr>`).join('')}</tbody></table>
       <h2>Entregas e identificação das compras</h2>
-      <table><thead><tr><th>Data</th><th>Compra</th><th>Cupom PDV</th><th>DOC</th><th>Caixa</th><th>Cliente / telefone</th><th>Bairro</th><th>Status</th><th>Entregador / veículo</th><th>Entrada / saída / finalização / retorno</th><th>Taxa / reembolso</th><th>Programação / ocorrência</th></tr></thead><tbody>${deliveries.map(d=>`<tr><td>${dateBR(d.date)}</td><td>${esc(d.orderNo||'—')}</td><td>${esc(d.coupon||'—')}</td><td>${esc(d.docNo||'—')}</td><td>${esc(d.cashierNo||'—')}</td><td>${esc(d.customerName||'—')}<br><span class="muted">${esc(d.customerPhone||'—')}</span></td><td>${esc(neighborhood(d.neighborhoodId)?.name||'—')}</td><td>${esc(d.status||'—')}</td><td>${esc(employee(d.driverId)?.name||'—')}<br><span class="muted">${esc(vehicle(d.vehicleId)?.name||'—')}</span></td><td>${d.purchaseTime||'—'} / ${d.departureTime||'—'} / ${d.finalizationTime||'—'} / ${d.returnTime||'—'}</td><td>${money(rootDelivery(d)?.fee||d.fee)} / ${money(rootDelivery(d)?.refundAmount||0)}</td><td>${d.scheduledDate?`${dateBR(d.scheduledDate)} • ${esc(d.scheduleKind||'Programada')}`:'—'}<br><span class="muted">${esc(reason(d.reasonId)?.name||d.reasonText||d.nextAction||'')}</span></td></tr>`).join('')}</tbody></table>
+      <table><thead><tr><th>Data</th><th>Compra</th><th>Nº do cupom</th><th>DOC</th><th>Caixa</th><th>Cliente / telefone</th><th>Bairro</th><th>Status</th><th>Entregador / veículo</th><th>Entrada / saída / finalização / retorno</th><th>Taxa / reembolso</th><th>Programação / ocorrência</th></tr></thead><tbody>${deliveries.map(d=>`<tr><td>${dateBR(d.date)}</td><td>${esc(d.orderNo||'—')}</td><td>${esc(d.coupon||'—')}</td><td>${esc(d.docNo||'—')}</td><td>${esc(d.cashierNo||'—')}</td><td>${esc(d.customerName||'—')}<br><span class="muted">${esc(d.customerPhone||'—')}</span></td><td>${esc(neighborhood(d.neighborhoodId)?.name||'—')}</td><td>${esc(d.status||'—')}</td><td>${esc(employee(d.driverId)?.name||'—')}<br><span class="muted">${esc(vehicle(d.vehicleId)?.name||'—')}</span></td><td>${d.purchaseTime||'—'} / ${d.departureTime||'—'} / ${d.finalizationTime||'—'} / ${d.returnTime||'—'}</td><td>${money(rootDelivery(d)?.fee||d.fee)} / ${money(rootDelivery(d)?.refundAmount||0)}</td><td>${d.scheduledDate?`${dateBR(d.scheduledDate)} • ${esc(d.scheduleKind||'Programada')}`:'—'}<br><span class="muted">${esc(reason(d.reasonId)?.name||d.reasonText||d.nextAction||'')}</span></td></tr>`).join('')}</tbody></table>
       <h2>Análise por bairro</h2><table><tr><th>Bairro</th><th>Entregas</th><th>Faturamento</th><th>Endereço errado</th><th>Agendadas</th><th>Reagendadas</th><th>Devoluções</th><th>Atrasadas</th><th>Taxa de problemas</th></tr>${nb.map(row=>`<tr><td>${esc(row.name)}</td><td>${row.deliveries}</td><td>${money(row.revenue)}</td><td>${row.wrongAddress}</td><td>${row.scheduled}</td><td>${row.rescheduled}</td><td>${row.devolutions}</td><td>${row.delayed}</td><td>${number(row.problemRate,1)}%</td></tr>`).join('')}</table>
       <h2>Qualidade dos dados</h2><table><thead><tr>${qualityRows[0].map(value=>`<th>${esc(value)}</th>`).join('')}</tr></thead><tbody>${qualityRows.slice(1).map(row=>`<tr>${row.map((value,index)=>`<td>${typeof value==='number'?number(value,index===4?1:0):esc(value)}</td>`).join('')}</tr>`).join('')}</tbody></table>
       <p class="muted" style="margin-top:16px">O arquivo Excel contém 27 abas com resumo diário, distribuição das taxas do PDV, metodologia dos indicadores, dados completos, comparação, horários, rankings, caixas, clientes, ocorrências, qualidade, inconsistências, previsão da agenda, custos, ciclos, KM, equipe, bairros, pendências, fechamentos e histórico.</p><script>window.onload=()=>window.print()<\/script></body></html>`;

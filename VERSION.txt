@@ -1,2 +1,2 @@
-V14.3.2 — Pesquisa por Compra, DOC, Caixa e Dia
-Pesquisa em todo o histórico, número da compra automático em fundo escuro, identificação completa, calendário ampliado, cache reforçado e Excel com 27 abas, preservando todos os registros existentes.
+V14.3.3 — Pesquisa Completa e Nº do Cupom
+Pesquisa por compra, nº do cupom, DOC, caixa e dia, número da compra automático em fundo escuro, calendário ampliado e Excel com 27 abas, preservando todos os registros existentes.

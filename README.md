@@ -1,13 +1,14 @@
-# Controle de Entregas • Nilo Supermercado — V14.3.2
+# Controle de Entregas • Nilo Supermercado — V14.3.3
 
 Versão focada em **segurança dos dados, confiabilidade dos indicadores e acessibilidade**, mantendo os ciclos automáticos e todas as melhorias operacionais da V13.
 
 ## Novidades da V14.3
 
-- Na V14.3.2, a tela **Entregas** pesquisa todo o histórico por número da compra, DOC, caixa ou dia, separadamente ou combinando os filtros.
+- Na V14.3.3, o nome **Cupom PDV** foi substituído por **Nº DO CUPOM** na interface, no Excel e na impressão/PDF, sem alterar os cupons já cadastrados.
+- A tela **Entregas** pesquisa todo o histórico por número da compra, número do cupom, DOC, caixa ou dia, separadamente ou combinando os filtros.
 - Na V14.3.1, o número da compra é preenchido automaticamente, não pode ser alterado por engano e acompanha a data escolhida.
 - O campo do número usa o mesmo fundo azul-escuro dos demais campos, com número amarelo de alto contraste.
-- Confirmação visual dos campos **Cupom PDV**, **Nº do DOC**, **Nº do caixa**, **nome do cliente** e **telefone** no lançamento rápido.
+- Confirmação visual dos campos **Nº DO CUPOM**, **Nº do DOC**, **Nº do caixa**, **nome do cliente** e **telefone** no lançamento rápido.
 - DOC e caixa são obrigatórios; nome e telefone continuam opcionais.
 - Os seletores de ano oferecem 10 anos anteriores e 20 anos futuros, além de qualquer ano já existente nos dados.
 - O Excel passou para **27 abas**, incluindo resumo diário, distribuição das taxas do PDV e metodologia dos indicadores.
@@ -30,7 +31,7 @@ Versão focada em **segurança dos dados, confiabilidade dos indicadores e acess
 
 ## Novidades da V14.1
 
-- O lançamento rápido possui campos separados para **Cupom PDV**, **Nº do DOC** e **Nº do caixa**.
+- O lançamento rápido possui campos separados para **Nº DO CUPOM**, **Nº do DOC** e **Nº do caixa**.
 - **Nome do cliente** e **número de telefone** são opcionais.
 - Os novos dados aparecem na operação, edição, agenda, rastreamento e relatórios.
 - O Excel da V14.1 incluía 14 abas; a V14.2 ampliou essa estrutura para 24 abas analíticas.
