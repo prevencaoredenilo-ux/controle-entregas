@@ -7,7 +7,7 @@
   }
   'use strict';
 
-  const APP_VERSION = '14.3.7';
+  const APP_VERSION = '14.3.8';
   const DB_NAME = 'controle_entregas_nx';
   const DB_VERSION = 1;
   const STORE_NAME = 'app_state';
@@ -113,7 +113,7 @@
     return {
       meta: { version: APP_VERSION, createdAt: now, updatedAt: now },
       settings: {
-        workStart: '09:00', lunchStart: '13:00', lunchEnd: '14:00', workEnd: '20:00', delayMinutes: 120,
+        workStart: '09:00', lunchStart: '13:00', lunchEnd: '14:00', workEnd: '20:00', delayMinutes: 120, completionLimitMinutes: 210,
         companyName: 'Controle de Entregas', locationName: 'Nova Xavantina • MT', appMode: 'production', autoCycles: true
       },
       vehicles: [
@@ -288,7 +288,7 @@
 
   function initPWA() {
     if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-      navigator.serviceWorker.register('./sw.js?v=14.3.7').catch(console.warn);
+      navigator.serviceWorker.register('./sw.js?v=14.3.8').catch(console.warn);
     }
     window.addEventListener('beforeinstallprompt', (event) => {
       event.preventDefault();
@@ -557,20 +557,62 @@
   function currentWaitMinutes(d) {
     if (!d.purchaseTime || isFinal(d)) return null;
     if (d.departureTime) return deliveryCalc(d).wait;
+    if (!['Na loja','Em rota'].includes(d.status)) return null;
     const endDate = todayISO();
     const endTime = currentTimeHM();
     if (d.date > endDate) return null;
-    return workingMinutesBetween(d.date, d.purchaseTime, endDate, endTime);
+    return durationMinutes(d.date, d.purchaseTime, endDate, endTime);
+  }
+
+  function currentPurchaseToClientMinutes(d) {
+    if (!d.purchaseTime || d.date > todayISO()) return null;
+    if (d.finalizationTime) return deliveryCalc(d).purchaseToClient;
+    if (isFinal(d)) return null;
+    if (!['Na loja','Em rota'].includes(d.status)) return null;
+    return durationMinutes(d.date, d.purchaseTime, todayISO(), currentTimeHM());
+  }
+
+  function completionProgress(d) {
+    const elapsed = currentPurchaseToClientMinutes(d);
+    const limit = Number(state.settings.completionLimitMinutes || 210);
+    return {
+      elapsed,
+      balance: elapsed === null ? null : limit - elapsed,
+      outside: elapsed !== null && elapsed > limit
+    };
   }
 
   function deliveryCalc(d) {
-    const wait = d.purchaseTime && d.departureTime ? workingMinutesBetween(d.date,d.purchaseTime,d.date,d.departureTime) : null;
+    const wait = d.purchaseTime && d.departureTime ? durationMinutes(d.date,d.purchaseTime,d.date,d.departureTime) : null;
     const toClient = d.departureTime && d.finalizationTime ? durationMinutes(d.date,d.departureTime,d.date,d.finalizationTime) : null;
+    const purchaseToClient = d.purchaseTime && d.finalizationTime ? durationMinutes(d.date,d.purchaseTime,d.date,d.finalizationTime) : null;
     const route = d.departureTime && d.returnTime ? durationMinutes(d.date,d.departureTime,d.date,d.returnTime) : null;
+    const departureLimit = Number(state.settings.delayMinutes || 120);
+    const completionLimit = Number(state.settings.completionLimitMinutes || 210);
     return {
-      wait, toClient, route,
-      delayed: wait !== null && wait > Number(state.settings.delayMinutes || 120)
+      wait, toClient, purchaseToClient, route,
+      delayed: wait !== null && wait > departureLimit,
+      completionDelayed: purchaseToClient !== null && purchaseToClient > completionLimit
     };
+  }
+  function deliveryStandardBadges(d, calc = deliveryCalc(d)) {
+    const liveWait = calc.wait === null ? currentWaitMinutes(d) : calc.wait;
+    const progress = completionProgress(d);
+    const departure = liveWait === null
+      ? '<span class="badge gray">Saída não calculada</span>'
+      : liveWait > Number(state.settings.delayMinutes || 120)
+        ? '<span class="badge red">Saída &gt; 2h</span>'
+        : d.departureTime
+          ? '<span class="badge green">Saída OK</span>'
+          : '<span class="badge yellow">Saída em andamento</span>';
+    const completion = progress.elapsed === null
+      ? '<span class="badge gray">Entrega não calculada</span>'
+      : progress.outside
+        ? '<span class="badge red">Entrega &gt; 3h30</span>'
+        : d.finalizationTime
+          ? '<span class="badge green">Entrega OK</span>'
+          : '<span class="badge yellow">Entrega em andamento</span>';
+    return `<span class="standard-badges">${departure}${completion}</span>`;
   }
   function cycleCalc(c) {
     // CICLO = uma saída da loja até o retorno ao mercado.
@@ -628,7 +670,9 @@
     if (d.status === 'Em rota' && !d.returnTime) list.push('Em rota sem retorno');
     if (d.parentId && !isFinal(d) && !d.scheduledDate && d.status !== 'Em rota') list.push('Atendimento programado iniciado e não concluído');
     if (d.status === 'Devolvida' && !d.scheduledDate && !d.nextAction) list.push('Devolvida sem próxima ação');
-    if (calc.delayed && !isFinal(d)) list.push('Atrasada acima de 2h úteis');
+    if (calc.delayed && !isFinal(d)) list.push('Saída fora do padrão de 2h');
+    const livePurchaseToClient = currentPurchaseToClientMinutes(d);
+    if (!d.finalizationTime && !isFinal(d) && livePurchaseToClient !== null && livePurchaseToClient > Number(state.settings.completionLimitMinutes || 210)) list.push('Compra há mais de 3h30 sem finalização no cliente');
     if (d.departureTime && !d.vehicleId) list.push('Saiu sem veículo');
     if (d.departureTime && !d.driverId) list.push('Saiu sem entregador');
     if (d.scheduledDate && d.scheduledDate < todayISO() && openScheduled(d)) list.push('Programação vencida');
@@ -648,7 +692,7 @@
 
   function issueSeverityForReason(text = '') {
     if (/vencida|Em rota sem retorno|Saiu sem veículo|Saiu sem entregador/i.test(text)) return 'critical';
-    if (/Atrasada|Devolvida|iniciado e não concluído/i.test(text)) return 'warning';
+    if (/Atrasada|fora do padrão|mais de 3h30|Devolvida|iniciado e não concluído/i.test(text)) return 'warning';
     return 'info';
   }
 
@@ -868,8 +912,10 @@
     const costPerDelivery = final.length ? totalCosts / final.length : 0;
     const fuel = sum(costs.filter(c => category(c.categoryId)?.name === 'Combustível').map(c => c.value));
     const avgWait = avg(deliveries.map(d => deliveryCalc(d).wait));
+    const avgPurchaseToClient = avg(deliveries.map(d => deliveryCalc(d).purchaseToClient));
     const avgRoute = avg(deliveries.map(d => deliveryCalc(d).route));
     const delayed = deliveries.filter(d => deliveryCalc(d).delayed).length;
+    const completionDelayed = deliveries.filter(d => deliveryCalc(d).completionDelayed).length;
     const openSched = deliveries.filter(openScheduled).length;
     const weeklyRows = buildWeeklyRows(deliveries,costs,cycles,odometers);
     const nbRows = buildNeighborhoodRows(deliveries);
@@ -902,9 +948,11 @@
         ])}
         ${managementPanel('▣','Operação','Volume, tempos e qualidade',[
           ['Tempo médio de espera',fmtMinutes(avgWait),'Compra → saída'],
-          ['Tempo médio de rota',fmtMinutes(avgRoute),'Saída → retorno'],
-          ['Entregas atrasadas',String(delayed),`Limite ${state.settings.delayMinutes} min úteis`],
-          ['Programadas abertas',String(openSched),'Ainda não concluídas']
+          ['Compra até o cliente',fmtMinutes(avgPurchaseToClient),'Compra → entrega finalizada'],
+          ['Saídas fora do padrão',String(delayed),`Acima de ${state.settings.delayMinutes} min corridos`],
+          ['Entregas fora do padrão',String(completionDelayed),`Acima de ${fmtMinutes(Number(state.settings.completionLimitMinutes || 210))}`],
+          ['Programadas abertas',String(openSched),'Ainda não concluídas'],
+          ['Tempo médio de rota',fmtMinutes(avgRoute),'Saída → retorno']
         ])}
         ${managementPanel('↻','Frota e eficiência','Produtividade dos ciclos',[
           ['Entregas por ciclo',number(deliveriesPerCycle,2),`${cycles.length} ciclos`],
@@ -1139,8 +1187,12 @@
 
     return `<div class="operation-card-grid v11-operation-cards">${sorted.map(d => {
       const calc = deliveryCalc(d);
-      const liveWait = currentWaitMinutes(d);
+      const liveWait = d.departureTime ? calc.wait : currentWaitMinutes(d);
       const liveDelayed = liveWait !== null && liveWait > Number(state.settings.delayMinutes || 120);
+      const progress = completionProgress(d);
+      const livePurchaseToClient = progress.elapsed;
+      const liveCompletionDelayed = progress.outside;
+      const completionBalance = progress.balance;
       const root = rootDelivery(d);
       const refund = Number(root?.refundAmount || 0);
       const isFutureScheduled = d.scheduledDate && d.scheduledDate > todayISO() && openScheduled(d);
@@ -1165,7 +1217,7 @@
         <div class="v11-delivery-head">
           <div class="v11-order-number"><span>COMPRA</span><strong>Nº ${esc(d.orderNo || '—')}</strong></div>
           <div class="v11-delivery-identification"><small>Nº DO CUPOM</small><strong>${esc(d.coupon || '—')}</strong><em>DOC ${esc(d.docNo || '—')} • Caixa ${esc(d.cashierNo || '—')} • ${esc(neighborhood(d.neighborhoodId)?.name || 'Sem bairro')}</em>${d.customerName || d.customerPhone ? `<em>Cliente: ${esc(d.customerName || 'Não informado')}${d.customerPhone ? ` • ${esc(d.customerPhone)}` : ''}</em>` : ''}</div>
-          <div class="v11-delivery-head-status">${statusBadge(d.status)}${liveDelayed && !d.departureTime?'<span class="badge red">Atrasada</span>':''}</div>
+          <div class="v11-delivery-head-status">${statusBadge(d.status)}${liveDelayed && !d.departureTime?'<span class="badge red">Saída fora</span>':''}${liveCompletionDelayed && !d.finalizationTime?'<span class="badge red">Entrega fora</span>':''}</div>
         </div>
 
         ${deliveryJourneyTimeline(d,cyc)}
@@ -1173,6 +1225,8 @@
         <div class="v11-delivery-insights">
           <div><small>Espera</small><strong class="${liveDelayed?'text-danger':''}">${fmtMinutes(liveWait)}</strong></div>
           <div><small>Loja → cliente</small><strong>${fmtMinutes(calc.toClient)}</strong></div>
+          <div><small>Compra → cliente</small><strong class="${liveCompletionDelayed?'text-danger':''}">${fmtMinutes(livePurchaseToClient)}</strong></div>
+          <div><small>${d.finalizationTime?'Resultado do prazo':'Prazo restante'}</small><strong class="${completionBalance !== null && completionBalance < 0?'text-danger':''}">${completionBalance === null?'—':completionBalance >= 0?`${fmtMinutes(completionBalance)} restantes`:`${fmtMinutes(Math.abs(completionBalance))} acima`}</strong></div>
           <div><small>Rota total</small><strong>${fmtMinutes(calc.route)}</strong></div>
           <div><small>Taxa</small><strong>${money(root?.fee || d.fee)}</strong></div>
         </div>
@@ -1221,7 +1275,7 @@
 
   function deliveryTable(deliveries, searchActive = false) {
     if (!deliveries.length) return emptyState('▣','Nenhuma entrega encontrada',searchActive ? 'Confira os dados pesquisados ou clique em Limpar.' : 'Registre uma nova entrega ou altere o recorte de análise.');
-    return `<div class="table-wrap"><table><thead><tr><th>Data</th><th>Nº do cupom</th><th>Cliente</th><th>Bairro</th><th>Status</th><th>Taxa registrada</th><th>Reembolso</th><th>Espera</th><th>Até cliente</th><th>Rota total</th><th>Atraso</th><th>Ações</th></tr></thead><tbody>${deliveries.map(d => {
+    return `<div class="table-wrap"><table><thead><tr><th>Data</th><th>Nº do cupom</th><th>Cliente</th><th>Bairro</th><th>Status</th><th>Taxa registrada</th><th>Reembolso</th><th>Compra → saída</th><th>Loja → cliente</th><th>Compra → cliente</th><th>Rota total</th><th>Padrões</th><th>Ações</th></tr></thead><tbody>${deliveries.map(d => {
       const calc = deliveryCalc(d);
       return `<tr>
         <td><div class="cell-title mono">${dateBR(d.date)}</div><div class="cell-sub">Entrada ${d.purchaseTime || '—'}</div></td>
@@ -1233,8 +1287,9 @@
         <td>${money(rootDelivery(d)?.refundAmount || 0)}</td>
         <td>${fmtMinutes(calc.wait)}</td>
         <td>${fmtMinutes(calc.toClient)}</td>
+        <td><strong class="${calc.completionDelayed?'text-danger':''}">${fmtMinutes(calc.purchaseToClient)}</strong></td>
         <td>${fmtMinutes(calc.route)}</td>
-        <td>${calc.delayed ? '<span class="badge red">Atrasada</span>' : '<span class="badge green">OK</span>'}</td>
+        <td>${deliveryStandardBadges(d,calc)}</td>
         <td><div class="actions"><button class="btn secondary small" data-action="edit-delivery" data-id="${d.id}">Editar</button><button class="btn secondary small" data-action="trace-delivery" data-coupon="${attr(d.coupon)}">Rastrear</button><button class="btn danger small" data-action="delete-record" data-type="delivery" data-id="${d.id}">Apagar</button></div></td>
       </tr>`;
     }).join('')}</tbody></table></div>`;
@@ -1317,7 +1372,7 @@
 
   function pendingAlertList(list) {
     if (!list.length) return emptyState('✓','Nenhuma atenção aberta','A operação de hoje não tem pendências registradas.');
-    return `<div class="alert-list">${list.slice(0,12).map(d => `<div class="alert-item ${pendingReasons(d).some(x=>x.includes('Atrasada')||x.includes('vencida'))?'red':'blue'}"><strong>Nº do cupom ${esc(d.coupon || '—')}</strong><p>${esc(pendingReasons(d).join(' • '))}</p></div>`).join('')}</div>`;
+    return `<div class="alert-list">${list.slice(0,12).map(d => `<div class="alert-item ${pendingReasons(d).some(x=>/fora do padrão|mais de 3h30|vencida/i.test(x))?'red':'blue'}"><strong>Nº do cupom ${esc(d.coupon || '—')}</strong><p>${esc(pendingReasons(d).join(' • '))}</p></div>`).join('')}</div>`;
   }
 
   function renderCycles() {
@@ -1611,7 +1666,7 @@
         Nº DO CUPOM: ${esc(root.coupon || '—')} • Nº DOC: ${esc(root.docNo || '—')} • Nº caixa: ${esc(root.cashierNo || '—')}<br>
         Cliente: ${esc(root.customerName || 'Não informado')} • Telefone: ${esc(root.customerPhone || 'Não informado')}
       </div>
-      <div class="trace-timeline">${chain.map(d=>{const c=deliveryCalc(d); return `<div class="trace-event"><strong>${dateBR(d.date)} • ${esc(d.status)}</strong><p>Entrada ${d.purchaseTime||'—'} • Saída ${d.departureTime||'—'} • Finalização ${d.finalizationTime||'—'} • Retorno ${d.returnTime||'—'}<br>Espera ${fmtMinutes(c.wait)} • Até cliente ${fmtMinutes(c.toClient)} • Rota ${fmtMinutes(c.route)}${d.scheduledDate?`<br>${esc(d.scheduleKind||'Programada')} para ${dateBR(d.scheduledDate)} • ${esc(reason(d.reasonId)?.name || d.reasonText || '')}`:''}</p></div>`}).join('')}</div>`;
+      <div class="trace-timeline">${chain.map(d=>{const c=deliveryCalc(d); return `<div class="trace-event"><strong>${dateBR(d.date)} • ${esc(d.status)}</strong><p>Entrada ${d.purchaseTime||'—'} • Saída ${d.departureTime||'—'} • Finalização ${d.finalizationTime||'—'} • Retorno ${d.returnTime||'—'}<br>Compra → saída ${fmtMinutes(c.wait)} • Loja → cliente ${fmtMinutes(c.toClient)} • Compra → cliente ${fmtMinutes(c.purchaseToClient)} • Rota ${fmtMinutes(c.route)}<br>${deliveryStandardBadges(d,c)}${d.scheduledDate?`<br>${esc(d.scheduleKind||'Programada')} para ${dateBR(d.scheduledDate)} • ${esc(reason(d.reasonId)?.name || d.reasonText || '')}`:''}</p></div>`}).join('')}</div>`;
   }
 
   function renderReports() {
@@ -1627,7 +1682,7 @@
             <label>Mês<select id="reportMonth">${monthNames.map((m,i)=>`<option value="${String(i+1).padStart(2,'0')}">${m}</option>`).join('')}</select></label>
             <label>De<input id="reportStart" type="date" /></label>
             <label>Até<input id="reportEnd" type="date" /></label>
-            <div class="full form-note"><strong>Relatório completo:</strong> identificação, comparação com o período anterior, picos por dia e horário, desempenho por caixa/bairro/equipe/veículo, clientes recorrentes, ocorrências, qualidade dos dados, inconsistências, previsão da agenda, financeiro, KM e histórico.</div>
+            <div class="full form-note"><strong>Relatório completo:</strong> tempos compra → saída, loja → cliente e compra → cliente; padrões de 2h e 3h30; identificação, comparação com o período anterior, picos por dia e horário, desempenho por caixa/bairro/equipe/veículo, clientes recorrentes, ocorrências, qualidade dos dados, inconsistências, previsão da agenda, financeiro, KM e histórico.</div>
             <div class="full form-actions"><button class="btn secondary" id="printReportBtn">Imprimir / PDF</button><button class="btn primary" id="exportExcelBtn">⇩ Baixar Excel</button></div>
           </div>
         </article>
@@ -1749,14 +1804,15 @@
 
   function settingsContent() {
     if (configTab === 'rules') {
-      return `${sectionHeader('⚙','Regras operacionais','Defina o expediente e o limite máximo de espera.')}
+      return `${sectionHeader('⚙','Regras operacionais','Defina o expediente e os padrões máximos da entrega.')}
         <div class="form-grid">
           <label>Início expediente<input id="ruleWorkStart" type="time" value="${state.settings.workStart}" /></label>
           <label>Início almoço<input id="ruleLunchStart" type="time" value="${state.settings.lunchStart}" /></label>
           <label>Fim almoço<input id="ruleLunchEnd" type="time" value="${state.settings.lunchEnd}" /></label>
           <label>Fim expediente<input id="ruleWorkEnd" type="time" value="${state.settings.workEnd}" /></label>
-          <label>Limite de atraso em minutos<input id="ruleDelay" type="number" min="1" value="${state.settings.delayMinutes}" /></label>
-          <div class="full form-note">O atraso é calculado da hora da compra até a saída, contando apenas o expediente. O almoço não entra na conta.</div>
+          <label>Limite compra → saída (minutos)<input id="ruleDelay" type="number" min="1" value="${state.settings.delayMinutes}" /></label>
+          <label>Limite compra → cliente (minutos)<input id="ruleCompletionLimit" type="number" min="1" value="${state.settings.completionLimitMinutes || 210}" /></label>
+          <div class="full form-note"><strong>Padrão 1:</strong> compra até a saída, em tempo corrido (padrão atual: 2h).<br><strong>Padrão 2:</strong> compra até a finalização na casa do cliente, também em tempo corrido (padrão atual: 3h30). Exemplo: compra às 10:00 e saída às 12:00 deixam 1h30 para a entrega.</div>
           <div class="full form-actions"><button class="btn primary" data-action="save-rules">Salvar regras</button></div>
         </div>`;
     }
@@ -2106,7 +2162,7 @@
             <label>Saída para entrega<input name="departureTime" type="time" value="${d.departureTime || ''}" /></label>
             <label>Finalização no cliente<input name="finalizationTime" type="time" value="${d.finalizationTime || ''}" /></label>
             <label>Retorno à loja<input name="returnTime" type="time" value="${d.returnTime || ''}" /></label>
-            <div class="form-note">Espera atual: <strong>${fmtMinutes(calc.wait)}</strong><br>Até cliente: <strong>${fmtMinutes(calc.toClient)}</strong><br>Rota total: <strong>${fmtMinutes(calc.route)}</strong></div>
+            <div class="form-note">Compra → saída: <strong>${fmtMinutes(calc.wait)}</strong><br>Loja → cliente: <strong>${fmtMinutes(calc.toClient)}</strong><br>Compra → entrega: <strong>${fmtMinutes(calc.purchaseToClient)}</strong><br>Rota total: <strong>${fmtMinutes(calc.route)}</strong><br>${deliveryStandardBadges(d,calc)}</div>
           </div>
         </div>
 
@@ -2750,6 +2806,7 @@
     state.settings.lunchEnd=$('#ruleLunchEnd').value;
     state.settings.workEnd=$('#ruleWorkEnd').value;
     state.settings.delayMinutes=Number($('#ruleDelay').value||120);
+    state.settings.completionLimitMinutes=Number($('#ruleCompletionLimit').value||210);
     await saveState('Regras operacionais atualizadas');toast('Regras salvas.','success');renderSettings();
   }
 
@@ -2853,16 +2910,18 @@
     const costs=scoped(state.costs).filter(c=>inRange(c.date,range));
     const odometers=scoped(state.odometerLogs).filter(o=>inRange(o.date,range));
     const waits=deliveries.map(d=>deliveryCalc(d).wait).filter(v=>v!==null);
+    const purchaseToClients=deliveries.map(d=>deliveryCalc(d).purchaseToClient).filter(v=>v!==null);
     const routes=deliveries.map(d=>deliveryCalc(d).route).filter(v=>v!==null);
     const delayed=deliveries.filter(d=>deliveryCalc(d).delayed).length;
+    const completionDelayed=deliveries.filter(d=>deliveryCalc(d).completionDelayed).length;
     const problems=roots.filter(root=>rootHadProblem(root,deliveries)).length;
     const financial=financialsForRange(range);
     return {
       purchases:roots.length,records:deliveries.length,finalized:final.length,
       firstAttempt:roots.filter(root=>root.status==='Finalizada').length,
       firstAttemptRate:percentage(roots.filter(root=>root.status==='Finalizada').length,roots.length),
-      delayed,delayRate:percentage(delayed,waits.length),problems,problemRate:percentage(problems,roots.length),
-      avgWait:avg(waits),avgRoute:avg(routes),gross:financial.gross,refunds:financial.refundTotal,net:financial.net,
+      delayed,delayRate:percentage(delayed,waits.length),completionDelayed,completionDelayRate:percentage(completionDelayed,purchaseToClients.length),problems,problemRate:percentage(problems,roots.length),
+      avgWait:avg(waits),avgPurchaseToClient:avg(purchaseToClients),avgRoute:avg(routes),gross:financial.gross,refunds:financial.refundTotal,net:financial.net,
       costs:sum(costs.map(c=>c.value)),km:totalKmFromOdometers(odometers)
     };
   }
@@ -2876,14 +2935,14 @@
     const closures=scoped(state.dayClosures || []).filter(c=>inRange(c.date,range));
     const current=periodMetrics(range), previousRange=previousReportRange(range), previous=previousRange?periodMetrics(previousRange):null;
     const comparisonDefinitions=[
-      ['Compras originais','purchases'],['Entregas finalizadas','finalized'],['Sucesso na primeira tentativa %','firstAttemptRate'],['Taxa de atraso %','delayRate'],['Taxa de problemas %','problemRate'],['Espera média min','avgWait'],['Rota média min','avgRoute'],['Faturamento bruto','gross'],['Reembolsos','refunds'],['Faturamento líquido','net'],['Custos','costs'],['KM total','km']
+      ['Compras originais','purchases'],['Entregas finalizadas','finalized'],['Sucesso na primeira tentativa %','firstAttemptRate'],['Saídas fora do padrão de 2h','delayed'],['Taxa de saída fora do padrão %','delayRate'],['Entregas fora do padrão de 3h30','completionDelayed'],['Taxa de entrega fora do padrão %','completionDelayRate'],['Taxa de problemas %','problemRate'],['Compra → saída média min','avgWait'],['Compra → cliente média min','avgPurchaseToClient'],['Rota média min','avgRoute'],['Faturamento bruto','gross'],['Reembolsos','refunds'],['Faturamento líquido','net'],['Custos','costs'],['KM total','km']
     ];
     const comparisonRows=[['Indicador','Período atual',previousRange?`Período anterior (${previousRange.label})`:'Sem período anterior','Diferença','Variação %'],...comparisonDefinitions.map(([label,key])=>[label,current[key],previous?.[key]??'',previous?current[key]-previous[key]:'',previous?variationPercent(current[key],previous[key]):''])];
 
     const reportDates=unique([...deliveries.map(d=>d.date),...costs.map(c=>c.date),...cycles.map(c=>c.date),...odometers.map(o=>o.date)].filter(Boolean)).sort();
-    const dailyRows=[['Data','Dia da semana','Compras','Registros','Finalizadas','Na loja','Em rota','Programadas','Reagendadas','Devolvidas','Retiradas','Canceladas','Atrasadas','Sucesso 1ª tentativa %','Taxa atraso %','Faturamento bruto','Reembolsos','Faturamento líquido','Custos','Saldo','Ciclos','KM','Espera média min','Até cliente média min','Rota média min','Clientes identificados','Telefones informados','Identificação completa %'],...reportDates.map(date=>{
-      const dayDeliveries=deliveries.filter(d=>d.date===date),dayRoots=dayDeliveries.filter(isRootPurchase),dayCosts=sum(costs.filter(c=>c.date===date).map(c=>c.value)),gross=sum(dayRoots.map(d=>d.fee)),refunds=sum(dayRoots.map(d=>d.refundAmount)),delayed=dayDeliveries.filter(d=>deliveryCalc(d).delayed).length,waits=dayDeliveries.map(d=>deliveryCalc(d).wait).filter(v=>v!==null),dateObj=reportDate(date),complete=dayRoots.filter(d=>d.coupon&&d.docNo&&d.cashierNo&&d.neighborhoodId&&d.purchaseTime).length;
-      return [date,dateObj?['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'][dateObj.getDay()]:'',dayRoots.length,dayDeliveries.length,dayDeliveries.filter(d=>d.status==='Finalizada').length,dayDeliveries.filter(d=>d.status==='Na loja').length,dayDeliveries.filter(d=>d.status==='Em rota').length,dayDeliveries.filter(d=>d.status==='Programada').length,dayDeliveries.filter(d=>d.status==='Reagendada').length,dayDeliveries.filter(d=>d.status==='Devolvida').length,dayDeliveries.filter(d=>d.status==='Retirada na loja').length,dayDeliveries.filter(d=>d.status==='Cancelada').length,delayed,percentage(dayRoots.filter(d=>d.status==='Finalizada').length,dayRoots.length),percentage(delayed,waits.length),gross,refunds,gross-refunds,dayCosts,gross-refunds-dayCosts,cycles.filter(c=>c.date===date).length,totalKmFromOdometers(odometers.filter(o=>o.date===date)),avg(waits),avg(dayDeliveries.map(d=>deliveryCalc(d).toClient)),avg(dayDeliveries.map(d=>deliveryCalc(d).route)),dayRoots.filter(d=>d.customerName||d.customerPhone).length,dayRoots.filter(d=>d.customerPhone).length,percentage(complete,dayRoots.length)];
+    const dailyRows=[['Data','Dia da semana','Compras','Registros','Finalizadas','Na loja','Em rota','Programadas','Reagendadas','Devolvidas','Retiradas','Canceladas','Saída > 2h','Entrega > 3h30','Sucesso 1ª tentativa %','Taxa saída fora do padrão %','Taxa entrega fora do padrão %','Faturamento bruto','Reembolsos','Faturamento líquido','Custos','Saldo','Ciclos','KM','Compra → saída média min','Loja → cliente média min','Compra → cliente média min','Rota média min','Clientes identificados','Telefones informados','Identificação completa %'],...reportDates.map(date=>{
+      const dayDeliveries=deliveries.filter(d=>d.date===date),dayRoots=dayDeliveries.filter(isRootPurchase),dayCosts=sum(costs.filter(c=>c.date===date).map(c=>c.value)),gross=sum(dayRoots.map(d=>d.fee)),refunds=sum(dayRoots.map(d=>d.refundAmount)),delayed=dayDeliveries.filter(d=>deliveryCalc(d).delayed).length,completionDelayed=dayDeliveries.filter(d=>deliveryCalc(d).completionDelayed).length,waits=dayDeliveries.map(d=>deliveryCalc(d).wait).filter(v=>v!==null),purchaseToClients=dayDeliveries.map(d=>deliveryCalc(d).purchaseToClient).filter(v=>v!==null),dateObj=reportDate(date),complete=dayRoots.filter(d=>d.coupon&&d.docNo&&d.cashierNo&&d.neighborhoodId&&d.purchaseTime).length;
+      return [date,dateObj?['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'][dateObj.getDay()]:'',dayRoots.length,dayDeliveries.length,dayDeliveries.filter(d=>d.status==='Finalizada').length,dayDeliveries.filter(d=>d.status==='Na loja').length,dayDeliveries.filter(d=>d.status==='Em rota').length,dayDeliveries.filter(d=>d.status==='Programada').length,dayDeliveries.filter(d=>d.status==='Reagendada').length,dayDeliveries.filter(d=>d.status==='Devolvida').length,dayDeliveries.filter(d=>d.status==='Retirada na loja').length,dayDeliveries.filter(d=>d.status==='Cancelada').length,delayed,completionDelayed,percentage(dayRoots.filter(d=>d.status==='Finalizada').length,dayRoots.length),percentage(delayed,waits.length),percentage(completionDelayed,purchaseToClients.length),gross,refunds,gross-refunds,dayCosts,gross-refunds-dayCosts,cycles.filter(c=>c.date===date).length,totalKmFromOdometers(odometers.filter(o=>o.date===date)),avg(waits),avg(dayDeliveries.map(d=>deliveryCalc(d).toClient)),avg(purchaseToClients),avg(dayDeliveries.map(d=>deliveryCalc(d).route)),dayRoots.filter(d=>d.customerName||d.customerPhone).length,dayRoots.filter(d=>d.customerPhone).length,percentage(complete,dayRoots.length)];
     })];
 
     const feeGroups=groupItems(roots,root=>Number(root.fee||0).toFixed(2));
@@ -2892,10 +2951,14 @@
     const methodologyRows=[['Indicador','Como é calculado','Finalidade'],
       ['Compras originais','Registros sem entrega anterior vinculada','Evita contar reagendamentos como nova venda'],
       ['Sucesso na primeira tentativa','Compras finalizadas na tentativa inicial ÷ compras originais','Medir entregas concluídas sem nova tentativa'],
-      ['Taxa de atraso','Registros atrasados ÷ registros com espera calculável','Identificar demora antes da saída'],
+      ['Saída fora do padrão','Compra até a saída acima do limite configurado (padrão: 120 min corridos)','Identificar demora antes da saída'],
+      ['Entrega fora do padrão','Compra até a finalização no cliente acima do limite configurado (padrão: 210 min corridos)','Controlar o prazo total até a casa do cliente'],
+      ['Taxa de saída fora do padrão','Saídas acima de 2h ÷ registros com compra e saída informadas','Comparar pontualidade da expedição'],
+      ['Taxa de entrega fora do padrão','Entregas acima de 3h30 ÷ registros com compra e finalização informadas','Comparar pontualidade da entrega final'],
       ['Taxa de problemas','Compras com devolução, reagendamento, cancelamento ou motivo ÷ compras originais','Acompanhar falhas operacionais'],
-      ['Espera média','Média entre hora da compra e saída, descontando o intervalo configurado','Medir agilidade da loja'],
+      ['Compra → saída média','Média em tempo corrido entre hora da compra e saída','Medir agilidade da loja'],
       ['Até cliente','Média entre saída e finalização no cliente','Medir deslocamento até a entrega'],
+      ['Compra → cliente média','Média em tempo corrido entre compra e finalização no cliente','Medir a experiência total do cliente'],
       ['Rota média','Média entre saída e retorno à loja','Medir duração completa das rotas'],
       ['Faturamento líquido','Taxas registradas menos reembolsos','Mostrar a receita efetiva das entregas'],
       ['Cliente recorrente','Mesmo telefone ou, sem telefone, mesmo nome em mais de uma compra','Identificar repetição de atendimento'],
@@ -2997,7 +3060,7 @@
     const completeIdentification=roots.filter(d=>d.coupon&&d.docNo&&d.cashierNo&&d.neighborhoodId&&d.purchaseTime).length;
     const statusRows=unique(deliveries.map(d=>d.status || 'Sem status')).sort().map(status=>{
       const rows=deliveries.filter(d=>(d.status || 'Sem status')===status);
-      return [status,rows.length,deliveries.length?rows.length/deliveries.length*100:0,revenueAttributedTo(rows),avg(rows.map(d=>deliveryCalc(d).wait)),avg(rows.map(d=>deliveryCalc(d).toClient)),avg(rows.map(d=>deliveryCalc(d).route)),rows.filter(d=>deliveryCalc(d).delayed).length];
+      return [status,rows.length,deliveries.length?rows.length/deliveries.length*100:0,revenueAttributedTo(rows),avg(rows.map(d=>deliveryCalc(d).wait)),avg(rows.map(d=>deliveryCalc(d).toClient)),avg(rows.map(d=>deliveryCalc(d).purchaseToClient)),avg(rows.map(d=>deliveryCalc(d).route)),rows.filter(d=>deliveryCalc(d).delayed).length,rows.filter(d=>deliveryCalc(d).completionDelayed).length];
     });
     const sheets={
       RESUMO_EXECUTIVO:[
@@ -3013,8 +3076,10 @@
         ['Programadas ou reagendadas em aberto',deliveries.filter(openScheduled).length],
         ['Devolvidas',deliveries.filter(d=>d.status==='Devolvida').length],
         ['Retiradas na loja',deliveries.filter(d=>d.status==='Retirada na loja').length],
-        ['Atrasadas',deliveries.filter(d=>deliveryCalc(d).delayed).length],
-        ['Taxa de atraso %',current.delayRate],
+        ['Saídas fora do padrão de 2h',current.delayed],
+        ['Taxa de saída fora do padrão %',current.delayRate],
+        ['Entregas fora do padrão de 3h30',current.completionDelayed],
+        ['Taxa de entrega fora do padrão %',current.completionDelayRate],
         ['Sucesso na primeira tentativa %',current.firstAttemptRate],
         ['Taxa de problemas %',current.problemRate],
         ['Clientes com nome informado',roots.filter(d=>d.customerName).length],
@@ -3031,8 +3096,9 @@
         ['Custos',totalCosts],
         ['Saldo operacional',fin.net-totalCosts],
         ['Custo por entrega finalizada',final.length?totalCosts/final.length:0],
-        ['Espera média em minutos',avg(deliveries.map(d=>deliveryCalc(d).wait))],
-        ['Tempo médio até cliente em minutos',avg(deliveries.map(d=>deliveryCalc(d).toClient))],
+        ['Compra até saída média em minutos',current.avgWait],
+        ['Loja até cliente média em minutos',avg(deliveries.map(d=>deliveryCalc(d).toClient))],
+        ['Compra até cliente média em minutos',current.avgPurchaseToClient],
         ['Rota média em minutos',avg(deliveries.map(d=>deliveryCalc(d).route))],
         ['KM total',km],
         ['KM médio por dia',unique(odometers.filter(o=>odometerCalc(o).complete).map(o=>o.date)).length?km/unique(odometers.filter(o=>odometerCalc(o).complete).map(o=>o.date)).length:0],
@@ -3047,10 +3113,10 @@
       DIAS_SEMANA:dayRows,
       HORARIOS_PICO:hourRows,
       TAXAS_PDV:feeRows,
-      STATUS:[['Status','Quantidade','Percentual dos registros','Faturamento atribuído','Espera média min','Até cliente média min','Rota média min','Atrasadas'],...statusRows],
+      STATUS:[['Status','Quantidade','Percentual dos registros','Faturamento atribuído','Compra → saída média min','Loja → cliente média min','Compra → cliente média min','Rota média min','Saída > 2h','Entrega > 3h30'],...statusRows],
       RANKING_OPERACIONAL:rankingRows,
       METODOLOGIA:methodologyRows,
-      ENTREGAS:[['ID','ID raiz','ID anterior','Tentativa','Data','Nº Compra','Nº do cupom','Nº DOC','Nº Caixa','Nome do cliente','Telefone','Bairro','Taxa registrada','Reembolso','Data reembolso','Receita líquida','Entregador','Veículo','Ciclo','Entrada','Saída','Finalização','Retorno Loja','Espera Min','Até Cliente Min','Rota Min','Atrasada','Status','Data Programada','Tipo Programação','Motivo padronizado','Motivo complementar','Próxima Ação','Observações','Criado em','Atualizado em'],...deliveries.map(d=>{const c=deliveryCalc(d);return[d.id,d.rootId||d.id,d.parentId||'',d.attemptNo||1,d.date,d.orderNo,d.coupon,d.docNo||'',d.cashierNo||'',d.customerName||'',d.customerPhone||'',neighborhood(d.neighborhoodId)?.name||'',rootDelivery(d)?.fee||d.fee,rootDelivery(d)?.refundAmount||0,rootDelivery(d)?.refundDate||'',netRevenueOfRoot(d),employee(d.driverId)?.name||'',vehicle(d.vehicleId)?.name||'',cycle(d.cycleId)?.code||'',d.purchaseTime,d.departureTime,d.finalizationTime,d.returnTime,c.wait,c.toClient,c.route,c.delayed?'SIM':'NÃO',d.status,d.scheduledDate,d.scheduleKind,reason(d.reasonId)?.name||'',d.reasonText||'',d.nextAction,d.notes,d.createdAt,d.updatedAt]})],
+      ENTREGAS:[['ID','ID raiz','ID anterior','Tentativa','Data','Nº Compra','Nº do cupom','Nº DOC','Nº Caixa','Nome do cliente','Telefone','Bairro','Taxa registrada','Reembolso','Data reembolso','Receita líquida','Entregador','Veículo','Ciclo','Entrada','Saída','Finalização','Retorno Loja','Compra → Saída Min','Loja → Cliente Min','Compra → Cliente Finalizada Min','Tempo Total/Transcorrido Agora Min','Saldo do Prazo 3h30 Min','Rota Min','Saída > 2h','Entrega > 3h30','Situação Atual do Prazo','Status','Data Programada','Tipo Programação','Motivo padronizado','Motivo complementar','Próxima Ação','Observações','Criado em','Atualizado em'],...deliveries.map(d=>{const c=deliveryCalc(d),p=completionProgress(d);return[d.id,d.rootId||d.id,d.parentId||'',d.attemptNo||1,d.date,d.orderNo,d.coupon,d.docNo||'',d.cashierNo||'',d.customerName||'',d.customerPhone||'',neighborhood(d.neighborhoodId)?.name||'',rootDelivery(d)?.fee||d.fee,rootDelivery(d)?.refundAmount||0,rootDelivery(d)?.refundDate||'',netRevenueOfRoot(d),employee(d.driverId)?.name||'',vehicle(d.vehicleId)?.name||'',cycle(d.cycleId)?.code||'',d.purchaseTime,d.departureTime,d.finalizationTime,d.returnTime,c.wait,c.toClient,c.purchaseToClient,p.elapsed,p.balance,c.route,c.delayed?'SIM':'NÃO',c.completionDelayed?'SIM':'NÃO',p.elapsed===null?'NÃO CALCULÁVEL':p.outside?'FORA DO PADRÃO':'DENTRO DO PADRÃO',d.status,d.scheduledDate,d.scheduleKind,reason(d.reasonId)?.name||'',d.reasonText||'',d.nextAction,d.notes,d.createdAt,d.updatedAt]})],
       CONTATOS_CLIENTES:[['Data','Nº Compra','Nº do cupom','Nº DOC','Nº Caixa','Nome do cliente','Telefone','Bairro','Status','Data Programada','Próxima Ação','Observações'],...roots.map(d=>[d.date,d.orderNo,d.coupon,d.docNo||'',d.cashierNo||'',d.customerName||'',d.customerPhone||'',neighborhood(d.neighborhoodId)?.name||'',d.status,d.scheduledDate,d.nextAction,d.notes])],
       CLIENTES:customerRows,
       CAIXAS_PDV:cashierRows,
@@ -3119,15 +3185,15 @@
     const html=`<!doctype html><html><head><meta charset="utf-8"><title>Relatório completo</title><style>@page{size:landscape;margin:10mm}body{font-family:Arial,sans-serif;color:#233743;padding:18px}h1{color:#173A5E;margin-bottom:4px}h2{color:#29495c;margin:24px 0 8px}p{margin-top:0}table{border-collapse:collapse;width:100%;margin-top:8px;page-break-inside:auto}tr{page-break-inside:avoid}th,td{border:1px solid #dfe7ec;padding:5px;font-size:9px;text-align:left;vertical-align:top}th{background:#eaf0f4}.cards{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}.c{border:1px solid #dfe7ec;border-radius:8px;padding:9px}.c small{color:#71808c}.c strong{display:block;font-size:16px;margin-top:3px}.muted{color:#71808c}@media print{button{display:none}}</style></head><body>
       <h1>Controle de Entregas • Relatório completo</h1><p>${dateBR(r.start)} a ${dateBR(r.end)} • ${esc(modeLabel())} • V${APP_VERSION}</p>
       <div class="cards">
-        <div class="c"><small>Compras</small><strong>${roots.length}</strong></div><div class="c"><small>Finalizadas</small><strong>${final.length}</strong></div><div class="c"><small>Em rota</small><strong>${deliveries.filter(d=>d.status==='Em rota').length}</strong></div><div class="c"><small>Programadas</small><strong>${deliveries.filter(openScheduled).length}</strong></div><div class="c"><small>Atrasadas</small><strong>${deliveries.filter(d=>deliveryCalc(d).delayed).length}</strong></div>
+        <div class="c"><small>Compras</small><strong>${roots.length}</strong></div><div class="c"><small>Finalizadas</small><strong>${final.length}</strong></div><div class="c"><small>Em rota</small><strong>${deliveries.filter(d=>d.status==='Em rota').length}</strong></div><div class="c"><small>Programadas</small><strong>${deliveries.filter(openScheduled).length}</strong></div><div class="c"><small>Saída &gt; 2h</small><strong>${current.delayed}</strong></div>
         <div class="c"><small>Faturamento bruto</small><strong>${money(fin.gross)}</strong></div><div class="c"><small>Reembolsos</small><strong>${money(fin.refundTotal)}</strong></div><div class="c"><small>Faturamento líquido</small><strong>${money(fin.net)}</strong></div><div class="c"><small>Custos</small><strong>${money(sum(costs.map(c=>c.value)))}</strong></div><div class="c"><small>KM total</small><strong>${number(totalKmFromOdometers(odometers),1)}</strong></div>
-        <div class="c"><small>Sucesso na 1ª tentativa</small><strong>${number(current.firstAttemptRate,1)}%</strong></div><div class="c"><small>Taxa de atraso</small><strong>${number(current.delayRate,1)}%</strong></div><div class="c"><small>Taxa de problemas</small><strong>${number(current.problemRate,1)}%</strong></div><div class="c"><small>Identificação completa</small><strong>${number(percentage(completeIdentification,roots.length),1)}%</strong></div><div class="c"><small>Clientes recorrentes</small><strong>${recurringCustomers}</strong></div>
+        <div class="c"><small>Sucesso na 1ª tentativa</small><strong>${number(current.firstAttemptRate,1)}%</strong></div><div class="c"><small>Entrega &gt; 3h30</small><strong>${current.completionDelayed}</strong></div><div class="c"><small>Fora do padrão 3h30</small><strong>${number(current.completionDelayRate,1)}%</strong></div><div class="c"><small>Taxa de problemas</small><strong>${number(current.problemRate,1)}%</strong></div><div class="c"><small>Identificação completa</small><strong>${number(percentage(completeIdentification,roots.length),1)}%</strong></div><div class="c"><small>Clientes recorrentes</small><strong>${recurringCustomers}</strong></div>
       </div>
-      <h2>Principais insights</h2><table><tr><th>Indicador</th><th>Resultado</th><th>Leitura operacional</th></tr><tr><td>Dia com mais compras</td><td>${esc(peakDay?.[0]||'Sem dados')}</td><td>${peakDay?`${peakDay[1]} compra(s) no período`:'Ainda não há base suficiente'}</td></tr><tr><td>Horário de pico</td><td>${esc(peakHour?.[0]||'Sem dados')}</td><td>${peakHour?`${peakHour[1]} compra(s) nessa faixa`:'Ainda não há base suficiente'}</td></tr><tr><td>Espera média</td><td>${number(current.avgWait,1)} min</td><td>Tempo entre a compra e a saída</td></tr><tr><td>Rota média</td><td>${number(current.avgRoute,1)} min</td><td>Tempo entre saída e retorno à loja</td></tr></table>
+      <h2>Principais insights</h2><table><tr><th>Indicador</th><th>Resultado</th><th>Leitura operacional</th></tr><tr><td>Dia com mais compras</td><td>${esc(peakDay?.[0]||'Sem dados')}</td><td>${peakDay?`${peakDay[1]} compra(s) no período`:'Ainda não há base suficiente'}</td></tr><tr><td>Horário de pico</td><td>${esc(peakHour?.[0]||'Sem dados')}</td><td>${peakHour?`${peakHour[1]} compra(s) nessa faixa`:'Ainda não há base suficiente'}</td></tr><tr><td>Compra → saída média</td><td>${number(current.avgWait,1)} min</td><td>Padrão: até ${state.settings.delayMinutes} minutos corridos</td></tr><tr><td>Compra → cliente média</td><td>${number(current.avgPurchaseToClient,1)} min</td><td>Padrão: até ${state.settings.completionLimitMinutes || 210} minutos corridos</td></tr><tr><td>Entregas fora do padrão</td><td>${current.completionDelayed}</td><td>${number(current.completionDelayRate,1)}% das entregas com horários calculáveis</td></tr><tr><td>Rota média</td><td>${number(current.avgRoute,1)} min</td><td>Tempo entre saída e retorno à loja</td></tr></table>
       <h2>Comparação com o período anterior</h2><table><thead><tr>${comparisonRows[0].map(value=>`<th>${esc(value)}</th>`).join('')}</tr></thead><tbody>${comparisonRows.slice(1).map(row=>`<tr><td>${esc(row[0])}</td><td>${typeof row[1]==='number'?number(row[1],1):esc(row[1])}</td><td>${typeof row[2]==='number'?number(row[2],1):esc(row[2])}</td><td>${typeof row[3]==='number'?number(row[3],1):esc(row[3])}</td><td>${typeof row[4]==='number'?`${number(row[4],1)}%`:esc(row[4])}</td></tr>`).join('')}</tbody></table>
       <h2>Ranking operacional</h2><table><thead><tr>${rankingRows[0].map(value=>`<th>${esc(value)}</th>`).join('')}</tr></thead><tbody>${rankingRows.slice(1,16).map(row=>`<tr>${row.map((value,index)=>`<td>${typeof value==='number'?number(value,index===11?1:0):esc(value)}</td>`).join('')}</tr>`).join('')}</tbody></table>
       <h2>Entregas e identificação das compras</h2>
-      <table><thead><tr><th>Data</th><th>Compra</th><th>Nº do cupom</th><th>DOC</th><th>Caixa</th><th>Cliente / telefone</th><th>Bairro</th><th>Status</th><th>Entregador / veículo</th><th>Entrada / saída / finalização / retorno</th><th>Taxa / reembolso</th><th>Programação / ocorrência</th></tr></thead><tbody>${deliveries.map(d=>`<tr><td>${dateBR(d.date)}</td><td>${esc(d.orderNo||'—')}</td><td>${esc(d.coupon||'—')}</td><td>${esc(d.docNo||'—')}</td><td>${esc(d.cashierNo||'—')}</td><td>${esc(d.customerName||'—')}<br><span class="muted">${esc(d.customerPhone||'—')}</span></td><td>${esc(neighborhood(d.neighborhoodId)?.name||'—')}</td><td>${esc(d.status||'—')}</td><td>${esc(employee(d.driverId)?.name||'—')}<br><span class="muted">${esc(vehicle(d.vehicleId)?.name||'—')}</span></td><td>${d.purchaseTime||'—'} / ${d.departureTime||'—'} / ${d.finalizationTime||'—'} / ${d.returnTime||'—'}</td><td>${money(rootDelivery(d)?.fee||d.fee)} / ${money(rootDelivery(d)?.refundAmount||0)}</td><td>${d.scheduledDate?`${dateBR(d.scheduledDate)} • ${esc(d.scheduleKind||'Programada')}`:'—'}<br><span class="muted">${esc(reason(d.reasonId)?.name||d.reasonText||d.nextAction||'')}</span></td></tr>`).join('')}</tbody></table>
+      <table><thead><tr><th>Data</th><th>Compra</th><th>Nº do cupom</th><th>DOC</th><th>Caixa</th><th>Cliente / telefone</th><th>Bairro</th><th>Status</th><th>Entregador / veículo</th><th>Entrada / saída / finalização / retorno</th><th>Tempos e padrão</th><th>Taxa / reembolso</th><th>Programação / ocorrência</th></tr></thead><tbody>${deliveries.map(d=>{const calc=deliveryCalc(d),progress=completionProgress(d);return `<tr><td>${dateBR(d.date)}</td><td>${esc(d.orderNo||'—')}</td><td>${esc(d.coupon||'—')}</td><td>${esc(d.docNo||'—')}</td><td>${esc(d.cashierNo||'—')}</td><td>${esc(d.customerName||'—')}<br><span class="muted">${esc(d.customerPhone||'—')}</span></td><td>${esc(neighborhood(d.neighborhoodId)?.name||'—')}</td><td>${esc(d.status||'—')}</td><td>${esc(employee(d.driverId)?.name||'—')}<br><span class="muted">${esc(vehicle(d.vehicleId)?.name||'—')}</span></td><td>${d.purchaseTime||'—'} / ${d.departureTime||'—'} / ${d.finalizationTime||'—'} / ${d.returnTime||'—'}</td><td>Compra → saída: ${fmtMinutes(calc.wait)} (${calc.wait===null?'não calculável':calc.delayed?'fora':'OK'})<br>Compra → cliente: ${fmtMinutes(calc.purchaseToClient)} (${calc.purchaseToClient===null?'não calculável':calc.completionDelayed?'fora':'OK'})<br>Prazo agora: ${progress.balance===null?'não calculável':progress.balance>=0?`${fmtMinutes(progress.balance)} restantes`:`${fmtMinutes(Math.abs(progress.balance))} acima`}</td><td>${money(rootDelivery(d)?.fee||d.fee)} / ${money(rootDelivery(d)?.refundAmount||0)}</td><td>${d.scheduledDate?`${dateBR(d.scheduledDate)} • ${esc(d.scheduleKind||'Programada')}`:'—'}<br><span class="muted">${esc(reason(d.reasonId)?.name||d.reasonText||d.nextAction||'')}</span></td></tr>`}).join('')}</tbody></table>
       <h2>Análise por bairro</h2><table><tr><th>Bairro</th><th>Entregas</th><th>Faturamento</th><th>Endereço errado</th><th>Agendadas</th><th>Reagendadas</th><th>Devoluções</th><th>Atrasadas</th><th>Taxa de problemas</th></tr>${nb.map(row=>`<tr><td>${esc(row.name)}</td><td>${row.deliveries}</td><td>${money(row.revenue)}</td><td>${row.wrongAddress}</td><td>${row.scheduled}</td><td>${row.rescheduled}</td><td>${row.devolutions}</td><td>${row.delayed}</td><td>${number(row.problemRate,1)}%</td></tr>`).join('')}</table>
       <h2>Qualidade dos dados</h2><table><thead><tr>${qualityRows[0].map(value=>`<th>${esc(value)}</th>`).join('')}</tr></thead><tbody>${qualityRows.slice(1).map(row=>`<tr>${row.map((value,index)=>`<td>${typeof value==='number'?number(value,index===4?1:0):esc(value)}</td>`).join('')}</tr>`).join('')}</tbody></table>
       <p class="muted" style="margin-top:16px">O arquivo Excel contém 27 abas com resumo diário, distribuição das taxas do PDV, metodologia dos indicadores, dados completos, comparação, horários, rankings, caixas, clientes, ocorrências, qualidade, inconsistências, previsão da agenda, custos, ciclos, KM, equipe, bairros, pendências, fechamentos e histórico.</p><script>window.onload=()=>window.print()<\/script></body></html>`;

@@ -1,2 +1,2 @@
-V14.3.7 — Compra Destacada no Histórico
-O número da compra tem o mesmo destaque do número do cupom no histórico; pesquisas completas e todos os registros existentes continuam preservados.
+V14.3.8 — Prazos da Entrega
+Calcula compra até saída e compra até finalização no cliente, mostra o prazo restante e identifica saídas acima de 2h e entregas acima de 3h30, preservando todos os registros existentes.
