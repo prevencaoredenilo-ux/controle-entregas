@@ -1,2 +1,2 @@
-V14.3.5 — Pesquisa Também por Nome do Cliente
-Pesquisa por nº do cupom, data, DOC, caixa ou nome do cliente; campos do cadastro com tamanho igual e nº do cupom obrigatório, preservando todos os registros existentes.
+V14.3.6 — Pesquisa pelo Número Automático da Entrega
+Pesquisa por nº da compra/entrega, cupom, data, DOC, caixa ou cliente; compra e cupom com o mesmo destaque, preservando todos os registros existentes.

@@ -7,7 +7,7 @@
   }
   'use strict';
 
-  const APP_VERSION = '14.3.5';
+  const APP_VERSION = '14.3.6';
   const DB_NAME = 'controle_entregas_nx';
   const DB_VERSION = 1;
   const STORE_NAME = 'app_state';
@@ -41,7 +41,7 @@
     odometer: ['Quilometragem da frota', 'KM inicial e final do dia por veículo, com médias por dia, semana, mês, entrega e ciclo.'],
     costs: ['Custos da frota', 'Combustível, manutenção e outros gastos registrados individualmente.'],
     neighborhoods: ['Análise por bairro', 'Entregas, faturamento, endereço errado, reagendamentos, devoluções e problemas por bairro.'],
-    trace: ['Pesquisar entregas', 'Localize por nº do cupom, data, DOC, caixa ou nome do cliente.'],
+    trace: ['Pesquisar entregas', 'Localize por nº da compra, cupom, data, DOC, caixa ou cliente.'],
     reports: ['Relatórios e Exportação', 'Baixe dados por dia, semana, mês, ano ou período personalizado.'],
     settings: ['Cadastros e Configurações', 'Adicione, edite, desative e reative veículos, bairros e colaboradores.'],
     trash: ['Lixeira', 'Restaure registros apagados por engano ou exclua definitivamente.']
@@ -288,7 +288,7 @@
 
   function initPWA() {
     if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-      navigator.serviceWorker.register('./sw.js?v=14.3.5').catch(console.warn);
+      navigator.serviceWorker.register('./sw.js?v=14.3.6').catch(console.warn);
     }
     window.addEventListener('beforeinstallprompt', (event) => {
       event.preventDefault();
@@ -1512,12 +1512,14 @@
   }
 
   function deliveryMatchesTraceFilters(delivery, filters = {}) {
+    const orderNo = normalizeTraceFilter(filters.orderNo);
     const coupon = normalizeTraceFilter(filters.coupon);
     const date = String(filters.date || '').trim();
     const docNo = normalizeTraceFilter(filters.docNo);
     const cashierNo = normalizeTraceFilter(filters.cashierNo);
     const customerName = normalizeTraceFilter(filters.customerName);
-    return (!coupon || normalizeTraceFilter(delivery.coupon) === coupon)
+    return (!orderNo || normalizeTraceFilter(delivery.orderNo) === orderNo)
+      && (!coupon || normalizeTraceFilter(delivery.coupon) === coupon)
       && (!date || delivery.date === date)
       && (!docNo || normalizeTraceFilter(delivery.docNo) === docNo)
       && (!cashierNo || normalizeTraceFilter(delivery.cashierNo) === cashierNo)
@@ -1527,6 +1529,7 @@
   function renderTrace() {
     $('#view').innerHTML = `<article class="card section-card">${sectionHeader('⌕','Pesquisar e rastrear entregas','Localize registros usando um ou mais filtros e abra a linha do tempo completa.')}
       <form id="traceSearchForm" class="trace-search-grid" role="search">
+        <label>Nº DA COMPRA/ENTREGA<input name="orderNo" inputmode="numeric" placeholder="Ex.: 5" /></label>
         <label>Nº DO CUPOM<input name="coupon" inputmode="numeric" placeholder="Ex.: 45879" /></label>
         <label>Data da compra<input name="date" type="date" /></label>
         <label>Nº DO DOC<input name="docNo" inputmode="numeric" placeholder="Ex.: 102548" /></label>
@@ -1534,7 +1537,7 @@
         <label>Nome do cliente<input name="customerName" autocomplete="name" placeholder="Ex.: Maria da Silva" /></label>
         <div class="trace-search-actions"><button class="btn primary" type="submit">Pesquisar</button><button class="btn secondary" type="button" id="clearTraceFilters">Limpar</button></div>
       </form>
-      <div id="traceResult">${emptyState('⌕','Informe pelo menos um filtro','Pesquise por número do cupom, data, DOC, caixa ou nome do cliente.')}</div>
+      <div id="traceResult">${emptyState('⌕','Informe pelo menos um filtro','Pesquise por número da compra, cupom, data, DOC, caixa ou cliente.')}</div>
     </article>`;
     $('#traceSearchForm').addEventListener('submit', event => {
       event.preventDefault();
@@ -1543,7 +1546,7 @@
     });
     $('#clearTraceFilters').addEventListener('click', () => {
       $('#traceSearchForm').reset();
-      $('#traceResult').innerHTML = emptyState('⌕','Informe pelo menos um filtro','Pesquise por número do cupom, data, DOC, caixa ou nome do cliente.');
+      $('#traceResult').innerHTML = emptyState('⌕','Informe pelo menos um filtro','Pesquise por número da compra, cupom, data, DOC, caixa ou cliente.');
     });
     $('#traceResult').addEventListener('click', event => {
       const button = event.target.closest('[data-trace-root]');
@@ -1553,17 +1556,18 @@
 
   function showTraceResults(filters = {}) {
     const box = $('#traceResult');
+    const orderNo = normalizeTraceFilter(filters.orderNo);
     const coupon = normalizeTraceFilter(filters.coupon);
     const date = String(filters.date || '').trim();
     const docNo = normalizeTraceFilter(filters.docNo);
     const cashierNo = normalizeTraceFilter(filters.cashierNo);
     const customerName = normalizeTraceFilter(filters.customerName);
-    if (!coupon && !date && !docNo && !cashierNo && !customerName) {
-      box.innerHTML = emptyState('⌕','Informe pelo menos um filtro','Pesquise por número do cupom, data, DOC, caixa ou nome do cliente.');
+    if (!orderNo && !coupon && !date && !docNo && !cashierNo && !customerName) {
+      box.innerHTML = emptyState('⌕','Informe pelo menos um filtro','Pesquise por número da compra, cupom, data, DOC, caixa ou cliente.');
       return;
     }
     const records = scoped(state.deliveries);
-    const matches = records.filter(delivery => deliveryMatchesTraceFilters(delivery, { coupon, date, docNo, cashierNo, customerName }));
+    const matches = records.filter(delivery => deliveryMatchesTraceFilters(delivery, { orderNo, coupon, date, docNo, cashierNo, customerName }));
     if (!matches.length) {
       box.innerHTML = emptyState('⌕','Nenhuma entrega encontrada','Confira os filtros informados e tente novamente.');
       return;
@@ -1579,8 +1583,8 @@
     }).filter(item => item.root).sort((a,b)=>`${b.root.date}${b.root.purchaseTime||''}`.localeCompare(`${a.root.date}${a.root.purchaseTime||''}`));
     box.innerHTML = `<div class="trace-results-head"><strong>${summaries.length} compras encontradas</strong><small>Selecione uma compra para abrir o histórico completo.</small></div><div class="trace-result-list">${summaries.map(item => `
       <article class="trace-result-row">
-        <div><small>COMPRA</small><strong>Nº ${esc(item.root.orderNo || '—')}</strong><span>${dateBR(item.root.date)} • ${item.root.purchaseTime || '—'}</span></div>
-        <div><small>Nº DO CUPOM</small><strong>${esc(item.root.coupon || '—')}</strong><span>DOC ${esc(item.root.docNo || '—')} • Caixa ${esc(item.root.cashierNo || '—')}</span></div>
+        <div class="trace-key-number"><small>COMPRA/ENTREGA</small><strong>Nº ${esc(item.root.orderNo || '—')}</strong><span>${dateBR(item.root.date)} • ${item.root.purchaseTime || '—'}</span></div>
+        <div class="trace-key-number"><small>Nº DO CUPOM</small><strong>${esc(item.root.coupon || '—')}</strong><span>DOC ${esc(item.root.docNo || '—')} • Caixa ${esc(item.root.cashierNo || '—')}</span></div>
         <div><small>CLIENTE / BAIRRO</small><strong>${esc(item.root.customerName || 'Não informado')}</strong><span>${esc(neighborhood(item.root.neighborhoodId)?.name || 'Sem bairro')}</span></div>
         <div><small>SITUAÇÃO</small><strong>${esc(item.current?.status || '—')}</strong><span>${item.records} registro(s)</span></div>
         <button class="btn primary small" type="button" data-trace-root="${attr(item.rootId)}">Ver histórico</button>
@@ -1953,7 +1957,7 @@
           <div class="quick-step-head"><span>1</span><div><strong>Identificação da compra</strong><small>O número da compra é o campo principal da sequência do dia.</small></div></div>
           <div class="quick-entry-grid identity-grid">
             <label class="purchase-number-input">Nº DA COMPRA <small>(automático)</small><input name="orderNo" value="${attr(last.suggested)}" inputmode="numeric" readonly aria-readonly="true" required /></label>
-            <label>Nº DO CUPOM <small>(obrigatório)</small><input name="coupon" inputmode="numeric" autofocus required placeholder="Ex.: 45879" /></label>
+            <label class="coupon-number-input">Nº DO CUPOM <small>(obrigatório)</small><input name="coupon" inputmode="numeric" autofocus required placeholder="Ex.: 45879" /></label>
             <label>Nº DO DOC <small>(obrigatório)</small><input name="docNo" inputmode="numeric" required placeholder="Ex.: 102548" /></label>
             <label>Nº DO CAIXA <small>(obrigatório)</small><input name="cashierNo" inputmode="numeric" required placeholder="Ex.: 3" /></label>
             <label>Data da compra <small>(obrigatório)</small><input name="date" type="date" value="${today}" required /></label>

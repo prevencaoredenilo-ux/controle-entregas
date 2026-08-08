@@ -1,9 +1,9 @@
-const CACHE_NAME = 'controle-entregas-v14-3-5-pesquisa-cliente';
+const CACHE_NAME = 'controle-entregas-v14-3-6-pesquisa-numero-compra';
 const APP_SHELL = [
   './',
   './index.html',
-  './styles.css?v=14.3.5',
-  './app.js?v=14.3.5',
+  './styles.css?v=14.3.6',
+  './app.js?v=14.3.6',
   './manifest.webmanifest',
   './icons/icon-192.png',
   './icons/icon-512.png'
