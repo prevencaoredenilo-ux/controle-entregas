@@ -189,12 +189,14 @@ td{padding:10px 11px;border-bottom:1px solid #EDF2F5;font-size:11px;vertical-ali
 .quick-entry-hero strong,.quick-entry-title strong{display:block;font-size:13px}
 .quick-entry-hero small,.quick-entry-title small{display:block;margin-top:2px;font-size:10px;opacity:.82;font-weight:500}
 .quick-entry-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:11px}
+.quick-entry-grid .span-2{grid-column:span 2}
 .quick-entry-block{padding:14px;border:1px solid var(--line);border-radius:14px;background:#FBFDFE;display:grid;gap:11px}
 .quick-entry-title>span{background:#E7F0F7;color:#173A5E}
 .choice-buttons{display:flex;gap:8px;flex-wrap:wrap}
 .choice-btn{border:1px solid #D8E3E9;background:#fff;color:#48606E;border-radius:11px;padding:11px 14px;font-size:11px;font-weight:850;transition:.16s}
 .choice-btn:hover{border-color:#7FA9C7;background:#F6FAFD}.choice-btn.selected{background:#173A5E;color:#fff;border-color:#173A5E;box-shadow:0 6px 18px rgba(23,58,94,.16)}
 .quick-schedule-date{max-width:260px}.finance-rule-note{padding:12px 13px;border:1px solid #CFE5D8;background:#F1FBF5;color:#2C6B47;border-radius:11px;font-size:10px;line-height:1.5}
+.trace-identification{margin-top:14px;line-height:1.7}
 .large-action{padding:11px 18px!important}
 .operation-card-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}
 .delivery-action-card{border:1px solid #DFE7EC;border-radius:14px;background:#fff;padding:14px;box-shadow:0 4px 14px rgba(37,65,82,.045)}
@@ -513,8 +515,8 @@ body{background:var(--v7-bg);color:var(--v7-ink)}
 .purchase-number-input input{font-size:24px!important;font-weight:900!important;color:var(--v7-blue)!important;background:var(--v7-blue-soft)!important;border:2px solid #C9D9F1!important}
 .choice-buttons.simple-choices .choice-btn{background:#fff;border:1px solid #DCE3EA;color:#425668;box-shadow:none}
 .choice-buttons.simple-choices .choice-btn.selected{background:var(--v7-blue-soft);border-color:#9FB9DE;color:var(--v7-blue)}
-.simplified-note{background:#F7F9FB!important;border-color:#E2E8EE!important;color:#536678!important}
-.sticky-actions{position:sticky;bottom:0;background:#fff;padding-top:10px;border-top:1px solid #E8EDF2;z-index:2}
+.simplified-note{background:#294554!important;border-color:#4F6B79!important;color:#E3F0F4!important;font-size:12px!important;line-height:1.55!important}
+.sticky-actions{position:sticky;bottom:0;background:var(--v12-surface)!important;padding:12px 0 2px;border-top:1px solid var(--v12-line)!important;box-shadow:0 -12px 18px rgba(34,53,64,.92);z-index:2}
 
 /* Menos cores nos botões gerais: azul para ação principal; cinza para apoio; verde/vermelho só para resultado. */
 .action-btn.primary,.action-btn.navy,.action-btn.warning,.action-btn.soft,.action-btn.ghost{background:#fff!important;color:#405367!important;border:1px solid #DCE3EA!important;box-shadow:none!important}
@@ -1249,8 +1251,8 @@ tbody tr:hover td{background:#385563!important;color:#FFFFFF!important}
 .modal{background:var(--v12-surface)!important;border-color:var(--v12-line)!important}
 .modal-head{background:var(--v12-surface)!important;border-color:var(--v12-line-soft)!important}
 .modal-head h2{color:#FFF9EA!important}
-.modal-head p{color:#C3D0D6!important}
-.modal-kicker{color:var(--v12-yellow-light)!important}
+.modal-head p{color:#C3D0D6!important;font-size:12px!important;line-height:1.45}
+.modal-kicker{color:var(--v12-yellow-light)!important;font-size:10px!important}
 .close-modal{background:#233943!important;border-color:#59727E!important;color:#FFFFFF!important}
 
 /* Listas, filtros e blocos menores */
@@ -1262,9 +1264,21 @@ tbody tr:hover td{background:#385563!important;color:#FFFFFF!important}
 .stat-row small{color:#C3D0D6!important}
 .stat-row .stat-number{color:#FFE08A!important}
 .form-note{background:#294554!important;border-color:#4F6B79!important;color:#D7E8EF!important}
-.finance-rule-note{color:#D4EBDD!important}
+.finance-rule-note{background:#294554!important;border-color:#4F6B79!important;color:#E3F0F4!important;font-size:12px!important}
 .empty-state{color:#C4D1D6!important}
 .empty-state strong{color:#FFFFFF!important}
+
+/* Restauração segura com comparação antes da substituição. */
+.restore-warning{padding:13px 14px;border:1px solid #8A6650;background:#493D35;border-radius:12px;margin-bottom:13px}
+.restore-warning strong{display:block;color:#FFE2A3!important;font-size:13px}
+.restore-warning p{margin:4px 0 0;color:#E4D2BD!important;font-size:11px;line-height:1.5}
+.restore-preview-grid{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-bottom:12px}
+.restore-preview-card{padding:13px;border:1px solid var(--v12-line);background:var(--v12-surface-2);border-radius:12px}
+.restore-preview-card>strong{display:block;color:#FFF4CC;font-size:12px;margin-bottom:9px}
+.restore-preview-card dl{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin:0}
+.restore-preview-card dl div{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 8px;border:1px solid var(--v12-line-soft);background:#2A414D;border-radius:8px}
+.restore-preview-card dt{color:var(--v12-muted);font-size:10px}
+.restore-preview-card dd{margin:0;color:#FFFFFF;font-size:12px;font-weight:850}
 
 /* Badges com texto nítido */
 .badge.green,.badge.ok{background:#315845!important;color:#C7F0D4!important}
@@ -1314,6 +1328,11 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   td{font-size:12px!important}
 }
 
+@media(max-width:560px){
+  .restore-preview-grid{grid-template-columns:1fr}
+  .restore-preview-card dl{grid-template-columns:1fr}
+}
+
 /* V13 — Ciclos automáticos: identificação visual de alto contraste */
 .auto-cycle-label{
   display:block;
@@ -1327,3 +1346,20 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .cycle-status-card .cycle-status-head small{
   opacity:1;
 }
+
+/* V14.3 — número da compra com contraste máximo e campos opcionais claros */
+.quick-entry-grid .purchase-number-input input{
+  background:#FFFFFF!important;
+  color:#102A3A!important;
+  border:3px solid #F2B523!important;
+  box-shadow:0 0 0 3px rgba(242,181,35,.14),0 7px 16px rgba(8,25,35,.22)!important;
+  font-size:28px!important;
+  font-weight:950!important;
+  letter-spacing:.02em!important;
+  text-shadow:none!important;
+}
+.quick-entry-grid .purchase-number-input input:focus{
+  border-color:#FFD15B!important;
+  box-shadow:0 0 0 4px rgba(255,209,91,.28),0 8px 20px rgba(8,25,35,.25)!important;
+}
+.quick-entry-grid label>small{color:#D6E3E8!important;font-size:10px!important;font-weight:700!important}

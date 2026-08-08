@@ -8,7 +8,7 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="icons/icon-192.png" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v=14.3.0" />
   <title>Controle de Entregas • Nilo Supermercado</title>
 </head>
 <body>
@@ -32,11 +32,11 @@
           </div>
         </div>
 
-        <div class="connection-card" id="connectionCard">
+        <div class="connection-card" id="connectionCard" aria-live="polite">
           <span class="connection-dot" id="connectionDot"></span>
           <div>
             <strong id="connectionTitle">Verificando conexão...</strong>
-            <small id="connectionSubtitle">Dados locais protegidos</small>
+            <small id="connectionSubtitle">Dados locais neste dispositivo • não sincronizados</small>
           </div>
         </div>
 
@@ -71,7 +71,7 @@
       <div class="sidebar-footer">
         <div>
           <span>Modo local + offline</span>
-          <small>Pronto para GitHub Pages • V13.0.0</small>
+          <small>Pronto para GitHub Pages • V14.3.0</small>
         </div>
         <button class="mini-icon-btn" id="installBtn" title="Instalar aplicativo" hidden>⇩</button>
       </div>
@@ -91,7 +91,7 @@
         <div class="topbar-actions">
           <span class="desktop-mode-chip" id="desktopModeChip">● Ambiente real</span>
           <button class="btn secondary desktop-only" id="backupBtn">↓ Backup</button>
-          <label class="btn secondary desktop-only file-btn">↑ Restaurar<input id="restoreInput" type="file" accept=".json" hidden /></label>
+          <label class="btn secondary desktop-only file-btn">↑ Restaurar backup<input id="restoreInput" type="file" accept=".json,application/json" hidden /></label>
           <button class="btn primary" id="quickNewDeliveryBtn">＋ Registrar compra</button>
         </div>
       </header>
@@ -127,7 +127,7 @@
     </main>
   </div>
 
-  <div class="modal-wrap hidden" id="modalWrap" role="dialog" aria-modal="true">
+  <div class="modal-wrap hidden" id="modalWrap" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="modalTitle" aria-describedby="modalSubtitle">
     <div class="modal" id="modal">
       <div class="modal-head">
         <div>
@@ -141,8 +141,8 @@
     </div>
   </div>
 
-  <div class="toast-stack" id="toastStack"></div>
+  <div class="toast-stack" id="toastStack" role="status" aria-live="polite" aria-atomic="true"></div>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=14.3.0"></script>
 </body>
 </html>

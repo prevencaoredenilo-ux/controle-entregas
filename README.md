@@ -1,8 +1,54 @@
-# Controle de Entregas • Nilo Supermercado — V13
+# Controle de Entregas • Nilo Supermercado — V14.3
 
-Versão focada em **ciclos automáticos por saída conjunta**, mantendo as melhorias anteriores de visibilidade, operação inteligente, modo treinamento, lixeira, KM diário, custos e relatórios.
+Versão focada em **segurança dos dados, confiabilidade dos indicadores e acessibilidade**, mantendo os ciclos automáticos e todas as melhorias operacionais da V13.
 
-## Regra principal da V13
+## Novidades da V14.3
+
+- Confirmação visual dos campos **Cupom PDV**, **Nº do DOC**, **Nº do caixa**, **nome do cliente** e **telefone** no lançamento rápido.
+- DOC e caixa são obrigatórios; nome e telefone continuam opcionais.
+- O número da compra agora usa fundo branco, texto azul-marinho escuro e borda amarela para máximo contraste.
+- Os seletores de ano oferecem 10 anos anteriores e 20 anos futuros, além de qualquer ano já existente nos dados.
+- O Excel passou para **27 abas**, incluindo resumo diário, distribuição das taxas do PDV e metodologia dos indicadores.
+- Arquivos JavaScript, CSS e service worker receberam identificação de versão para evitar que o navegador continue exibindo uma versão antiga após a publicação.
+- A atualização continua criando uma cópia local da versão anterior e preservando todos os registros.
+
+## Novidades da V14.2
+
+- O Excel passou de 14 para 24 abas formatadas na V14.2 e chegou a 27 abas na V14.3.
+- Comparação automática com o período imediatamente anterior.
+- Análises por dia da semana e faixa de horário para identificar picos.
+- Rankings de qualidade por bairro, entregador, veículo e caixa PDV.
+- Produtividade, sucesso, atrasos, problemas, tempos médios e faturamento por caixa, equipe, veículo e bairro.
+- Clientes recorrentes, frequência, bairros atendidos, problemas e faturamento por cliente.
+- Motivos de ocorrências, devoluções, reagendamentos e cancelamentos.
+- Qualidade dos dados e lista detalhada de campos ausentes, duplicidades, lacunas e horários inconsistentes.
+- Previsão das entregas programadas por data, situação, bairro, contato e próxima ação.
+- Impressão/PDF com insights, comparação, ranking e qualidade dos dados.
+- Todos os indicadores são calculados durante a geração do relatório e não modificam os registros armazenados.
+
+## Novidades da V14.1
+
+- O lançamento rápido possui campos separados para **Cupom PDV**, **Nº do DOC** e **Nº do caixa**.
+- **Nome do cliente** e **número de telefone** são opcionais.
+- Os novos dados aparecem na operação, edição, agenda, rastreamento e relatórios.
+- O Excel da V14.1 incluía 14 abas; a V14.2 ampliou essa estrutura para 24 abas analíticas.
+- A impressão/PDF também mostra a identificação completa das compras e os principais dados operacionais.
+- A migração mantém todas as entregas atuais; registros antigos apenas recebem os novos campos vazios.
+- Antes da primeira migração, uma cópia local da versão anterior fica disponível em **Cadastros > Dados > Backup antes da atualização**.
+
+## Principais melhorias da V14
+
+- A restauração valida o arquivo e mostra uma comparação antes de substituir os dados.
+- Um backup dos dados atuais é baixado automaticamente antes da restauração confirmada.
+- Arquivos incompatíveis, excessivamente grandes ou com estruturas inseguras são recusados.
+- Os indicadores de dias ativos e dias fechados agora mostram zero quando não há movimento.
+- Textos de pendências e concordância de singular/plural foram corrigidos.
+- O status de conexão deixa claro que os dados continuam locais e não sincronizados.
+- Modais fecham com `Esc`, mantêm o foco dentro da janela e devolvem o foco ao botão de origem.
+- Contraste e tamanho dos textos do cadastro rápido foram corrigidos.
+- O modo offline usa a rede quando disponível e o cache quando necessário, reduzindo o risco de uma versão antiga permanecer presa no aparelho.
+
+## Regra operacional mantida da V13
 
 **Todas as entregas que saem juntas recebem automaticamente o mesmo ciclo.**
 
