@@ -1,9 +1,9 @@
-const CACHE_NAME = 'controle-entregas-v14-3-3-numero-cupom';
+const CACHE_NAME = 'controle-entregas-v14-3-4-filtros-rastreamento';
 const APP_SHELL = [
   './',
   './index.html',
-  './styles.css?v=14.3.3',
-  './app.js?v=14.3.3',
+  './styles.css?v=14.3.4',
+  './app.js?v=14.3.4',
   './manifest.webmanifest',
   './icons/icon-192.png',
   './icons/icon-512.png'

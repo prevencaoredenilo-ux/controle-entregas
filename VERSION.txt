@@ -1,2 +1,2 @@
-V14.3.3 — Pesquisa Completa e Nº do Cupom
-Pesquisa por compra, nº do cupom, DOC, caixa e dia, número da compra automático em fundo escuro, calendário ampliado e Excel com 27 abas, preservando todos os registros existentes.
+V14.3.4 — Filtros no Rastreamento e Campos Padronizados
+Pesquisa por nº do cupom, data, DOC ou caixa na tela Pesquisar Entregas; campos do cadastro com tamanho igual e nº do cupom obrigatório, preservando todos os registros existentes.

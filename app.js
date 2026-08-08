@@ -7,7 +7,7 @@
   }
   'use strict';
 
-  const APP_VERSION = '14.3.3';
+  const APP_VERSION = '14.3.4';
   const DB_NAME = 'controle_entregas_nx';
   const DB_VERSION = 1;
   const STORE_NAME = 'app_state';
@@ -41,7 +41,7 @@
     odometer: ['Quilometragem da frota', 'KM inicial e final do dia por veículo, com médias por dia, semana, mês, entrega e ciclo.'],
     costs: ['Custos da frota', 'Combustível, manutenção e outros gastos registrados individualmente.'],
     neighborhoods: ['Análise por bairro', 'Entregas, faturamento, endereço errado, reagendamentos, devoluções e problemas por bairro.'],
-    trace: ['Rastrear nº do cupom', 'Histórico completo da compra até a conclusão, incluindo reagendamentos.'],
+    trace: ['Pesquisar entregas', 'Localize por nº do cupom, data, DOC ou caixa e abra o histórico completo.'],
     reports: ['Relatórios e Exportação', 'Baixe dados por dia, semana, mês, ano ou período personalizado.'],
     settings: ['Cadastros e Configurações', 'Adicione, edite, desative e reative veículos, bairros e colaboradores.'],
     trash: ['Lixeira', 'Restaure registros apagados por engano ou exclua definitivamente.']
@@ -288,7 +288,7 @@
 
   function initPWA() {
     if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-      navigator.serviceWorker.register('./sw.js?v=14.3.3').catch(console.warn);
+      navigator.serviceWorker.register('./sw.js?v=14.3.4').catch(console.warn);
     }
     window.addEventListener('beforeinstallprompt', (event) => {
       event.preventDefault();
@@ -1503,21 +1503,87 @@
     </tr>`).join('')}</tbody></table></div>`;
   }
 
-  function renderTrace() {
-    $('#view').innerHTML = `<article class="card section-card">${sectionHeader('⌕','Rastrear nº do cupom','Digite o número do cupom para visualizar a linha do tempo completa.')}
-      <div class="trace-search"><input id="traceInput" placeholder="Ex.: 45879" inputmode="numeric" /><button class="btn primary" id="traceButton">Pesquisar</button></div>
-      <div id="traceResult"></div>
-    </article>`;
-    $('#traceButton').addEventListener('click', () => showTrace($('#traceInput').value.trim()));
-    $('#traceInput').addEventListener('keydown', e => { if(e.key==='Enter') showTrace(e.target.value.trim()); });
+  function normalizeTraceFilter(value) {
+    return String(value ?? '').trim().toLocaleLowerCase('pt-BR');
   }
 
-  function showTrace(coupon) {
+  function deliveryMatchesTraceFilters(delivery, filters = {}) {
+    const coupon = normalizeTraceFilter(filters.coupon);
+    const date = String(filters.date || '').trim();
+    const docNo = normalizeTraceFilter(filters.docNo);
+    const cashierNo = normalizeTraceFilter(filters.cashierNo);
+    return (!coupon || normalizeTraceFilter(delivery.coupon) === coupon)
+      && (!date || delivery.date === date)
+      && (!docNo || normalizeTraceFilter(delivery.docNo) === docNo)
+      && (!cashierNo || normalizeTraceFilter(delivery.cashierNo) === cashierNo);
+  }
+
+  function renderTrace() {
+    $('#view').innerHTML = `<article class="card section-card">${sectionHeader('⌕','Pesquisar e rastrear entregas','Localize registros usando um ou mais filtros e abra a linha do tempo completa.')}
+      <form id="traceSearchForm" class="trace-search-grid" role="search">
+        <label>Nº DO CUPOM<input name="coupon" inputmode="numeric" placeholder="Ex.: 45879" /></label>
+        <label>Data da compra<input name="date" type="date" /></label>
+        <label>Nº DO DOC<input name="docNo" inputmode="numeric" placeholder="Ex.: 102548" /></label>
+        <label>Nº DO CAIXA<input name="cashierNo" inputmode="numeric" placeholder="Ex.: 3" /></label>
+        <div class="trace-search-actions"><button class="btn primary" type="submit">Pesquisar</button><button class="btn secondary" type="button" id="clearTraceFilters">Limpar</button></div>
+      </form>
+      <div id="traceResult">${emptyState('⌕','Informe pelo menos um filtro','Pesquise por número do cupom, data, DOC ou caixa.')}</div>
+    </article>`;
+    $('#traceSearchForm').addEventListener('submit', event => {
+      event.preventDefault();
+      const data = Object.fromEntries(new FormData(event.currentTarget).entries());
+      showTraceResults(data);
+    });
+    $('#clearTraceFilters').addEventListener('click', () => {
+      $('#traceSearchForm').reset();
+      $('#traceResult').innerHTML = emptyState('⌕','Informe pelo menos um filtro','Pesquise por número do cupom, data, DOC ou caixa.');
+    });
+    $('#traceResult').addEventListener('click', event => {
+      const button = event.target.closest('[data-trace-root]');
+      if (button) showTraceByRoot(button.dataset.traceRoot);
+    });
+  }
+
+  function showTraceResults(filters = {}) {
     const box = $('#traceResult');
-    const list = scoped(state.deliveries).filter(d => String(d.coupon || '').trim() === coupon).sort((a,b)=>`${a.date}${a.purchaseTime||''}`.localeCompare(`${b.date}${b.purchaseTime||''}`));
-    if (!coupon || !list.length) { box.innerHTML = emptyState('⌕','Nº do cupom não encontrado','Verifique o número informado e tente novamente.'); return; }
-    const rootIds = unique(list.map(d=>d.rootId || d.id));
-    const chain = scoped(state.deliveries).filter(d => rootIds.includes(d.rootId || d.id) || list.some(x=>x.id===d.id)).sort((a,b)=>`${a.date}${a.purchaseTime||''}`.localeCompare(`${b.date}${b.purchaseTime||''}`));
+    const coupon = normalizeTraceFilter(filters.coupon);
+    const date = String(filters.date || '').trim();
+    const docNo = normalizeTraceFilter(filters.docNo);
+    const cashierNo = normalizeTraceFilter(filters.cashierNo);
+    if (!coupon && !date && !docNo && !cashierNo) {
+      box.innerHTML = emptyState('⌕','Informe pelo menos um filtro','Pesquise por número do cupom, data, DOC ou caixa.');
+      return;
+    }
+    const records = scoped(state.deliveries);
+    const matches = records.filter(delivery => deliveryMatchesTraceFilters(delivery, { coupon, date, docNo, cashierNo }));
+    if (!matches.length) {
+      box.innerHTML = emptyState('⌕','Nenhuma entrega encontrada','Confira os filtros informados e tente novamente.');
+      return;
+    }
+    const rootIds = unique(matches.map(delivery => delivery.rootId || delivery.id));
+    if (rootIds.length === 1) {
+      showTraceByRoot(rootIds[0]);
+      return;
+    }
+    const summaries = rootIds.map(rootId => {
+      const chain = records.filter(delivery => (delivery.rootId || delivery.id) === rootId).sort((a,b)=>`${a.date}${a.purchaseTime||''}`.localeCompare(`${b.date}${b.purchaseTime||''}`));
+      return { rootId, root: chain.find(delivery => delivery.id === rootId) || chain[0], current: chain.at(-1), records: chain.length };
+    }).filter(item => item.root).sort((a,b)=>`${b.root.date}${b.root.purchaseTime||''}`.localeCompare(`${a.root.date}${a.root.purchaseTime||''}`));
+    box.innerHTML = `<div class="trace-results-head"><strong>${summaries.length} compras encontradas</strong><small>Selecione uma compra para abrir o histórico completo.</small></div><div class="trace-result-list">${summaries.map(item => `
+      <article class="trace-result-row">
+        <div><small>COMPRA</small><strong>Nº ${esc(item.root.orderNo || '—')}</strong><span>${dateBR(item.root.date)} • ${item.root.purchaseTime || '—'}</span></div>
+        <div><small>Nº DO CUPOM</small><strong>${esc(item.root.coupon || '—')}</strong><span>DOC ${esc(item.root.docNo || '—')} • Caixa ${esc(item.root.cashierNo || '—')}</span></div>
+        <div><small>CLIENTE / BAIRRO</small><strong>${esc(item.root.customerName || 'Não informado')}</strong><span>${esc(neighborhood(item.root.neighborhoodId)?.name || 'Sem bairro')}</span></div>
+        <div><small>SITUAÇÃO</small><strong>${esc(item.current?.status || '—')}</strong><span>${item.records} registro(s)</span></div>
+        <button class="btn primary small" type="button" data-trace-root="${attr(item.rootId)}">Ver histórico</button>
+      </article>`).join('')}</div>`;
+  }
+
+  function showTraceByRoot(rootId) {
+    const box = $('#traceResult');
+    const chain = scoped(state.deliveries).filter(delivery => (delivery.rootId || delivery.id) === rootId).sort((a,b)=>`${a.date}${a.purchaseTime||''}`.localeCompare(`${b.date}${b.purchaseTime||''}`));
+    if (!chain.length) { box.innerHTML = emptyState('⌕','Entrega não encontrada','Faça uma nova pesquisa.'); return; }
+    const root = chain.find(delivery => delivery.id === rootId) || chain[0];
     const final = chain.filter(d=>d.status==='Finalizada');
     const reSchedules = chain.filter(d=>d.scheduleKind==='Reagendada' && d.scheduledDate).length;
     box.innerHTML = `
@@ -1525,13 +1591,13 @@
         ${cardMetric('Registros',chain.length,'Histórico completo','▣','blue')}
         ${cardMetric('Reagendamentos',reSchedules,'Mudanças de data','↻','yellow')}
         ${cardMetric('Situação atual',chain.at(-1)?.status || '—','Último registro','•','purple')}
-        ${cardMetric('Faturamento líquido',money(netRevenueOfRoot(chain[0])),'Registrado na compra original','R$','green')}
-        ${cardMetric('Bairro',neighborhood(chain[0]?.neighborhoodId)?.name || '—','Origem','◎','blue')}
+        ${cardMetric('Faturamento líquido',money(netRevenueOfRoot(root)),'Registrado na compra original','R$','green')}
+        ${cardMetric('Bairro',neighborhood(root.neighborhoodId)?.name || '—','Origem','◎','blue')}
       </section>
       <div class="form-note trace-identification">
         <strong>Identificação da compra</strong><br>
-        Nº DO CUPOM: ${esc(chain[0]?.coupon || '—')} • Nº DOC: ${esc(chain[0]?.docNo || '—')} • Nº caixa: ${esc(chain[0]?.cashierNo || '—')}<br>
-        Cliente: ${esc(chain[0]?.customerName || 'Não informado')} • Telefone: ${esc(chain[0]?.customerPhone || 'Não informado')}
+        Nº DO CUPOM: ${esc(root.coupon || '—')} • Nº DOC: ${esc(root.docNo || '—')} • Nº caixa: ${esc(root.cashierNo || '—')}<br>
+        Cliente: ${esc(root.customerName || 'Não informado')} • Telefone: ${esc(root.customerPhone || 'Não informado')}
       </div>
       <div class="trace-timeline">${chain.map(d=>{const c=deliveryCalc(d); return `<div class="trace-event"><strong>${dateBR(d.date)} • ${esc(d.status)}</strong><p>Entrada ${d.purchaseTime||'—'} • Saída ${d.departureTime||'—'} • Finalização ${d.finalizationTime||'—'} • Retorno ${d.returnTime||'—'}<br>Espera ${fmtMinutes(c.wait)} • Até cliente ${fmtMinutes(c.toClient)} • Rota ${fmtMinutes(c.route)}${d.scheduledDate?`<br>${esc(d.scheduleKind||'Programada')} para ${dateBR(d.scheduledDate)} • ${esc(reason(d.reasonId)?.name || d.reasonText || '')}`:''}</p></div>`}).join('')}</div>`;
   }
@@ -1770,7 +1836,7 @@
     $$('[data-action="quick-reschedule"]').forEach(b=>b.addEventListener('click',()=>quickReschedule(b.dataset.id)));
     $$('[data-action="quick-pickup"]').forEach(b=>b.addEventListener('click',()=>quickPickup(b.dataset.id)));
     $$('[data-action="quick-devolution"]').forEach(b=>b.addEventListener('click',()=>quickDevolution(b.dataset.id)));
-    $$('[data-action="trace-delivery"]').forEach(b=>b.addEventListener('click',()=>{navigate('trace');setTimeout(()=>{$('#traceInput').value=b.dataset.coupon;showTrace(b.dataset.coupon);},0);}));
+    $$('[data-action="trace-delivery"]').forEach(b=>b.addEventListener('click',()=>{navigate('trace');setTimeout(()=>{const input=$('#traceSearchForm [name="coupon"]');if(input)input.value=b.dataset.coupon;showTraceResults({coupon:b.dataset.coupon});},0);}));
     $$('[data-action="start-scheduled"]').forEach(b=>b.addEventListener('click',()=>startScheduledDelivery(b.dataset.id)));
     $$('[data-action="start-cycle"]').forEach(b=>b.addEventListener('click',()=>openCycleDepartureModal()));
     $$('[data-action="auto-detect-cycles"]').forEach(b=>b.addEventListener('click',()=>runAutoCycleDetection()));
@@ -1879,14 +1945,14 @@
           <div class="quick-step-head"><span>1</span><div><strong>Identificação da compra</strong><small>O número da compra é o campo principal da sequência do dia.</small></div></div>
           <div class="quick-entry-grid identity-grid">
             <label class="purchase-number-input">Nº DA COMPRA <small>(automático)</small><input name="orderNo" value="${attr(last.suggested)}" inputmode="numeric" readonly aria-readonly="true" required /></label>
-            <label>Nº DO CUPOM<input name="coupon" inputmode="numeric" autofocus required placeholder="Ex.: 45879" /></label>
+            <label>Nº DO CUPOM <small>(obrigatório)</small><input name="coupon" inputmode="numeric" autofocus required placeholder="Ex.: 45879" /></label>
             <label>Nº DO DOC <small>(obrigatório)</small><input name="docNo" inputmode="numeric" required placeholder="Ex.: 102548" /></label>
             <label>Nº DO CAIXA <small>(obrigatório)</small><input name="cashierNo" inputmode="numeric" required placeholder="Ex.: 3" /></label>
-            <label>Data da compra<input name="date" type="date" value="${today}" required /></label>
-            <label>Hora da compra<input name="purchaseTime" type="time" value="${time}" required /></label>
-            <label class="span-2">Bairro<select name="neighborhoodId" required>${options(state.neighborhoods,'')}</select></label>
-            <label class="span-2">Nome do cliente <small>(opcional)</small><input name="customerName" autocomplete="name" placeholder="Ex.: Maria da Silva" /></label>
-            <label class="span-2">Número de telefone <small>(opcional)</small><input name="customerPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="Ex.: (66) 99999-9999" /></label>
+            <label>Data da compra <small>(obrigatório)</small><input name="date" type="date" value="${today}" required /></label>
+            <label>Hora da compra <small>(obrigatório)</small><input name="purchaseTime" type="time" value="${time}" required /></label>
+            <label>Bairro <small>(obrigatório)</small><select name="neighborhoodId" required>${options(state.neighborhoods,'')}</select></label>
+            <label>Nome do cliente <small>(opcional)</small><input name="customerName" autocomplete="name" placeholder="Ex.: Maria da Silva" /></label>
+            <label>Número de telefone <small>(opcional)</small><input name="customerPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="Ex.: (66) 99999-9999" /></label>
           </div>
         </section>
 
@@ -3209,6 +3275,6 @@
     const el=document.createElement('div');el.className=`toast ${type}`;el.textContent=message;$('#toastStack').appendChild(el);setTimeout(()=>el.remove(),3300);
   }
 
-  window.App = { navigate, openDeliveryModal, openCycleModal, openCostModal, showTrace };
+  window.App = { navigate, openDeliveryModal, openCycleModal, openCostModal, showTrace: coupon => showTraceResults({ coupon }) };
   initialize();
 })();
