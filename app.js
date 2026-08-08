@@ -7,7 +7,7 @@
   }
   'use strict';
 
-  const APP_VERSION = '14.3.0';
+  const APP_VERSION = '14.3.1';
   const DB_NAME = 'controle_entregas_nx';
   const DB_VERSION = 1;
   const STORE_NAME = 'app_state';
@@ -287,7 +287,7 @@
 
   function initPWA() {
     if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-      navigator.serviceWorker.register('./sw.js?v=14.3.0').catch(console.warn);
+      navigator.serviceWorker.register('./sw.js?v=14.3.1').catch(console.warn);
     }
     window.addEventListener('beforeinstallprompt', (event) => {
       event.preventDefault();
@@ -1826,13 +1826,13 @@
         <div class="previous-purchase-banner">
           <div class="previous-purchase-label"><span>ÚLTIMA COMPRA REGISTRADA HOJE</span><strong>${prev ? `Nº ${esc(prev.orderNo || '—')}` : 'Nenhuma ainda'}</strong></div>
           <div class="previous-purchase-detail"><small>${prev ? `Cupom ${esc(prev.coupon || '—')} • DOC ${esc(prev.docNo || '—')} • Caixa ${esc(prev.cashierNo || '—')} • ${prev.purchaseTime || '—'} • ${esc(neighborhood(prev.neighborhoodId)?.name || 'Sem bairro')}` : 'Esta será a primeira compra do dia.'}</small></div>
-          <div class="next-purchase-suggestion"><span>SUGESTÃO PARA A NOVA</span><strong>${last.suggested ? `Nº ${esc(last.suggested)}` : 'Informe manualmente'}</strong></div>
+          <div class="next-purchase-suggestion"><span>NÚMERO AUTOMÁTICO PARA A NOVA</span><strong id="nextPurchaseSuggestedNumber">Nº ${esc(last.suggested || '1')}</strong></div>
         </div>
 
         <section class="quick-step-card">
           <div class="quick-step-head"><span>1</span><div><strong>Identificação da compra</strong><small>O número da compra é o campo principal da sequência do dia.</small></div></div>
           <div class="quick-entry-grid identity-grid">
-            <label class="purchase-number-input">Nº DA COMPRA<input name="orderNo" value="${attr(last.suggested)}" inputmode="numeric" placeholder="Ex.: 15" required /></label>
+            <label class="purchase-number-input">Nº DA COMPRA <small>(automático)</small><input name="orderNo" value="${attr(last.suggested)}" inputmode="numeric" readonly aria-readonly="true" required /></label>
             <label>Cupom PDV<input name="coupon" inputmode="numeric" autofocus required placeholder="Ex.: 45879" /></label>
             <label>Nº DO DOC <small>(obrigatório)</small><input name="docNo" inputmode="numeric" required placeholder="Ex.: 102548" /></label>
             <label>Nº DO CAIXA <small>(obrigatório)</small><input name="cashierNo" inputmode="numeric" required placeholder="Ex.: 3" /></label>
@@ -1904,7 +1904,16 @@
     }));
     const orderInput = $('#quickDeliveryForm [name="orderNo"]');
     const submitBtn = $('#quickDeliveryForm button[type="submit"]');
-    orderInput?.addEventListener('input',()=>{ submitBtn.textContent = `Registrar compra Nº ${orderInput.value || ''}`; });
+    const syncAutomaticOrderNumber = () => {
+      if (!orderInput) return;
+      const selectedDate = $('#quickDeliveryForm [name="date"]')?.value || today;
+      orderInput.value = lastPurchaseSummary(selectedDate).suggested || '1';
+      if (submitBtn) submitBtn.textContent = `Registrar compra Nº ${orderInput.value}`;
+      const suggestion = $('#nextPurchaseSuggestedNumber');
+      if (suggestion) suggestion.textContent = `Nº ${orderInput.value}`;
+    };
+    $('#quickDeliveryForm [name="date"]')?.addEventListener('change',syncAutomaticOrderNumber);
+    syncAutomaticOrderNumber();
     $('#cancelQuickDeliveryBtn').addEventListener('click',closeModal);
     $('#quickDeliveryForm').addEventListener('submit',async e=>{
       e.preventDefault();

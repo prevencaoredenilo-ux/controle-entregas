@@ -1347,16 +1347,18 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   opacity:1;
 }
 
-/* V14.3 — número da compra com contraste máximo e campos opcionais claros */
+/* V14.3.1 — número automático com o mesmo fundo dos demais campos */
 .quick-entry-grid .purchase-number-input input{
-  background:#FFFFFF!important;
-  color:#102A3A!important;
+  background:#20333E!important;
+  color:#FFD15B!important;
+  -webkit-text-fill-color:#FFD15B!important;
   border:3px solid #F2B523!important;
   box-shadow:0 0 0 3px rgba(242,181,35,.14),0 7px 16px rgba(8,25,35,.22)!important;
   font-size:28px!important;
   font-weight:950!important;
   letter-spacing:.02em!important;
   text-shadow:none!important;
+  cursor:default!important;
 }
 .quick-entry-grid .purchase-number-input input:focus{
   border-color:#FFD15B!important;

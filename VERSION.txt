@@ -1,2 +1,2 @@
-V14.3.0 — Campos Visíveis, Calendário Ampliado e 27 Abas
-Identificação completa no lançamento rápido, número da compra com alto contraste, 10 anos anteriores e 20 futuros nos seletores, cache reforçado e Excel com 27 abas, preservando todos os registros existentes.
+V14.3.1 — Número Automático Visível, Campos Completos e 27 Abas
+Identificação completa no lançamento rápido, número da compra automático em fundo escuro, 10 anos anteriores e 20 futuros nos seletores, cache reforçado e Excel com 27 abas, preservando todos os registros existentes.

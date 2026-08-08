@@ -24,7 +24,7 @@ As pastas de versões antigas podem permanecer como histórico, mas não são ut
 
 1. Abra o sistema com internet.
 2. Recarregue a página uma vez para garantir a ativação do novo modo offline.
-3. Confira no rodapé se aparece **V14.3.0**.
+3. Confira no rodapé se aparece **V14.3.1**.
 4. Abra **Cadastros > Dados** e faça um novo backup.
 5. Se precisar conferir a cópia de segurança automática, use **Backup antes da atualização**.
 
@@ -45,4 +45,4 @@ Use o modo **Treino** para confirmar:
 
 ## Compatibilidade
 
-A V14.3 mantém os dados da V14.2, V14.1, V14, V13 e das versões anteriores reconhecidas pelo sistema. Os novos indicadores são calculados somente ao abrir ou baixar os relatórios e não alteram as entregas armazenadas. Na primeira abertura, nenhuma entrega, ciclo, custo, KM, configuração ou histórico é apagado. Backups de uma versão futura são bloqueados para evitar perda de informações.
+A V14.3.1 mantém os dados da V14.3, V14.2, V14.1, V14, V13 e das versões anteriores reconhecidas pelo sistema. Os novos indicadores são calculados somente ao abrir ou baixar os relatórios e não alteram as entregas armazenadas. Na primeira abertura, nenhuma entrega, ciclo, custo, KM, configuração ou histórico é apagado. Backups de uma versão futura são bloqueados para evitar perda de informações.
