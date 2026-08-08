@@ -7,7 +7,7 @@
   }
   'use strict';
 
-  const APP_VERSION = '14.3.6';
+  const APP_VERSION = '14.3.7';
   const DB_NAME = 'controle_entregas_nx';
   const DB_VERSION = 1;
   const STORE_NAME = 'app_state';
@@ -288,7 +288,7 @@
 
   function initPWA() {
     if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-      navigator.serviceWorker.register('./sw.js?v=14.3.6').catch(console.warn);
+      navigator.serviceWorker.register('./sw.js?v=14.3.7').catch(console.warn);
     }
     window.addEventListener('beforeinstallprompt', (event) => {
       event.preventDefault();
@@ -1225,7 +1225,7 @@
       const calc = deliveryCalc(d);
       return `<tr>
         <td><div class="cell-title mono">${dateBR(d.date)}</div><div class="cell-sub">Entrada ${d.purchaseTime || '—'}</div></td>
-        <td><div class="cell-title">${esc(d.coupon || '—')}</div><div class="cell-sub">Compra ${esc(d.orderNo || '—')} • DOC ${esc(d.docNo || '—')} • Caixa ${esc(d.cashierNo || '—')}</div></td>
+        <td><div class="history-identification-number">${esc(d.coupon || '—')}</div><div class="history-identification-number">Compra ${esc(d.orderNo || '—')}</div><div class="cell-sub">DOC ${esc(d.docNo || '—')} • Caixa ${esc(d.cashierNo || '—')}</div></td>
         <td><div class="cell-title">${esc(d.customerName || '—')}</div><div class="cell-sub">${esc(d.customerPhone || 'Telefone não informado')}</div></td>
         <td>${esc(neighborhood(d.neighborhoodId)?.name || '—')}</td>
         <td>${statusBadge(d.status)}</td>

@@ -1463,3 +1463,14 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   .trace-search-actions{display:grid;grid-template-columns:1fr 1fr}
   .quick-entry-grid.identity-grid{grid-template-columns:1fr!important}
 }
+
+/* V14.3.7 — compra e cupom com o mesmo destaque no histórico */
+.history-identification-number{
+  display:block;
+  color:#FFFFFF!important;
+  font-size:13px!important;
+  font-weight:900!important;
+  line-height:1.25!important;
+}
+.history-identification-number+.history-identification-number{margin-top:5px}
+.history-identification-number+.cell-sub{margin-top:5px}

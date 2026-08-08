@@ -1,2 +1,2 @@
-V14.3.6 — Pesquisa pelo Número Automático da Entrega
-Pesquisa por nº da compra/entrega, cupom, data, DOC, caixa ou cliente; compra e cupom com o mesmo destaque, preservando todos os registros existentes.
+V14.3.7 — Compra Destacada no Histórico
+O número da compra tem o mesmo destaque do número do cupom no histórico; pesquisas completas e todos os registros existentes continuam preservados.

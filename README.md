@@ -1,9 +1,10 @@
-# Controle de Entregas • Nilo Supermercado — V14.3.6
+# Controle de Entregas • Nilo Supermercado — V14.3.7
 
 Versão focada em **segurança dos dados, confiabilidade dos indicadores e acessibilidade**, mantendo os ciclos automáticos e todas as melhorias operacionais da V13.
 
 ## Novidades da V14.3
 
+- Na V14.3.7, o número da compra aparece no Histórico de entregas com o mesmo tamanho, peso e cor do número do cupom; DOC e caixa continuam em texto secundário.
 - Na V14.3.6, a tela **Pesquisar Entregas** ganhou um filtro separado para o número automático da compra/entrega gerado pelo próprio sistema.
 - O nº da compra/entrega e o nº do cupom usam o mesmo destaque amarelo no cadastro e nos resultados da pesquisa.
 - Na V14.3.5, as duas pesquisas também localizam pelo nome completo ou por parte do nome do cliente, ignorando diferenças de maiúsculas e acentos.
