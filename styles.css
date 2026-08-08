@@ -1369,7 +1369,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 /* V14.3.2 — pesquisa do histórico por identificação, caixa e dia */
 .delivery-search-panel{
   display:grid;
-  grid-template-columns:minmax(150px,.85fr) minmax(190px,1.35fr) minmax(120px,.75fr) minmax(150px,.9fr) auto auto;
+  grid-template-columns:minmax(150px,.8fr) minmax(190px,1.2fr) minmax(120px,.7fr) minmax(150px,.85fr) minmax(160px,1fr) auto auto;
   gap:10px;
   align-items:end;
   margin-bottom:14px;
@@ -1395,7 +1395,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 /* V14.3.4 — filtros completos no rastreamento */
 .trace-search-grid{
   display:grid;
-  grid-template-columns:repeat(4,minmax(0,1fr));
+  grid-template-columns:repeat(5,minmax(0,1fr));
   gap:11px;
   align-items:end;
   padding:14px;

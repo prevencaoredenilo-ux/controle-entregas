@@ -1,2 +1,2 @@
-V14.3.4 — Filtros no Rastreamento e Campos Padronizados
-Pesquisa por nº do cupom, data, DOC ou caixa na tela Pesquisar Entregas; campos do cadastro com tamanho igual e nº do cupom obrigatório, preservando todos os registros existentes.
+V14.3.5 — Pesquisa Também por Nome do Cliente
+Pesquisa por nº do cupom, data, DOC, caixa ou nome do cliente; campos do cadastro com tamanho igual e nº do cupom obrigatório, preservando todos os registros existentes.

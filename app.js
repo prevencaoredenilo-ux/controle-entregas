@@ -7,7 +7,7 @@
   }
   'use strict';
 
-  const APP_VERSION = '14.3.4';
+  const APP_VERSION = '14.3.5';
   const DB_NAME = 'controle_entregas_nx';
   const DB_VERSION = 1;
   const STORE_NAME = 'app_state';
@@ -29,7 +29,7 @@
   let deferredInstallPrompt = null;
   let lastFocusedElement = null;
   let preUpdateBackup = null;
-  let deliverySearch = { identifier: '', cashier: '', date: '' };
+  let deliverySearch = { identifier: '', cashier: '', date: '', customerName: '' };
 
   const pageMeta = {
     dashboard: ['Dashboard', 'Visão geral da operação, custos, faturamento e produtividade.'],
@@ -41,7 +41,7 @@
     odometer: ['Quilometragem da frota', 'KM inicial e final do dia por veículo, com médias por dia, semana, mês, entrega e ciclo.'],
     costs: ['Custos da frota', 'Combustível, manutenção e outros gastos registrados individualmente.'],
     neighborhoods: ['Análise por bairro', 'Entregas, faturamento, endereço errado, reagendamentos, devoluções e problemas por bairro.'],
-    trace: ['Pesquisar entregas', 'Localize por nº do cupom, data, DOC ou caixa e abra o histórico completo.'],
+    trace: ['Pesquisar entregas', 'Localize por nº do cupom, data, DOC, caixa ou nome do cliente.'],
     reports: ['Relatórios e Exportação', 'Baixe dados por dia, semana, mês, ano ou período personalizado.'],
     settings: ['Cadastros e Configurações', 'Adicione, edite, desative e reative veículos, bairros e colaboradores.'],
     trash: ['Lixeira', 'Restaure registros apagados por engano ou exclua definitivamente.']
@@ -288,7 +288,7 @@
 
   function initPWA() {
     if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-      navigator.serviceWorker.register('./sw.js?v=14.3.4').catch(console.warn);
+      navigator.serviceWorker.register('./sw.js?v=14.3.5').catch(console.warn);
     }
     window.addEventListener('beforeinstallprompt', (event) => {
       event.preventDefault();
@@ -358,7 +358,7 @@
       $('#filterWeek').value = '';
       $('#filterStart').value = '';
       $('#filterEnd').value = '';
-      deliverySearch = { identifier: '', cashier: '', date: '' };
+      deliverySearch = { identifier: '', cashier: '', date: '', customerName: '' };
       render();
     });
     $('#filterYear').addEventListener('change', refreshWeekOptions);
@@ -439,17 +439,19 @@
   function filteredCosts() { const r = selectedRange(); return scoped(state.costs).filter(d => inRange(d.date, r)); }
 
   function normalizeDeliverySearch(value) {
-    return String(value ?? '').trim().toLocaleLowerCase('pt-BR');
+    return String(value ?? '').trim().toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\u0300-\u036f]/g,'');
   }
 
   function deliveryMatchesSearch(delivery, search = deliverySearch) {
     const identifier = normalizeDeliverySearch(search.identifier);
     const cashier = normalizeDeliverySearch(search.cashier);
     const date = String(search.date || '').trim();
+    const customerName = normalizeDeliverySearch(search.customerName);
     const identifiers = [delivery.orderNo, delivery.coupon, delivery.docNo].map(normalizeDeliverySearch);
     return (!identifier || identifiers.includes(identifier))
       && (!cashier || normalizeDeliverySearch(delivery.cashierNo) === cashier)
-      && (!date || delivery.date === date);
+      && (!date || delivery.date === date)
+      && (!customerName || normalizeDeliverySearch(delivery.customerName).includes(customerName));
   }
 
   function searchedDeliveries() {
@@ -1195,6 +1197,7 @@
         <label>Nº da compra, Nº do cupom ou DOC<input id="deliverySearchIdentifier" inputmode="numeric" value="${attr(deliverySearch.identifier)}" placeholder="Ex.: 17, 45879 ou 102548" /></label>
         <label>Nº do caixa<input id="deliverySearchCashier" inputmode="numeric" value="${attr(deliverySearch.cashier)}" placeholder="Ex.: 3" /></label>
         <label>Dia da compra<input id="deliverySearchDate" type="date" value="${attr(deliverySearch.date)}" /></label>
+        <label>Nome do cliente<input id="deliverySearchCustomer" value="${attr(deliverySearch.customerName)}" autocomplete="name" placeholder="Ex.: Maria" /></label>
         <button class="btn primary compact" type="submit">Pesquisar</button>
         <button class="btn secondary compact" type="button" id="clearDeliverySearchBtn">Limpar</button>
       </form>
@@ -1204,12 +1207,13 @@
       deliverySearch = {
         identifier: $('#deliverySearchIdentifier')?.value.trim() || '',
         cashier: $('#deliverySearchCashier')?.value.trim() || '',
-        date: $('#deliverySearchDate')?.value || ''
+        date: $('#deliverySearchDate')?.value || '',
+        customerName: $('#deliverySearchCustomer')?.value.trim() || ''
       };
       render();
     });
     $('#clearDeliverySearchBtn')?.addEventListener('click', () => {
-      deliverySearch = { identifier: '', cashier: '', date: '' };
+      deliverySearch = { identifier: '', cashier: '', date: '', customerName: '' };
       render();
     });
     bindViewActions();
@@ -1504,7 +1508,7 @@
   }
 
   function normalizeTraceFilter(value) {
-    return String(value ?? '').trim().toLocaleLowerCase('pt-BR');
+    return String(value ?? '').trim().toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\u0300-\u036f]/g,'');
   }
 
   function deliveryMatchesTraceFilters(delivery, filters = {}) {
@@ -1512,10 +1516,12 @@
     const date = String(filters.date || '').trim();
     const docNo = normalizeTraceFilter(filters.docNo);
     const cashierNo = normalizeTraceFilter(filters.cashierNo);
+    const customerName = normalizeTraceFilter(filters.customerName);
     return (!coupon || normalizeTraceFilter(delivery.coupon) === coupon)
       && (!date || delivery.date === date)
       && (!docNo || normalizeTraceFilter(delivery.docNo) === docNo)
-      && (!cashierNo || normalizeTraceFilter(delivery.cashierNo) === cashierNo);
+      && (!cashierNo || normalizeTraceFilter(delivery.cashierNo) === cashierNo)
+      && (!customerName || normalizeTraceFilter(delivery.customerName).includes(customerName));
   }
 
   function renderTrace() {
@@ -1525,9 +1531,10 @@
         <label>Data da compra<input name="date" type="date" /></label>
         <label>Nº DO DOC<input name="docNo" inputmode="numeric" placeholder="Ex.: 102548" /></label>
         <label>Nº DO CAIXA<input name="cashierNo" inputmode="numeric" placeholder="Ex.: 3" /></label>
+        <label>Nome do cliente<input name="customerName" autocomplete="name" placeholder="Ex.: Maria da Silva" /></label>
         <div class="trace-search-actions"><button class="btn primary" type="submit">Pesquisar</button><button class="btn secondary" type="button" id="clearTraceFilters">Limpar</button></div>
       </form>
-      <div id="traceResult">${emptyState('⌕','Informe pelo menos um filtro','Pesquise por número do cupom, data, DOC ou caixa.')}</div>
+      <div id="traceResult">${emptyState('⌕','Informe pelo menos um filtro','Pesquise por número do cupom, data, DOC, caixa ou nome do cliente.')}</div>
     </article>`;
     $('#traceSearchForm').addEventListener('submit', event => {
       event.preventDefault();
@@ -1536,7 +1543,7 @@
     });
     $('#clearTraceFilters').addEventListener('click', () => {
       $('#traceSearchForm').reset();
-      $('#traceResult').innerHTML = emptyState('⌕','Informe pelo menos um filtro','Pesquise por número do cupom, data, DOC ou caixa.');
+      $('#traceResult').innerHTML = emptyState('⌕','Informe pelo menos um filtro','Pesquise por número do cupom, data, DOC, caixa ou nome do cliente.');
     });
     $('#traceResult').addEventListener('click', event => {
       const button = event.target.closest('[data-trace-root]');
@@ -1550,12 +1557,13 @@
     const date = String(filters.date || '').trim();
     const docNo = normalizeTraceFilter(filters.docNo);
     const cashierNo = normalizeTraceFilter(filters.cashierNo);
-    if (!coupon && !date && !docNo && !cashierNo) {
-      box.innerHTML = emptyState('⌕','Informe pelo menos um filtro','Pesquise por número do cupom, data, DOC ou caixa.');
+    const customerName = normalizeTraceFilter(filters.customerName);
+    if (!coupon && !date && !docNo && !cashierNo && !customerName) {
+      box.innerHTML = emptyState('⌕','Informe pelo menos um filtro','Pesquise por número do cupom, data, DOC, caixa ou nome do cliente.');
       return;
     }
     const records = scoped(state.deliveries);
-    const matches = records.filter(delivery => deliveryMatchesTraceFilters(delivery, { coupon, date, docNo, cashierNo }));
+    const matches = records.filter(delivery => deliveryMatchesTraceFilters(delivery, { coupon, date, docNo, cashierNo, customerName }));
     if (!matches.length) {
       box.innerHTML = emptyState('⌕','Nenhuma entrega encontrada','Confira os filtros informados e tente novamente.');
       return;

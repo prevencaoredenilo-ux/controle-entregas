@@ -1,9 +1,10 @@
-# Controle de Entregas • Nilo Supermercado — V14.3.4
+# Controle de Entregas • Nilo Supermercado — V14.3.5
 
 Versão focada em **segurança dos dados, confiabilidade dos indicadores e acessibilidade**, mantendo os ciclos automáticos e todas as melhorias operacionais da V13.
 
 ## Novidades da V14.3
 
+- Na V14.3.5, as duas pesquisas também localizam pelo nome completo ou por parte do nome do cliente, ignorando diferenças de maiúsculas e acentos.
 - Na V14.3.4, a antiga tela de rastreamento virou **Pesquisar Entregas**, com filtros separados por nº do cupom, data, DOC e caixa e uma lista para selecionar o histórico desejado.
 - Todos os campos do lançamento rápido passaram a ter a mesma largura e altura; o **Nº DO CUPOM** aparece claramente como obrigatório.
 - Na V14.3.3, o nome **Cupom PDV** foi substituído por **Nº DO CUPOM** na interface, no Excel e na impressão/PDF, sem alterar os cupons já cadastrados.

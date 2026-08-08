@@ -1,9 +1,9 @@
-const CACHE_NAME = 'controle-entregas-v14-3-4-filtros-rastreamento';
+const CACHE_NAME = 'controle-entregas-v14-3-5-pesquisa-cliente';
 const APP_SHELL = [
   './',
   './index.html',
-  './styles.css?v=14.3.4',
-  './app.js?v=14.3.4',
+  './styles.css?v=14.3.5',
+  './app.js?v=14.3.5',
   './manifest.webmanifest',
   './icons/icon-192.png',
   './icons/icon-512.png'
