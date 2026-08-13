@@ -1,6 +1,15 @@
-# Controle de Entregas • Nilo Supermercado — V14.4.0
+# Controle de Entregas • Nilo Supermercado — V14.4.1
 
 Versão focada em **segurança dos dados, confiabilidade dos indicadores e acessibilidade**, mantendo os ciclos automáticos e todas as melhorias operacionais da V13.
+
+## Correção da V14.4.1
+
+- Programações e reagendamentos agora são conferidos pela cadeia completa da compra antes de qualquer contagem.
+- Se uma tentativa posterior possui finalização no cliente, a compra é contabilizada como **Entregue**, mesmo que um registro anterior permaneça como `Programada` ou `Reagendada` no histórico.
+- A agenda separa compras **abertas**, **em atendimento** e **já entregues após programação**, sem excluir ou reescrever registros antigos.
+- Dashboard, análises por bairro, Excel e impressão/PDF usam a situação consolidada da compra nos totais atuais.
+- O Excel preserva o status de cada registro e acrescenta a situação consolidada; a aba `PROGRAMADAS` passa a mostrar também o resultado final, a data/hora da entrega e a tentativa concluída.
+- Nenhum dado operacional é removido: programação, reagendamento, tentativas e ocorrências continuam disponíveis para auditoria.
 
 ## Novidades da V14.4
 

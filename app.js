@@ -7,7 +7,7 @@
   }
   'use strict';
 
-  const APP_VERSION = '14.4.0';
+  const APP_VERSION = '14.4.1';
   const DB_NAME = 'controle_entregas_nx';
   const DB_VERSION = 1;
   const STORE_NAME = 'app_state';
@@ -291,7 +291,7 @@
 
   function initPWA() {
     if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-      navigator.serviceWorker.register('./sw.js?v=14.4.0').catch(console.warn);
+      navigator.serviceWorker.register('./sw.js?v=14.4.1').catch(console.warn);
     }
     window.addEventListener('beforeinstallprompt', (event) => {
       event.preventDefault();
@@ -621,7 +621,7 @@
     // CICLO = uma saída da loja até o retorno ao mercado.
     // Todas as entregas levadas naquela mesma saída compartilham o mesmo cycleId.
     const carriedDeliveries = scoped(state.deliveries).filter(d => d.cycleId === c.id);
-    const delivered = carriedDeliveries.filter(d => d.status === 'Finalizada');
+    const delivered = carriedDeliveries.filter(deliveredToCustomer);
     const minutes = c.departureTime && c.returnTime ? durationMinutes(c.date,c.departureTime,c.date,c.returnTime) : null;
     const revenue = revenueAttributedTo(carriedDeliveries);
     const sameDayVehicleCycles = scoped(state.cycles).filter(x => x.date === c.date && x.vehicleId === c.vehicleId);
@@ -651,7 +651,7 @@
     const km = odometerCalc(log).km;
     const cycles = scoped(state.cycles).filter(x => x.date === date && x.vehicleId === vehicleId);
     const carried = scoped(state.deliveries).filter(x => x.date === date && x.vehicleId === vehicleId && x.cycleId);
-    const completed = carried.filter(x => x.status === 'Finalizada');
+    const completed = carried.filter(deliveredToCustomer);
     return {
       log, km, cycles: cycles.length, deliveries: carried.length, completed: completed.length,
       deliveriesPerCycle: cycles.length ? carried.length / cycles.length : 0,
@@ -660,11 +660,56 @@
     };
   }
   function isFinal(d) { return d.status === 'Finalizada' || d.status === 'Retirada na loja' || d.status === 'Cancelada'; }
+  function deliveredToCustomer(d) { return Boolean(d?.finalizationTime) || d?.status === 'Finalizada'; }
   function childDeliveries(id) { return scoped(state.deliveries).filter(d => d.parentId === id); }
-  function openScheduled(d) {
+  function sortedDeliveryChain(d, records = scoped(state.deliveries)) {
+    return chainForRoot(d,records).slice().sort((a,b)=>Number(a.attemptNo||1)-Number(b.attemptNo||1) || `${a.date||''}${a.purchaseTime||''}${a.createdAt||''}`.localeCompare(`${b.date||''}${b.purchaseTime||''}${b.createdAt||''}`));
+  }
+  function openScheduled(d, records = scoped(state.deliveries)) {
     if (!d.scheduledDate || isFinal(d)) return false;
-    const children = childDeliveries(d.id);
-    return children.length === 0;
+    const chain = chainForRoot(d,records);
+    if (chain.some(deliveredToCustomer)) return false;
+    return !records.some(record=>record.parentId===d.id);
+  }
+  function purchaseOutcome(root, records = scoped(state.deliveries)) {
+    const chain = sortedDeliveryChain(root,records);
+    const delivered = chain.filter(deliveredToCustomer).at(-1);
+    if (delivered) return {key:'Entregue',label:'Entregue',tone:'green',record:delivered,delivered:true,open:false};
+    const pickup = chain.filter(d=>d.status==='Retirada na loja').at(-1);
+    if (pickup) return {key:'Retirada na loja',label:'Retirada na loja',tone:'blue',record:pickup,delivered:false,open:false};
+    const cancelled = chain.filter(d=>d.status==='Cancelada').at(-1);
+    if (cancelled) return {key:'Cancelada',label:'Cancelada',tone:'gray',record:cancelled,delivered:false,open:false};
+    const openSchedule = chain.filter(d=>openScheduled(d,records)).at(-1);
+    if (openSchedule) {
+      const kind = openSchedule.scheduleKind === 'Reagendada' ? 'Reagendada' : 'Programada';
+      return {key:`${kind} aberta`,label:`${kind} aberta`,tone:'purple',record:openSchedule,delivered:false,open:true};
+    }
+    const inRoute = chain.filter(d=>d.status==='Em rota' || (d.departureTime&&!d.finalizationTime)).at(-1);
+    if (inRoute) return {key:'Em rota',label:'Em rota',tone:'yellow',record:inRoute,delivered:false,open:true};
+    const active = chain.filter(d=>!isFinal(d) && !['Devolvida','Programada','Reagendada'].includes(d.status)).at(-1);
+    if (active) return {key:'Na loja',label:'Na loja',tone:'blue',record:active,delivered:false,open:true};
+    const devolved = chain.filter(d=>d.status==='Devolvida').at(-1);
+    if (devolved) return {key:'Devolvida',label:'Devolvida',tone:'red',record:devolved,delivered:false,open:false};
+    const latest = chain.at(-1) || root;
+    return {key:latest?.status || 'Sem situação',label:latest?.status || 'Sem situação',tone:'gray',record:latest,delivered:false,open:false};
+  }
+  function scheduleSummary(root, records = scoped(state.deliveries)) {
+    const chain = sortedDeliveryChain(root,records);
+    const events = chain.filter(d=>d.scheduledDate);
+    if (!events.length) return null;
+    const outcome = purchaseOutcome(root,records);
+    const latestEvent = events.at(-1);
+    const kind = events.some(d=>d.scheduleKind==='Reagendada') ? 'Reagendada' : 'Programada';
+    const started = chain.some(d=>d.parentId===latestEvent.id);
+    let situation = outcome.label;
+    if (outcome.delivered) situation = `Entregue após ${kind.toLocaleLowerCase('pt-BR')}`;
+    else if (outcome.open && outcome.record?.scheduledDate) situation = outcome.label;
+    else if (started && outcome.open) situation = 'Atendimento iniciado';
+    return {root,chain,events,latestEvent,kind,outcome,situation,delivered:outcome.delivered,open:Boolean(outcome.record?.scheduledDate&&outcome.open),started:started&&!outcome.delivered};
+  }
+  function allScheduleSummaries(records = scoped(state.deliveries)) {
+    const roots = records.filter(isRootPurchase);
+    return roots.map(root=>scheduleSummary(root,records)).filter(Boolean);
   }
   function pendingReasons(d) {
     const list = [];
@@ -682,7 +727,10 @@
     return unique(list);
   }
   function allPending() { return scoped(state.deliveries).filter(d => pendingReasons(d).length); }
-  function scheduledOpen() { return scoped(state.deliveries).filter(openScheduled); }
+  function scheduledOpen() {
+    const records = scoped(state.deliveries);
+    return allScheduleSummaries(records).filter(summary=>summary.open).map(summary=>summary.outcome.record);
+  }
   function scheduledForDate(date) { return scheduledOpen().filter(d => d.scheduledDate === date); }
 
 
@@ -902,7 +950,8 @@
     const range = selectedRange();
     const deliveries = filteredDeliveries();
     const roots = deliveries.filter(isRootPurchase);
-    const final = deliveries.filter(d => d.status === 'Finalizada');
+    const allRecords = scoped(state.deliveries);
+    const deliveredPurchases = roots.map(root=>purchaseOutcome(root,allRecords)).filter(outcome=>outcome.delivered).map(outcome=>outcome.record);
     const costs = filteredCosts();
     const cycles = filteredCycles();
     const odometers = filteredOdometers();
@@ -913,7 +962,7 @@
     const totalKm = totalKmFromOdometers(odometers);
     const carriedInCycles = sum(cycles.map(c => cycleCalc(c).deliveries));
     const deliveriesPerCycle = cycles.length ? carriedInCycles / cycles.length : 0;
-    const costPerDelivery = final.length ? totalCosts / final.length : 0;
+    const costPerDelivery = deliveredPurchases.length ? totalCosts / deliveredPurchases.length : 0;
     const fuel = sum(costs.filter(c => category(c.categoryId)?.name === 'Combustível').map(c => c.value));
     const avgWait = avg(deliveries.map(d => deliveryCalc(d).wait));
     const avgPurchaseToClient = avg(deliveries.map(d => deliveryCalc(d).purchaseToClient));
@@ -926,9 +975,11 @@
     const completionWithin = completionCalculated.length - completionDelayed;
     const departureCompliance = percentage(departureWithin,departureCalculated.length);
     const completionCompliance = percentage(completionWithin,completionCalculated.length);
-    const finalizedPurchases = roots.filter(root=>rootWasFinalized(root,deliveries)).length;
+    const finalizedPurchases = deliveredPurchases.length;
     const completionRate = percentage(finalizedPurchases,roots.length);
-    const openSched = deliveries.filter(openScheduled).length;
+    const openSched = roots.filter(root=>purchaseOutcome(root,allRecords).record?.scheduledDate&&purchaseOutcome(root,allRecords).open).length;
+    const scheduleSummaries = roots.map(root=>scheduleSummary(root,allRecords)).filter(Boolean);
+    const deliveredAfterSchedule = scheduleSummaries.filter(summary=>summary.delivered).length;
     const weeklyRows = buildWeeklyRows(deliveries,costs,cycles,odometers);
     const nbRows = buildNeighborhoodRows(deliveries);
     const topDelivery = nbRows[0];
@@ -936,9 +987,10 @@
     const topReschedule = [...nbRows].sort((a,b) => b.rescheduled-a.rescheduled)[0];
     const issuesInRange = systemIssues({includeInfo:false}).filter(i => inRange(i.date, range) || inRange(i.relatedDate, range));
     const criticalCount = issuesInRange.filter(i=>i.severity==='critical').length;
-    const statusRows = statusOptions.map(status=>({label:status,value:deliveries.filter(d=>d.status===status).length})).filter(row=>row.value);
-    const departedPurchases = roots.filter(root=>chainForRoot(root,deliveries).some(d=>d.departureTime)).length;
-    const waitingDeparture = roots.filter(root=>chainForRoot(root,deliveries).some(d=>!d.departureTime&&!isFinal(d)&&!openScheduled(d))).length;
+    const outcomeGroups = groupItems(roots,root=>purchaseOutcome(root,allRecords).key);
+    const statusRows = [...outcomeGroups.entries()].map(([label,rows])=>({label,value:rows.length})).sort((a,b)=>b.value-a.value);
+    const departedPurchases = roots.filter(root=>chainForRoot(root,allRecords).some(d=>d.departureTime)).length;
+    const waitingDeparture = roots.filter(root=>purchaseOutcome(root,allRecords).key==='Na loja').length;
 
     $('#view').innerHTML = `
       <section class="hero-strip v11-dashboard-hero">
@@ -948,7 +1000,7 @@
 
       <section class="executive-primary-grid">
         ${executiveMetric('Faturamento líquido',money(fin.net),'Bruto menos reembolsos','R$','focus')}
-        ${executiveMetric('Entregas finalizadas',final.length,`${deliveries.length} registros no período`,'▣','info')}
+        ${executiveMetric('Compras entregues',finalizedPurchases,`${deliveries.length} registros e tentativas no período`,'▣','info')}
         ${executiveMetric('Conclusão das compras',percent(completionRate),`${finalizedPurchases} de ${roots.length} compras`,'✓',completionRate>=90?'success':'warning')}
         ${executiveMetric('Pendências críticas',criticalCount,criticalCount?'Exigem ação':'Sem críticas abertas','! ',criticalCount?'danger':'success')}
         ${executiveMetric('KM rodado',`${number(totalKm,1)} km`,`${activeDays} ${activeDays === 1 ? 'dia' : 'dias'} com movimento`,'KM','info')}
@@ -968,12 +1020,13 @@
           ['Saídas fora do padrão',String(delayed),`Acima de ${state.settings.delayMinutes} min corridos`],
           ['Entregas fora do padrão',String(completionDelayed),`Acima de ${fmtMinutes(Number(state.settings.completionLimitMinutes || 210))}`],
           ['Programadas abertas',String(openSched),'Ainda não concluídas'],
+          ['Programadas já entregues',String(deliveredAfterSchedule),'Situação consolidada da compra'],
           ['Tempo médio de rota',fmtMinutes(avgRoute),'Saída → retorno']
         ])}
         ${managementPanel('↻','Frota e eficiência','Produtividade dos ciclos',[
           ['Entregas por ciclo',number(deliveriesPerCycle,2),`${cycles.length} ciclos`],
           ['KM médio por dia',`${number(totalKm/activeDaysDivisor,1)} km`,`${activeDays} ${activeDays === 1 ? 'dia' : 'dias'}`],
-          ['KM por entrega',`${number(final.length?totalKm/final.length:0,2)} km`,'Média das finalizadas'],
+          ['KM por entrega',`${number(finalizedPurchases?totalKm/finalizedPurchases:0,2)} km`,'Média das compras entregues'],
           ['KM médio por ciclo',`${number(cycles.length?totalKm/cycles.length:0,2)} km`,'A partir do KM diário']
         ])}
       </section>
@@ -991,13 +1044,13 @@
       </section>
 
       <section class="dashboard-grid equal">
-        <article class="card section-card">${sectionHeader('▥','Entregas por dia','Evolução das entregas finalizadas no período.')}<div class="chart-box">${lineChartHTML(groupCountByDate(final), '#F2B523')}</div></article>
+        <article class="card section-card">${sectionHeader('▥','Entregas por dia','Uma compra entregue é contada somente uma vez, mesmo após reagendamento.')}<div class="chart-box">${lineChartHTML(groupCountByDate(deliveredPurchases), '#F2B523')}</div></article>
         <article class="card section-card">${sectionHeader('★','Destaques dos bairros','Volume e principais ocorrências.')}<div class="stat-list">${statRow('Mais entregas',topDelivery?.name || '—',topDelivery?`${topDelivery.deliveries} entregas`:'Sem dados')}${statRow('Mais endereço errado',topWrong?.name || '—',topWrong?`${topWrong.wrongAddress} ocorrências`:'Sem dados')}${statRow('Mais reagendamentos',topReschedule?.name || '—',topReschedule?`${topReschedule.rescheduled} reagendamentos`:'Sem dados')}</div></article>
       </section>
 
       <section class="dashboard-grid equal">
         <article class="card section-card">${sectionHeader('R$','Faturamento líquido x custos por semana','Compare resultado e gasto por semana.')}<div class="chart-box small">${groupedBarChartHTML(weeklyRows.map(r => ({label:r.label,a:r.netRevenue,b:r.costs})), 'Faturamento líquido','Custos')}</div></article>
-        <article class="card section-card">${sectionHeader('◉','Distribuição por status','Situação dos registros no período selecionado.')}<div class="chart-box small">${statusDistributionChartHTML(statusRows)}</div></article>
+        <article class="card section-card">${sectionHeader('◉','Situação final das compras','A programação histórica não substitui o resultado final da compra.')}<div class="chart-box small">${statusDistributionChartHTML(statusRows)}</div></article>
       </section>
 
       <section class="dashboard-grid equal">
@@ -1027,12 +1080,13 @@
 
   function buildWeeklyRows(deliveries = filteredDeliveries(), costs = filteredCosts(), cycles = filteredCycles(), odometers = filteredOdometers()) {
     const selected = selectedRange();
+    const allRecords = scoped(state.deliveries);
     const refundDates = scoped(state.deliveries).filter(d=>d.refundDate && inRange(d.refundDate, selected)).map(d=>startOfWeek(d.refundDate));
     const weeks = unique([...deliveries.map(d=>startOfWeek(d.date)),...costs.map(c=>startOfWeek(c.date)),...cycles.map(c=>startOfWeek(c.date)),...odometers.map(o=>startOfWeek(o.date)),...refundDates]).sort();
     return weeks.map((week, index) => {
       const weekRange = {start:week,end:endOfWeek(week)};
       const d = deliveries.filter(x => inRange(x.date, weekRange));
-      const final = d.filter(x => x.status === 'Finalizada');
+      const deliveredPurchases = d.filter(isRootPurchase).filter(root=>rootWasFinalized(root,allRecords));
       const c = costs.filter(x => inRange(x.date, weekRange));
       const cy = cycles.filter(x => inRange(x.date, weekRange));
       const odo = odometers.filter(x => inRange(x.date, weekRange));
@@ -1040,7 +1094,7 @@
       const fin = financialsForRange(weekRange);
       return {
         week, label:`Sem. ${index+1}`,
-        deliveries:final.length,
+        deliveries:deliveredPurchases.length,
         grossRevenue:fin.gross,
         refunds:fin.refundTotal,
         netRevenue:fin.net,
@@ -1329,21 +1383,42 @@
   }
 
   function renderScheduled() {
+    const summaries = allScheduleSummaries().sort((a,b)=>`${b.latestEvent.scheduledDate||''}${b.latestEvent.updatedAt||''}`.localeCompare(`${a.latestEvent.scheduledDate||''}${a.latestEvent.updatedAt||''}`));
     const list = scheduledOpen().slice().sort((a,b) => String(a.scheduledDate).localeCompare(String(b.scheduledDate)));
     const overdue = list.filter(d => d.scheduledDate < todayISO()).length;
     const today = list.filter(d => d.scheduledDate === todayISO()).length;
     const future = list.filter(d => d.scheduledDate > todayISO()).length;
+    const delivered = summaries.filter(summary=>summary.delivered).length;
+    const inService = summaries.filter(summary=>summary.started && summary.outcome.open).length;
     $('#view').innerHTML = `
       <section class="metrics-grid">
         ${cardMetric('Programadas abertas', list.length, 'Ainda não concluídas', '◷', 'purple')}
         ${cardMetric('Para hoje', today, dateBR(todayISO()), '⌂', 'blue')}
         ${cardMetric('Vencidas', overdue, 'Exigem ação imediata', '!', overdue ? 'red':'green')}
-        ${cardMetric('Futuras', future, 'Próximas datas', '→', 'green')}
-        ${cardMetric('Reagendamentos', list.filter(d=>d.scheduleKind==='Reagendada').length, 'Abertos', '↻', 'yellow')}
+        ${cardMetric('Em atendimento', inService, 'Já iniciadas e ainda não entregues', '→', 'yellow')}
+        ${cardMetric('Já entregues', delivered, 'Após programação ou reagendamento', '✓', 'green')}
       </section>
-      <article class="card section-card" style="margin-top:12px">${sectionHeader('◷','Programadas e reagendadas em aberto','Aparecem automaticamente pela Data Programada e somem da lista quando o atendimento é iniciado.')}${scheduledTable(list,true)}</article>
+      <article class="card section-card" style="margin-top:12px">${sectionHeader('◷','Programadas e reagendadas em aberto',`${future} futura(s). Somente compras ainda não entregues e cujo atendimento não começou.`)}${scheduledTable(list,true)}</article>
+      <article class="card section-card" style="margin-top:12px">${sectionHeader('▤','Conferência das programações','Cada compra é verificada em todo o histórico antes de ser classificada como aberta, em atendimento ou entregue.')}${scheduleSummaryTable(summaries)}</article>
     `;
     bindViewActions();
+  }
+
+  function scheduleSummaryTable(summaries) {
+    if (!summaries.length) return emptyState('▤','Nenhuma programação registrada','As programações e seus resultados aparecerão aqui.');
+    return `<div class="table-wrap"><table><thead><tr><th>Última data programada</th><th>Tipo</th><th>Compra / cupom</th><th>Cliente</th><th>Situação consolidada</th><th>Entrega no cliente</th><th>Histórico</th></tr></thead><tbody>${summaries.map(summary=>{
+      const deliveredRecord=summary.outcome.delivered?summary.outcome.record:null;
+      const situationTone=summary.delivered?'green':summary.open?'purple':summary.outcome.open?'yellow':summary.outcome.tone;
+      return `<tr>
+        <td><div class="cell-title mono">${dateBR(summary.latestEvent.scheduledDate)}</div><div class="cell-sub">Origem ${dateBR(summary.root.date)}</div></td>
+        <td>${statusBadge(summary.kind)}</td>
+        <td><div class="cell-title">Compra ${esc(summary.root.orderNo||'—')}</div><div class="cell-sub">Nº do cupom ${esc(summary.root.coupon||'—')}</div></td>
+        <td><div class="cell-title">${esc(summary.root.customerName||'—')}</div><div class="cell-sub">${esc(summary.root.customerPhone||'Telefone não informado')}</div></td>
+        <td><span class="badge ${situationTone}">${esc(summary.situation)}</span></td>
+        <td>${deliveredRecord?`<div class="cell-title mono">${dateBR(deliveredRecord.date)} • ${deliveredRecord.finalizationTime||'horário não informado'}</div><div class="cell-sub">Tentativa ${deliveredRecord.attemptNo||1}</div>`:'—'}</td>
+        <td><div class="cell-title">${summary.events.length} programação(ões)</div><div class="cell-sub">${summary.chain.length} tentativa(s) ligada(s)</div></td>
+      </tr>`;
+    }).join('')}</tbody></table></div>`;
   }
 
   function scheduledTable(list, actions = false) {
@@ -1442,7 +1517,7 @@
   function renderOdometer() {
     const logs = filteredOdometers().slice().sort((a,b) => `${b.date}${vehicle(b.vehicleId)?.name||''}`.localeCompare(`${a.date}${vehicle(a.vehicleId)?.name||''}`));
     const cycles = filteredCycles();
-    const deliveries = filteredDeliveries().filter(d=>d.status==='Finalizada');
+    const deliveries = filteredDeliveries().filter(deliveredToCustomer);
     const totalKm = totalKmFromOdometers(logs);
     const closedDays = unique(logs.filter(o=>odometerCalc(o).complete).map(o=>o.date)).length;
     const dayDivisor = closedDays || 1;
@@ -1496,7 +1571,7 @@
   }
   function renderCosts() {
     const list = filteredCosts().slice().sort((a,b) => `${b.date}${b.time||''}`.localeCompare(`${a.date}${a.time||''}`));
-    const deliveries = filteredDeliveries().filter(d=>d.status==='Finalizada');
+    const deliveries = filteredDeliveries().filter(deliveredToCustomer);
     const cycles = filteredCycles();
     const odometers = filteredOdometers();
     const total = sum(list.map(c=>c.value));
@@ -1552,33 +1627,38 @@
         ${cardMetric('Mais entregas',topDelivery?.name || '—',topDelivery ? `${topDelivery.deliveries} entregas`:'Sem dados','1º','blue')}
         ${cardMetric('Maior faturamento',topRevenue?.name || '—',topRevenue ? money(topRevenue.revenue):'Sem dados','R$','green')}
         ${cardMetric('Mais endereço errado',topWrong?.name || '—',topWrong ? `${topWrong.wrongAddress} ocorrências`:'Sem dados','!','red')}
-        ${cardMetric('Mais agendamentos',topScheduled?.name || '—',topScheduled ? `${topScheduled.scheduled} agendadas`:'Sem dados','◷','purple')}
-        ${cardMetric('Mais reagendamentos',topRescheduled?.name || '—',topRescheduled ? `${topRescheduled.rescheduled} reagendadas`:'Sem dados','↻','yellow')}
+        ${cardMetric('Mais programações registradas',topScheduled?.name || '—',topScheduled ? `${topScheduled.scheduled} no histórico`:'Sem dados','◷','purple')}
+        ${cardMetric('Mais reagendamentos registrados',topRescheduled?.name || '—',topRescheduled ? `${topRescheduled.rescheduled} no histórico`:'Sem dados','↻','yellow')}
       </section>
       <section class="dashboard-grid equal">
         <article class="card section-card">${sectionHeader('◎','Top bairros por entregas','Quantidade de entregas finalizadas.')}<div class="chart-box">${horizontalBarChartHTML(rows.slice(0,10).map(r=>({label:r.name,value:r.deliveries})),'#2E73B9')}</div></article>
-        <article class="card section-card">${sectionHeader('!','Problemas por bairro','Endereço errado, devolução, agendamento e reagendamento.')}<div class="chart-box">${problemNeighborhoodChartHTML(rows.slice().sort((a,b)=>b.problemCount-a.problemCount).slice(0,8))}</div></article>
+        <article class="card section-card">${sectionHeader('!','Ocorrências históricas por bairro','Endereço errado, devolução, reagendamento e atraso registrados.')}<div class="chart-box">${problemNeighborhoodChartHTML(rows.slice().sort((a,b)=>b.problemCount-a.problemCount).slice(0,8))}</div></article>
       </section>
       <article class="card section-card" style="margin-top:12px">${sectionHeader('▤','Tabela completa por bairro','Compare volume, faturamento, qualidade e taxa de problemas.')}${neighborhoodTable(rows)}</article>
     `;
   }
 
   function buildNeighborhoodRows(deliveries) {
+    const allRecords = scoped(state.deliveries);
     return state.neighborhoods.map(n => {
       const all = deliveries.filter(d => d.neighborhoodId === n.id);
-      const final = all.filter(d => d.status === 'Finalizada');
       const purchases = all.filter(isRootPurchase);
+      const scheduleSummaries = purchases.map(root=>scheduleSummary(root,allRecords)).filter(Boolean);
       const devolutions = all.filter(d => d.status === 'Devolvida').length;
       const wrongAddress = all.filter(d => d.reasonId === 'ENDERECO_ERRADO').length;
-      const scheduled = all.filter(d => d.scheduledDate && (d.scheduleKind || 'Programada') === 'Programada').length;
-      const rescheduled = all.filter(d => d.scheduledDate && d.scheduleKind === 'Reagendada').length;
+      const scheduled = sum(scheduleSummaries.map(summary=>summary.events.filter(d=>(d.scheduleKind || 'Programada')==='Programada').length));
+      const rescheduled = sum(scheduleSummaries.map(summary=>summary.events.filter(d=>d.scheduleKind==='Reagendada').length));
+      const scheduledOpen = scheduleSummaries.filter(summary=>summary.open&&summary.kind==='Programada').length;
+      const rescheduledOpen = scheduleSummaries.filter(summary=>summary.open&&summary.kind==='Reagendada').length;
+      const scheduledDelivered = scheduleSummaries.filter(summary=>summary.delivered).length;
       const delayed = all.filter(d => deliveryCalc(d).delayed).length;
       const problemCount = devolutions + wrongAddress + rescheduled + delayed;
       return {
         id:n.id,name:n.name,
-        deliveries:final.length,
+        deliveries:purchases.filter(root=>rootWasFinalized(root,allRecords)).length,
+        totalPurchases:purchases.length,
         revenue:sum(purchases.map(d=>Number(d.fee||0)-Number(d.refundAmount||0))),
-        devolutions, wrongAddress, scheduled, rescheduled, delayed, problemCount,
+        devolutions, wrongAddress, scheduled, rescheduled, scheduledOpen, rescheduledOpen, scheduledDelivered, delayed, problemCount,
         totalRecords:all.length,
         returnRate:all.length ? devolutions/all.length*100 : 0,
         problemRate:all.length ? problemCount/all.length*100 : 0,
@@ -1590,8 +1670,8 @@
 
   function neighborhoodTable(rows) {
     if (!rows.length) return emptyState('◎','Sem dados de bairros','As análises serão criadas automaticamente a partir das entregas.');
-    return `<div class="table-wrap"><table><thead><tr><th>Bairro</th><th>Entregas</th><th>Faturamento</th><th>End. errado</th><th>Agendadas</th><th>Reagendadas</th><th>Devoluções</th><th>Atrasadas</th><th>Taxa devolução</th><th>Taxa problemas</th></tr></thead><tbody>${rows.map(r=>`<tr>
-      <td><div class="cell-title">${esc(r.name)}</div></td><td>${r.deliveries}</td><td>${money(r.revenue)}</td><td>${r.wrongAddress}</td><td>${r.scheduled}</td><td>${r.rescheduled}</td><td>${r.devolutions}</td><td>${r.delayed}</td><td>${number(r.returnRate,1)}%</td><td>${number(r.problemRate,1)}%</td>
+    return `<div class="table-wrap"><table><thead><tr><th>Bairro</th><th>Compras entregues</th><th>Faturamento</th><th>End. errado</th><th>Programações registradas</th><th>Reagendamentos registrados</th><th>Programadas abertas</th><th>Reagendadas abertas</th><th>Entregues após programação</th><th>Devoluções</th><th>Atrasadas</th><th>Taxa devolução</th><th>Taxa problemas</th></tr></thead><tbody>${rows.map(r=>`<tr>
+      <td><div class="cell-title">${esc(r.name)}</div></td><td>${r.deliveries}</td><td>${money(r.revenue)}</td><td>${r.wrongAddress}</td><td>${r.scheduled}</td><td>${r.rescheduled}</td><td>${r.scheduledOpen}</td><td>${r.rescheduledOpen}</td><td>${r.scheduledDelivered}</td><td>${r.devolutions}</td><td>${r.delayed}</td><td>${number(r.returnRate,1)}%</td><td>${number(r.problemRate,1)}%</td>
     </tr>`).join('')}</tbody></table></div>`;
   }
 
@@ -1684,7 +1764,7 @@
     const chain = scoped(state.deliveries).filter(delivery => (delivery.rootId || delivery.id) === rootId).sort((a,b)=>`${a.date}${a.purchaseTime||''}`.localeCompare(`${b.date}${b.purchaseTime||''}`));
     if (!chain.length) { box.innerHTML = emptyState('⌕','Entrega não encontrada','Faça uma nova pesquisa.'); return; }
     const root = chain.find(delivery => delivery.id === rootId) || chain[0];
-    const final = chain.filter(d=>d.status==='Finalizada');
+    const final = chain.filter(deliveredToCustomer);
     const reSchedules = chain.filter(d=>d.scheduleKind==='Reagendada' && d.scheduledDate).length;
     box.innerHTML = `
       <section class="metrics-grid" style="margin-top:16px">
@@ -1715,7 +1795,7 @@
             <label>Mês<select id="reportMonth">${monthNames.map((m,i)=>`<option value="${String(i+1).padStart(2,'0')}">${m}</option>`).join('')}</select></label>
             <label>De<input id="reportStart" type="date" /></label>
             <label>Até<input id="reportEnd" type="date" /></label>
-            <div class="full form-note"><strong>Relatório completo:</strong> tempos compra → saída, loja → cliente e compra → cliente; padrões de 2h e 3h30; identificação, comparação com o período anterior, picos por dia e horário, desempenho por caixa/bairro/equipe/veículo, clientes recorrentes, ocorrências, qualidade dos dados, inconsistências, previsão da agenda, financeiro, KM e histórico.</div>
+            <div class="full form-note"><strong>Relatório completo:</strong> antes de contabilizar, o sistema confere se cada compra programada ou reagendada foi entregue em alguma tentativa. O Excel e o PDF separam pendências reais, atendimentos iniciados, entregues após programação e todo o histórico, além dos tempos, SLA, financeiro, KM, clientes e indicadores gerenciais.</div>
             <div class="full form-actions"><button class="btn secondary" id="printReportBtn">Imprimir / PDF</button><button class="btn primary" id="exportExcelBtn">⇩ Baixar Excel</button></div>
           </div>
         </article>
@@ -2963,7 +3043,7 @@
     return ['Devolvida','Reagendada','Cancelada'].includes(d.status) || d.scheduleKind==='Reagendada' || Boolean(d.reasonId || d.reasonText);
   }
   function chainForRoot(root,records) { const id=root?.rootId || root?.id; return records.filter(d=>(d.rootId || d.id)===id); }
-  function rootWasFinalized(root,records) { return chainForRoot(root,records).some(d=>d.status==='Finalizada'); }
+  function rootWasFinalized(root,records) { return chainForRoot(root,records).some(deliveredToCustomer); }
   function rootHadProblem(root,records) { return chainForRoot(root,records).some(recordHasProblem); }
   function rootWasDelayed(root,records) { return chainForRoot(root,records).some(d=>deliveryCalc(d).delayed); }
   function normalizedCustomerKey(d) {
@@ -2987,9 +3067,10 @@
     return gaps;
   }
   function periodMetrics(range) {
+    const allRecords=scoped(state.deliveries);
     const deliveries=scoped(state.deliveries).filter(d=>inRange(d.date,range));
     const roots=deliveries.filter(isRootPurchase);
-    const final=deliveries.filter(d=>d.status==='Finalizada');
+    const finalizedPurchases=roots.filter(root=>rootWasFinalized(root,allRecords));
     const costs=scoped(state.costs).filter(c=>inRange(c.date,range));
     const odometers=scoped(state.odometerLogs).filter(o=>inRange(o.date,range));
     const waits=deliveries.map(d=>deliveryCalc(d).wait).filter(v=>v!==null);
@@ -2998,20 +3079,22 @@
     const delayed=deliveries.filter(d=>deliveryCalc(d).delayed).length;
     const completionDelayed=deliveries.filter(d=>deliveryCalc(d).completionDelayed).length;
     const departureWithin=waits.length-delayed,completionWithin=purchaseToClients.length-completionDelayed;
-    const problems=roots.filter(root=>rootHadProblem(root,deliveries)).length;
+    const problems=roots.filter(root=>rootHadProblem(root,allRecords)).length;
     const financial=financialsForRange(range);
     return {
-      purchases:roots.length,records:deliveries.length,finalized:final.length,
-      firstAttempt:roots.filter(root=>root.status==='Finalizada').length,
-      firstAttemptRate:percentage(roots.filter(root=>root.status==='Finalizada').length,roots.length),
+      purchases:roots.length,records:deliveries.length,finalized:finalizedPurchases.length,
+      firstAttempt:roots.filter(deliveredToCustomer).length,
+      firstAttemptRate:percentage(roots.filter(deliveredToCustomer).length,roots.length),
       departureCalculable:waits.length,departureWithin,departureComplianceRate:percentage(departureWithin,waits.length),delayed,delayRate:percentage(delayed,waits.length),completionCalculable:purchaseToClients.length,completionWithin,completionComplianceRate:percentage(completionWithin,purchaseToClients.length),completionDelayed,completionDelayRate:percentage(completionDelayed,purchaseToClients.length),problems,problemRate:percentage(problems,roots.length),
       avgWait:avg(waits),avgPurchaseToClient:avg(purchaseToClients),avgRoute:avg(routes),gross:financial.gross,refunds:financial.refundTotal,net:financial.net,
       costs:sum(costs.map(c=>c.value)),km:totalKmFromOdometers(odometers)
     };
   }
   function buildReportAnalytics(range) {
+    const allRecords=scoped(state.deliveries);
     const deliveries=scoped(state.deliveries).filter(d=>inRange(d.date,range));
     const roots=deliveries.filter(isRootPurchase);
+    const scheduleSummaries=roots.map(root=>scheduleSummary(root,allRecords)).filter(Boolean);
     const rootNet=root=>Math.max(0,Number(root?.fee||0)-Number(root?.refundAmount||0));
     const costs=scoped(state.costs).filter(c=>inRange(c.date,range));
     const cycles=scoped(state.cycles).filter(c=>inRange(c.date,range));
@@ -3019,14 +3102,14 @@
     const closures=scoped(state.dayClosures || []).filter(c=>inRange(c.date,range));
     const current=periodMetrics(range), previousRange=previousReportRange(range), previous=previousRange?periodMetrics(previousRange):null;
     const comparisonDefinitions=[
-      ['Compras originais','purchases'],['Entregas finalizadas','finalized'],['Sucesso na primeira tentativa %','firstAttemptRate'],['Cumprimento compra → saída %','departureComplianceRate'],['Saídas fora do padrão de 2h','delayed'],['Taxa de saída fora do padrão %','delayRate'],['Cumprimento compra → cliente %','completionComplianceRate'],['Entregas fora do padrão de 3h30','completionDelayed'],['Taxa de entrega fora do padrão %','completionDelayRate'],['Taxa de problemas %','problemRate'],['Compra → saída média min','avgWait'],['Compra → cliente média min','avgPurchaseToClient'],['Rota média min','avgRoute'],['Faturamento bruto','gross'],['Reembolsos','refunds'],['Faturamento líquido','net'],['Custos','costs'],['KM total','km']
+      ['Compras originais','purchases'],['Compras entregues no cliente','finalized'],['Sucesso na primeira tentativa %','firstAttemptRate'],['Cumprimento compra → saída %','departureComplianceRate'],['Saídas fora do padrão de 2h','delayed'],['Taxa de saída fora do padrão %','delayRate'],['Cumprimento compra → cliente %','completionComplianceRate'],['Entregas fora do padrão de 3h30','completionDelayed'],['Taxa de entrega fora do padrão %','completionDelayRate'],['Taxa de problemas %','problemRate'],['Compra → saída média min','avgWait'],['Compra → cliente média min','avgPurchaseToClient'],['Rota média min','avgRoute'],['Faturamento bruto','gross'],['Reembolsos','refunds'],['Faturamento líquido','net'],['Custos','costs'],['KM total','km']
     ];
     const comparisonRows=[['Indicador','Período atual',previousRange?`Período anterior (${previousRange.label})`:'Sem período anterior','Diferença','Variação %'],...comparisonDefinitions.map(([label,key])=>[label,current[key],previous?.[key]??'',previous?current[key]-previous[key]:'',previous?variationPercent(current[key],previous[key]):''])];
 
     const reportDates=unique([...deliveries.map(d=>d.date),...costs.map(c=>c.date),...cycles.map(c=>c.date),...odometers.map(o=>o.date)].filter(Boolean)).sort();
-    const dailyRows=[['Data','Dia da semana','Compras','Registros','Finalizadas','Na loja','Em rota','Programadas','Reagendadas','Devolvidas','Retiradas','Canceladas','Saída > 2h','Entrega > 3h30','Sucesso 1ª tentativa %','Taxa saída fora do padrão %','Taxa entrega fora do padrão %','Faturamento bruto','Reembolsos','Faturamento líquido','Custos','Saldo','Ciclos','KM','Compra → saída média min','Loja → cliente média min','Compra → cliente média min','Rota média min','Clientes identificados','Telefones informados','Identificação completa %'],...reportDates.map(date=>{
-      const dayDeliveries=deliveries.filter(d=>d.date===date),dayRoots=dayDeliveries.filter(isRootPurchase),dayCosts=sum(costs.filter(c=>c.date===date).map(c=>c.value)),gross=sum(dayRoots.map(d=>d.fee)),refunds=sum(dayRoots.map(d=>d.refundAmount)),delayed=dayDeliveries.filter(d=>deliveryCalc(d).delayed).length,completionDelayed=dayDeliveries.filter(d=>deliveryCalc(d).completionDelayed).length,waits=dayDeliveries.map(d=>deliveryCalc(d).wait).filter(v=>v!==null),purchaseToClients=dayDeliveries.map(d=>deliveryCalc(d).purchaseToClient).filter(v=>v!==null),dateObj=reportDate(date),complete=dayRoots.filter(d=>d.coupon&&d.docNo&&d.cashierNo&&d.neighborhoodId&&d.purchaseTime).length;
-      return [date,dateObj?['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'][dateObj.getDay()]:'',dayRoots.length,dayDeliveries.length,dayDeliveries.filter(d=>d.status==='Finalizada').length,dayDeliveries.filter(d=>d.status==='Na loja').length,dayDeliveries.filter(d=>d.status==='Em rota').length,dayDeliveries.filter(d=>d.status==='Programada').length,dayDeliveries.filter(d=>d.status==='Reagendada').length,dayDeliveries.filter(d=>d.status==='Devolvida').length,dayDeliveries.filter(d=>d.status==='Retirada na loja').length,dayDeliveries.filter(d=>d.status==='Cancelada').length,delayed,completionDelayed,percentage(dayRoots.filter(d=>d.status==='Finalizada').length,dayRoots.length),percentage(delayed,waits.length),percentage(completionDelayed,purchaseToClients.length),gross,refunds,gross-refunds,dayCosts,gross-refunds-dayCosts,cycles.filter(c=>c.date===date).length,totalKmFromOdometers(odometers.filter(o=>o.date===date)),avg(waits),avg(dayDeliveries.map(d=>deliveryCalc(d).toClient)),avg(purchaseToClients),avg(dayDeliveries.map(d=>deliveryCalc(d).route)),dayRoots.filter(d=>d.customerName||d.customerPhone).length,dayRoots.filter(d=>d.customerPhone).length,percentage(complete,dayRoots.length)];
+    const dailyRows=[['Data','Dia da semana','Compras','Registros','Compras entregues','Na loja','Em rota','Programadas abertas','Reagendadas abertas','Entregues após programação','Devolvidas','Retiradas','Canceladas','Saída > 2h','Entrega > 3h30','Sucesso 1ª tentativa %','Taxa saída fora do padrão %','Taxa entrega fora do padrão %','Faturamento bruto','Reembolsos','Faturamento líquido','Custos','Saldo','Ciclos','KM','Compra → saída média min','Loja → cliente média min','Compra → cliente média min','Rota média min','Clientes identificados','Telefones informados','Identificação completa %'],...reportDates.map(date=>{
+      const dayDeliveries=deliveries.filter(d=>d.date===date),dayRoots=dayDeliveries.filter(isRootPurchase),daySchedules=dayRoots.map(root=>scheduleSummary(root,allRecords)).filter(Boolean),dayCosts=sum(costs.filter(c=>c.date===date).map(c=>c.value)),gross=sum(dayRoots.map(d=>d.fee)),refunds=sum(dayRoots.map(d=>d.refundAmount)),delayed=dayDeliveries.filter(d=>deliveryCalc(d).delayed).length,completionDelayed=dayDeliveries.filter(d=>deliveryCalc(d).completionDelayed).length,waits=dayDeliveries.map(d=>deliveryCalc(d).wait).filter(v=>v!==null),purchaseToClients=dayDeliveries.map(d=>deliveryCalc(d).purchaseToClient).filter(v=>v!==null),dateObj=reportDate(date),complete=dayRoots.filter(d=>d.coupon&&d.docNo&&d.cashierNo&&d.neighborhoodId&&d.purchaseTime).length,deliveredPurchases=dayRoots.filter(root=>rootWasFinalized(root,allRecords)).length;
+      return [date,dateObj?['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'][dateObj.getDay()]:'',dayRoots.length,dayDeliveries.length,deliveredPurchases,dayRoots.filter(root=>purchaseOutcome(root,allRecords).key==='Na loja').length,dayRoots.filter(root=>purchaseOutcome(root,allRecords).key==='Em rota').length,daySchedules.filter(summary=>summary.open&&summary.kind==='Programada').length,daySchedules.filter(summary=>summary.open&&summary.kind==='Reagendada').length,daySchedules.filter(summary=>summary.delivered).length,dayRoots.filter(root=>purchaseOutcome(root,allRecords).key==='Devolvida').length,dayRoots.filter(root=>purchaseOutcome(root,allRecords).key==='Retirada na loja').length,dayRoots.filter(root=>purchaseOutcome(root,allRecords).key==='Cancelada').length,delayed,completionDelayed,percentage(dayRoots.filter(deliveredToCustomer).length,dayRoots.length),percentage(delayed,waits.length),percentage(completionDelayed,purchaseToClients.length),gross,refunds,gross-refunds,dayCosts,gross-refunds-dayCosts,cycles.filter(c=>c.date===date).length,totalKmFromOdometers(odometers.filter(o=>o.date===date)),avg(waits),avg(dayDeliveries.map(d=>deliveryCalc(d).toClient)),avg(purchaseToClients),avg(dayDeliveries.map(d=>deliveryCalc(d).route)),dayRoots.filter(d=>d.customerName||d.customerPhone).length,dayRoots.filter(d=>d.customerPhone).length,percentage(complete,dayRoots.length)];
     })];
 
     const deliveryDates=unique(deliveries.map(d=>d.date).filter(Boolean)).sort();
@@ -3036,14 +3119,15 @@
     })];
 
     const flowRows=[['Data','Compras originais','Registros','Com saída registrada','Aguardando saída','Finalizadas no cliente','Em rota','Programadas abertas','Taxa de finalização %'],...deliveryDates.map(date=>{
-      const rows=deliveries.filter(d=>d.date===date),dayRoots=rows.filter(isRootPurchase),finalizedPurchases=dayRoots.filter(root=>rootWasFinalized(root,deliveries)).length;
-      return [date,dayRoots.length,rows.length,rows.filter(d=>d.departureTime).length,rows.filter(d=>!d.departureTime&&!isFinal(d)&&!openScheduled(d)).length,finalizedPurchases,rows.filter(d=>d.status==='Em rota').length,rows.filter(openScheduled).length,percentage(finalizedPurchases,dayRoots.length)];
+      const rows=deliveries.filter(d=>d.date===date),dayRoots=rows.filter(isRootPurchase),finalizedPurchases=dayRoots.filter(root=>rootWasFinalized(root,allRecords)).length;
+      return [date,dayRoots.length,rows.length,dayRoots.filter(root=>chainForRoot(root,allRecords).some(d=>d.departureTime)).length,dayRoots.filter(root=>purchaseOutcome(root,allRecords).key==='Na loja').length,dayRoots.filter(root=>rootWasFinalized(root,allRecords)).length,dayRoots.filter(root=>purchaseOutcome(root,allRecords).key==='Em rota').length,dayRoots.filter(root=>purchaseOutcome(root,allRecords).record?.scheduledDate&&purchaseOutcome(root,allRecords).open).length,percentage(dayRoots.filter(root=>rootWasFinalized(root,allRecords)).length,dayRoots.length)];
     })];
 
     const reportMonths=unique([...deliveries.map(d=>String(d.date||'').slice(0,7)),...roots.map(d=>String(d.refundDate||'').slice(0,7)),...costs.map(c=>String(c.date||'').slice(0,7)),...cycles.map(c=>String(c.date||'').slice(0,7)),...odometers.map(o=>String(o.date||'').slice(0,7))].filter(value=>/^\d{4}-\d{2}$/.test(value))).sort();
-    const monthlyRows=[['Mês','Compras','Registros','Finalizadas','Taxa de finalização %','Saídas dentro de 2h %','Entregas dentro de 3h30 %','Compra → saída média min','Compra → cliente média min','Faturamento bruto','Reembolsos','Faturamento líquido','Custos','Saldo','KM'],...reportMonths.map(month=>{
-      const [year,monthNo]=month.split('-').map(Number),lastDay=new Date(year,monthNo,0).getDate(),monthRange={start:[range.start,`${month}-01`].sort().at(-1),end:[range.end,`${month}-${String(lastDay).padStart(2,'0')}`].sort()[0]},rows=deliveries.filter(d=>inRange(d.date,monthRange)),monthRoots=rows.filter(isRootPurchase),monthFinalized=monthRoots.filter(root=>rootWasFinalized(root,deliveries)).length,waits=rows.map(d=>deliveryCalc(d).wait).filter(v=>v!==null),totals=rows.map(d=>deliveryCalc(d).purchaseToClient).filter(v=>v!==null),monthFinancial=financialsForRange(monthRange),monthCosts=sum(costs.filter(c=>inRange(c.date,monthRange)).map(c=>c.value));
-      return [`${String(monthNo).padStart(2,'0')}/${year}`,monthRoots.length,rows.length,monthFinalized,percentage(monthFinalized,monthRoots.length),percentage(waits.filter(value=>value<=Number(state.settings.delayMinutes||120)).length,waits.length),percentage(totals.filter(value=>value<=Number(state.settings.completionLimitMinutes||210)).length,totals.length),avg(waits),avg(totals),monthFinancial.gross,monthFinancial.refundTotal,monthFinancial.net,monthCosts,monthFinancial.net-monthCosts,totalKmFromOdometers(odometers.filter(o=>inRange(o.date,monthRange)))];
+    const monthlyRows=[['Mês','Compras','Registros','Compras entregues','Taxa de finalização %','Programadas/reagendadas abertas','Entregues após programação','Saídas dentro de 2h %','Entregas dentro de 3h30 %','Compra → saída média min','Compra → cliente média min','Faturamento bruto','Reembolsos','Faturamento líquido','Custos','Saldo','KM'],...reportMonths.map(month=>{
+      const [year,monthNo]=month.split('-').map(Number),lastDay=new Date(year,monthNo,0).getDate(),monthRange={start:[range.start,`${month}-01`].sort().at(-1),end:[range.end,`${month}-${String(lastDay).padStart(2,'0')}`].sort()[0]},rows=deliveries.filter(d=>inRange(d.date,monthRange)),monthRoots=rows.filter(isRootPurchase),monthFinalized=monthRoots.filter(root=>rootWasFinalized(root,allRecords)).length,waits=rows.map(d=>deliveryCalc(d).wait).filter(v=>v!==null),totals=rows.map(d=>deliveryCalc(d).purchaseToClient).filter(v=>v!==null),monthFinancial=financialsForRange(monthRange),monthCosts=sum(costs.filter(c=>inRange(c.date,monthRange)).map(c=>c.value));
+      const monthSchedules=monthRoots.map(root=>scheduleSummary(root,allRecords)).filter(Boolean);
+      return [`${String(monthNo).padStart(2,'0')}/${year}`,monthRoots.length,rows.length,monthFinalized,percentage(monthFinalized,monthRoots.length),monthSchedules.filter(summary=>summary.open).length,monthSchedules.filter(summary=>summary.delivered).length,percentage(waits.filter(value=>value<=Number(state.settings.delayMinutes||120)).length,waits.length),percentage(totals.filter(value=>value<=Number(state.settings.completionLimitMinutes||210)).length,totals.length),avg(waits),avg(totals),monthFinancial.gross,monthFinancial.refundTotal,monthFinancial.net,monthCosts,monthFinancial.net-monthCosts,totalKmFromOdometers(odometers.filter(o=>inRange(o.date,monthRange)))];
     })];
 
     const feeGroups=groupItems(roots,root=>Number(root.fee||0).toFixed(2));
@@ -3066,25 +3150,27 @@
       ['Nota de qualidade','100 menos a média das taxas de atraso e problemas','Comparar qualidade entre bairros, equipe, veículos e caixas'],
       ['Identificação completa','Nº do cupom, DOC, caixa, bairro e hora de entrada preenchidos','Medir qualidade dos cadastros'],
       ['Comparativo','Período selecionado contra período anterior com a mesma quantidade de dias','Mostrar evolução ou queda'],
-      ['Previsão da agenda','Entregas programadas agrupadas pela data prevista','Antecipar carga de trabalho'],
+      ['Situação consolidada da compra','Resultado de toda a cadeia ligada à compra original; uma finalização posterior prevalece sobre Programada ou Reagendada no histórico','Evitar contabilizar como pendente uma compra que já foi entregue'],
+      ['Programações registradas','Todos os eventos de programação e reagendamento são mantidos como histórico','Preservar o que aconteceu sem confundir com pendência atual'],
+      ['Previsão da agenda','Somente compras programadas ainda abertas, agrupadas pela data prevista','Antecipar a carga de trabalho real'],
       ['KM por entrega','KM diário dividido pelas entregas finalizadas','Avaliar eficiência da frota']
     ];
 
     const weekNames=['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'];
     const dayGroups=groupItems(roots,root=>{const date=reportDate(root.date);return date?date.getDay():-1;});
     const dayRows=[['Dia da semana','Compras','Finalizadas','Sucesso %','Atrasadas','Taxa de atraso %','Problemas','Faturamento líquido','Espera média min','Rota média min'],...[0,1,2,3,4,5,6].filter(day=>dayGroups.get(day)?.length).map(day=>{
-      const rows=dayGroups.get(day),finalized=rows.filter(root=>rootWasFinalized(root,deliveries)).length,delayed=rows.filter(root=>rootWasDelayed(root,deliveries)).length,problems=rows.filter(root=>rootHadProblem(root,deliveries)).length;
+      const rows=dayGroups.get(day),finalized=rows.filter(root=>rootWasFinalized(root,allRecords)).length,delayed=rows.filter(root=>rootWasDelayed(root,allRecords)).length,problems=rows.filter(root=>rootHadProblem(root,allRecords)).length;
       return [weekNames[day],rows.length,finalized,percentage(finalized,rows.length),delayed,percentage(delayed,rows.length),problems,sum(rows.map(rootNet)),avg(rows.map(d=>deliveryCalc(d).wait)),avg(rows.map(d=>deliveryCalc(d).route))];
     })];
     const hourGroups=groupItems(roots.filter(root=>{const hour=Number(String(root.purchaseTime||'').slice(0,2));return Number.isInteger(hour)&&hour>=0&&hour<=23;}),root=>Number(String(root.purchaseTime).slice(0,2)));
     const hourRows=[['Faixa de horário','Compras','Finalizadas','Sucesso %','Atrasadas','Taxa de atraso %','Faturamento líquido','Espera média min'],...[...hourGroups.entries()].sort((a,b)=>a[0]-b[0]).map(([hour,rows])=>{
-      const finalized=rows.filter(root=>rootWasFinalized(root,deliveries)).length,delayed=rows.filter(root=>rootWasDelayed(root,deliveries)).length;
+      const finalized=rows.filter(root=>rootWasFinalized(root,allRecords)).length,delayed=rows.filter(root=>rootWasDelayed(root,allRecords)).length;
       return [`${String(hour).padStart(2,'0')}:00–${String(hour).padStart(2,'0')}:59`,rows.length,finalized,percentage(finalized,rows.length),delayed,percentage(delayed,rows.length),sum(rows.map(rootNet)),avg(rows.map(d=>deliveryCalc(d).wait))];
     })];
 
     const cashierGroups=groupItems(roots,root=>String(root.cashierNo || '').trim() || 'Não informado');
     const cashierRows=[['Nº Caixa','Compras','Finalizadas','Sucesso %','Atrasadas','Taxa de atraso %','DOCs duplicados','Clientes identificados','Faturamento bruto','Reembolsos','Faturamento líquido','Taxa média'],...[...cashierGroups.entries()].map(([cashier,rows])=>{
-      const finalized=rows.filter(root=>rootWasFinalized(root,deliveries)).length,delayed=rows.filter(root=>rootWasDelayed(root,deliveries)).length;
+      const finalized=rows.filter(root=>rootWasFinalized(root,allRecords)).length,delayed=rows.filter(root=>rootWasDelayed(root,allRecords)).length;
       const duplicates=[...groupItems(rows.filter(root=>root.docNo),root=>`${root.date}|${root.docNo}`).values()].filter(group=>group.length>1).reduce((total,group)=>total+group.length,0);
       const gross=sum(rows.map(d=>d.fee)),refunds=sum(rows.map(d=>d.refundAmount));
       return [cashier,rows.length,finalized,percentage(finalized,rows.length),delayed,percentage(delayed,rows.length),duplicates,rows.filter(d=>d.customerName||d.customerPhone).length,gross,refunds,gross-refunds,avg(rows.map(d=>d.fee))];
@@ -3093,9 +3179,9 @@
     const customerGroups=groupItems(roots.filter(normalizedCustomerKey),normalizedCustomerKey);
     const customerRows=[['Cliente','Telefone','Compras','Cliente recorrente','Primeira compra','Última compra','Bairros atendidos','Bairro mais frequente','Finalizadas','Problemas','Reagendamentos','Devoluções','Faturamento líquido'],...[...customerGroups.values()].map(rows=>{
       const sorted=rows.slice().sort((a,b)=>String(a.date).localeCompare(String(b.date))), name=rows.find(d=>d.customerName)?.customerName||'Não informado', phone=rows.find(d=>d.customerPhone)?.customerPhone||'';
-      const related=rows.flatMap(root=>chainForRoot(root,deliveries));
+      const related=rows.flatMap(root=>chainForRoot(root,allRecords));
       const neighborhoods=unique(rows.map(d=>neighborhood(d.neighborhoodId)?.name).filter(Boolean));
-      return [name,phone,rows.length,rows.length>1?'SIM':'NÃO',sorted[0]?.date||'',sorted.at(-1)?.date||'',neighborhoods.length,mostCommon(rows.map(d=>neighborhood(d.neighborhoodId)?.name)),rows.filter(root=>rootWasFinalized(root,deliveries)).length,rows.filter(root=>rootHadProblem(root,deliveries)).length,related.filter(d=>d.scheduleKind==='Reagendada').length,related.filter(d=>d.status==='Devolvida').length,sum(rows.map(rootNet))];
+      return [name,phone,rows.length,rows.length>1?'SIM':'NÃO',sorted[0]?.date||'',sorted.at(-1)?.date||'',neighborhoods.length,mostCommon(rows.map(d=>neighborhood(d.neighborhoodId)?.name)),rows.filter(root=>rootWasFinalized(root,allRecords)).length,rows.filter(root=>rootHadProblem(root,allRecords)).length,related.filter(d=>d.scheduleKind==='Reagendada').length,related.filter(d=>d.status==='Devolvida').length,sum(rows.map(rootNet))];
     }).sort((a,b)=>b[2]-a[2]||String(a[0]).localeCompare(String(b[0])))];
 
     const occurrenceRecords=deliveries.filter(d=>recordHasProblem(d));
@@ -3127,12 +3213,12 @@
     [...groupItems(roots,d=>d.date).entries()].forEach(([date,rows])=>{const gaps=sequenceGaps(rows.map(d=>d.orderNo));if(gaps.length)inconsistencyRows.push(['Lacuna na sequência de compras',date,'','','',`Números ausentes: ${gaps.join(', ')}`]);});
     if(inconsistencyRows.length===1)inconsistencyRows.push(['Nenhuma inconsistência encontrada','','','','','Os registros do período passaram pelas validações automáticas.']);
 
-    const forecastGroups=groupItems(deliveries.filter(openScheduled),d=>d.scheduledDate || 'Sem data');
+    const forecastGroups=groupItems(scheduleSummaries.filter(summary=>summary.open).map(summary=>summary.outcome.record),d=>d.scheduledDate || 'Sem data');
     const forecastRows=[['Data programada','Situação','Entregas','Reagendadas','Clientes com telefone','Bairros diferentes','Bairro mais frequente','Taxas vinculadas','Próxima ação mais frequente'],...[...forecastGroups.entries()].map(([date,rows])=>[date,date==='Sem data'?'SEM DATA':date<todayISO()?'VENCIDA':date===todayISO()?'HOJE':'FUTURA',rows.length,rows.filter(d=>d.scheduleKind==='Reagendada').length,rows.filter(d=>d.customerPhone).length,unique(rows.map(d=>d.neighborhoodId).filter(Boolean)).length,mostCommon(rows.map(d=>neighborhood(d.neighborhoodId)?.name)),revenueAttributedTo(rows),mostCommon(rows.map(d=>d.nextAction),'Não informada')]).sort((a,b)=>String(a[0]).localeCompare(String(b[0])))];
 
     const rankingRows=[['Dimensão','Nome','Registros','Finalizadas','Sucesso %','Atrasadas','Taxa de atraso %','Problemas','Taxa de problemas %','Rota média min','Faturamento atribuído','Nota de qualidade']];
     const addRanking=(dimension,groups,labelFn)=>[...groups.entries()].forEach(([id,rows])=>{
-      if(!rows.length)return;const finalized=rows.filter(d=>d.status==='Finalizada').length,delayed=rows.filter(d=>deliveryCalc(d).delayed).length,problems=rows.filter(recordHasProblem).length,delayRate=percentage(delayed,rows.length),problemRate=percentage(problems,rows.length),score=clamp(100-(delayRate+problemRate)/2,0,100);
+      if(!rows.length)return;const finalized=rows.filter(deliveredToCustomer).length,delayed=rows.filter(d=>deliveryCalc(d).delayed).length,problems=rows.filter(recordHasProblem).length,delayRate=percentage(delayed,rows.length),problemRate=percentage(problems,rows.length),score=clamp(100-(delayRate+problemRate)/2,0,100);
       rankingRows.push([dimension,labelFn(id),rows.length,finalized,percentage(finalized,rows.length),delayed,delayRate,problems,problemRate,avg(rows.map(d=>deliveryCalc(d).route)),revenueAttributedTo(rows),score]);
     });
     addRanking('Bairro',groupItems(deliveries.filter(d=>d.neighborhoodId),d=>d.neighborhoodId),id=>neighborhood(id)?.name||'Bairro não encontrado');
@@ -3141,7 +3227,7 @@
     addRanking('Caixa PDV',groupItems(roots.filter(d=>d.cashierNo),d=>d.cashierNo),id=>`Caixa ${id}`);
     rankingRows.splice(1,rankingRows.length-1,...rankingRows.slice(1).sort((a,b)=>b[11]-a[11]||b[3]-a[3]));
 
-    return {deliveries,roots,costs,cycles,odometers,closures,current,previousRange,comparisonRows,dailyRows,slaRows,flowRows,monthlyRows,dayRows,hourRows,feeRows,methodologyRows,cashierRows,customerRows,occurrenceRows,qualityRows,inconsistencyRows,forecastRows,rankingRows};
+    return {deliveries,roots,scheduleSummaries,costs,cycles,odometers,closures,current,previousRange,comparisonRows,dailyRows,slaRows,flowRows,monthlyRows,dayRows,hourRows,feeRows,methodologyRows,cashierRows,customerRows,occurrenceRows,qualityRows,inconsistencyRows,forecastRows,rankingRows};
   }
 
   /* Excel-compatible SpreadsheetML 2003 export. Works offline and supports multiple worksheets. */
@@ -3149,8 +3235,10 @@
     const r=reportRangeFromForm();
     if(!r.start || !r.end){toast('Informe o período do relatório.','warning');return;}
     const analytics=buildReportAnalytics(r);
-    const {deliveries,roots,costs,cycles,odometers,closures,current,comparisonRows,dailyRows,slaRows,flowRows,monthlyRows,dayRows,hourRows,feeRows,methodologyRows,cashierRows,customerRows,occurrenceRows,qualityRows,inconsistencyRows,forecastRows,rankingRows}=analytics;
-    const final=deliveries.filter(d=>d.status==='Finalizada');
+    const {deliveries,roots,scheduleSummaries,costs,cycles,odometers,closures,current,comparisonRows,dailyRows,slaRows,flowRows,monthlyRows,dayRows,hourRows,feeRows,methodologyRows,cashierRows,customerRows,occurrenceRows,qualityRows,inconsistencyRows,forecastRows,rankingRows}=analytics;
+    const allRecords=scoped(state.deliveries);
+    const deliveredRoots=roots.filter(root=>rootWasFinalized(root,allRecords));
+    const outcomeFor=root=>purchaseOutcome(root,allRecords);
     const totalCosts=current.costs;
     const fin={gross:current.gross,refundTotal:current.refunds,net:current.net};
     const km=current.km;
@@ -3159,10 +3247,10 @@
     const topCashier=cashierRows.slice(1).filter(row=>row[0]!=='Não informado').sort((a,b)=>b[1]-a[1])[0];
     const recurringCustomers=customerRows.slice(1).filter(row=>row[3]==='SIM').length;
     const completeIdentification=roots.filter(d=>d.coupon&&d.docNo&&d.cashierNo&&d.neighborhoodId&&d.purchaseTime).length;
-    const statusRows=unique(deliveries.map(d=>d.status || 'Sem status')).sort().map(status=>{
-      const rows=deliveries.filter(d=>(d.status || 'Sem status')===status);
-      return [status,rows.length,deliveries.length?rows.length/deliveries.length*100:0,revenueAttributedTo(rows),avg(rows.map(d=>deliveryCalc(d).wait)),avg(rows.map(d=>deliveryCalc(d).toClient)),avg(rows.map(d=>deliveryCalc(d).purchaseToClient)),avg(rows.map(d=>deliveryCalc(d).route)),rows.filter(d=>deliveryCalc(d).delayed).length,rows.filter(d=>deliveryCalc(d).completionDelayed).length];
-    });
+    const statusRows=[...groupItems(roots,root=>outcomeFor(root).key).entries()].map(([status,statusRoots])=>{
+      const rows=statusRoots.flatMap(root=>chainForRoot(root,allRecords));
+      return [status,statusRoots.length,percentage(statusRoots.length,roots.length),sum(statusRoots.map(netRevenueOfRoot)),avg(rows.map(d=>deliveryCalc(d).wait)),avg(rows.map(d=>deliveryCalc(d).toClient)),avg(rows.map(d=>deliveryCalc(d).purchaseToClient)),avg(rows.map(d=>deliveryCalc(d).route)),rows.filter(d=>deliveryCalc(d).delayed).length,rows.filter(d=>deliveryCalc(d).completionDelayed).length];
+    }).sort((a,b)=>b[1]-a[1]);
     const sheets={
       RESUMO_EXECUTIVO:[
         ['Indicador','Valor'],
@@ -3171,12 +3259,15 @@
         ['Período',`${dateBR(r.start)} a ${dateBR(r.end)}`],
         ['Compras originais',roots.length],
         ['Registros de entrega e tentativas',deliveries.length],
-        ['Entregas finalizadas',final.length],
-        ['Entregas em rota',deliveries.filter(d=>d.status==='Em rota').length],
-        ['Entregas na loja',deliveries.filter(d=>d.status==='Na loja').length],
-        ['Programadas ou reagendadas em aberto',deliveries.filter(openScheduled).length],
-        ['Devolvidas',deliveries.filter(d=>d.status==='Devolvida').length],
-        ['Retiradas na loja',deliveries.filter(d=>d.status==='Retirada na loja').length],
+        ['Compras entregues no cliente',deliveredRoots.length],
+        ['Compras em rota',roots.filter(root=>outcomeFor(root).key==='Em rota').length],
+        ['Compras na loja',roots.filter(root=>outcomeFor(root).key==='Na loja').length],
+        ['Programadas ou reagendadas em aberto',scheduleSummaries.filter(summary=>summary.open).length],
+        ['Programadas ou reagendadas em atendimento',scheduleSummaries.filter(summary=>summary.started&&summary.outcome.open).length],
+        ['Entregues após programação ou reagendamento',scheduleSummaries.filter(summary=>summary.delivered).length],
+        ['Devolvidas sem entrega posterior',roots.filter(root=>outcomeFor(root).key==='Devolvida').length],
+        ['Retiradas na loja',roots.filter(root=>outcomeFor(root).key==='Retirada na loja').length],
+        ['Canceladas',roots.filter(root=>outcomeFor(root).key==='Cancelada').length],
         ['Saídas fora do padrão de 2h',current.delayed],
         ['Cumprimento compra até saída %',current.departureComplianceRate],
         ['Taxa de saída fora do padrão %',current.delayRate],
@@ -3198,14 +3289,14 @@
         ['Faturamento líquido',fin.net],
         ['Custos',totalCosts],
         ['Saldo operacional',fin.net-totalCosts],
-        ['Custo por entrega finalizada',final.length?totalCosts/final.length:0],
+        ['Custo por compra entregue',deliveredRoots.length?totalCosts/deliveredRoots.length:0],
         ['Compra até saída média em minutos',current.avgWait],
         ['Loja até cliente média em minutos',avg(deliveries.map(d=>deliveryCalc(d).toClient))],
         ['Compra até cliente média em minutos',current.avgPurchaseToClient],
         ['Rota média em minutos',avg(deliveries.map(d=>deliveryCalc(d).route))],
         ['KM total',km],
         ['KM médio por dia',unique(odometers.filter(o=>odometerCalc(o).complete).map(o=>o.date)).length?km/unique(odometers.filter(o=>odometerCalc(o).complete).map(o=>o.date)).length:0],
-        ['KM por entrega finalizada',final.length?km/final.length:0],
+        ['KM por compra entregue',deliveredRoots.length?km/deliveredRoots.length:0],
         ['Ciclos',cycles.length],
         ['Entregas por ciclo',cycles.length?sum(cycles.map(c=>cycleCalc(c).deliveries))/cycles.length:0],
         ['KM médio por ciclo',cycles.length?km/cycles.length:0],
@@ -3219,11 +3310,11 @@
       DIAS_SEMANA:dayRows,
       HORARIOS_PICO:hourRows,
       TAXAS_PDV:feeRows,
-      STATUS:[['Status','Quantidade','Percentual dos registros','Faturamento atribuído','Compra → saída média min','Loja → cliente média min','Compra → cliente média min','Rota média min','Saída > 2h','Entrega > 3h30'],...statusRows],
+      STATUS:[['Situação consolidada da compra','Quantidade de compras','Percentual das compras','Faturamento atribuído','Compra → saída média min','Loja → cliente média min','Compra → cliente média min','Rota média min','Saída > 2h','Entrega > 3h30'],...statusRows],
       RANKING_OPERACIONAL:rankingRows,
       METODOLOGIA:methodologyRows,
-      ENTREGAS:[['ID','ID raiz','ID anterior','Tentativa','Data','Nº Compra','Nº do cupom','Nº DOC','Nº Caixa','Nome do cliente','Telefone','Bairro','Taxa registrada','Reembolso','Data reembolso','Receita líquida','Entregador','Veículo','Ciclo','Entrada','Saída','Finalização','Retorno Loja','Compra → Saída Min','Loja → Cliente Min','Compra → Cliente Finalizada Min','Tempo Total/Transcorrido Agora Min','Saldo do Prazo 3h30 Min','Rota Min','Saída > 2h','Entrega > 3h30','Situação Atual do Prazo','Status','Data Programada','Tipo Programação','Motivo padronizado','Motivo complementar','Próxima Ação','Observações','Criado em','Atualizado em'],...deliveries.map(d=>{const c=deliveryCalc(d),p=completionProgress(d);return[d.id,d.rootId||d.id,d.parentId||'',d.attemptNo||1,d.date,d.orderNo,d.coupon,d.docNo||'',d.cashierNo||'',d.customerName||'',d.customerPhone||'',neighborhood(d.neighborhoodId)?.name||'',rootDelivery(d)?.fee||d.fee,rootDelivery(d)?.refundAmount||0,rootDelivery(d)?.refundDate||'',netRevenueOfRoot(d),employee(d.driverId)?.name||'',vehicle(d.vehicleId)?.name||'',cycle(d.cycleId)?.code||'',d.purchaseTime,d.departureTime,d.finalizationTime,d.returnTime,c.wait,c.toClient,c.purchaseToClient,p.elapsed,p.balance,c.route,c.delayed?'SIM':'NÃO',c.completionDelayed?'SIM':'NÃO',p.elapsed===null?'NÃO CALCULÁVEL':p.outside?'FORA DO PADRÃO':'DENTRO DO PADRÃO',d.status,d.scheduledDate,d.scheduleKind,reason(d.reasonId)?.name||'',d.reasonText||'',d.nextAction,d.notes,d.createdAt,d.updatedAt]})],
-      CONTATOS_CLIENTES:[['Data','Nº Compra','Nº do cupom','Nº DOC','Nº Caixa','Nome do cliente','Telefone','Bairro','Status','Data Programada','Próxima Ação','Observações'],...roots.map(d=>[d.date,d.orderNo,d.coupon,d.docNo||'',d.cashierNo||'',d.customerName||'',d.customerPhone||'',neighborhood(d.neighborhoodId)?.name||'',d.status,d.scheduledDate,d.nextAction,d.notes])],
+      ENTREGAS:[['ID','ID raiz','ID anterior','Tentativa','Data','Nº Compra','Nº do cupom','Nº DOC','Nº Caixa','Nome do cliente','Telefone','Bairro','Taxa registrada','Reembolso','Data reembolso','Receita líquida','Entregador','Veículo','Ciclo','Entrada','Saída','Finalização','Retorno Loja','Compra → Saída Min','Loja → Cliente Min','Compra → Cliente Finalizada Min','Tempo Total/Transcorrido Agora Min','Saldo do Prazo 3h30 Min','Rota Min','Saída > 2h','Entrega > 3h30','Situação Atual do Prazo','Status deste registro','Situação consolidada da compra','Entregue em alguma tentativa','Data Programada','Tipo Programação','Motivo padronizado','Motivo complementar','Próxima Ação','Observações','Criado em','Atualizado em'],...deliveries.map(d=>{const c=deliveryCalc(d),p=completionProgress(d),outcome=purchaseOutcome(d,allRecords);return[d.id,d.rootId||d.id,d.parentId||'',d.attemptNo||1,d.date,d.orderNo,d.coupon,d.docNo||'',d.cashierNo||'',d.customerName||'',d.customerPhone||'',neighborhood(d.neighborhoodId)?.name||'',rootDelivery(d)?.fee||d.fee,rootDelivery(d)?.refundAmount||0,rootDelivery(d)?.refundDate||'',netRevenueOfRoot(d),employee(d.driverId)?.name||'',vehicle(d.vehicleId)?.name||'',cycle(d.cycleId)?.code||'',d.purchaseTime,d.departureTime,d.finalizationTime,d.returnTime,c.wait,c.toClient,c.purchaseToClient,p.elapsed,p.balance,c.route,c.delayed?'SIM':'NÃO',c.completionDelayed?'SIM':'NÃO',p.elapsed===null?'NÃO CALCULÁVEL':p.outside?'FORA DO PADRÃO':'DENTRO DO PADRÃO',d.status,outcome.label,outcome.delivered?'SIM':'NÃO',d.scheduledDate,d.scheduleKind,reason(d.reasonId)?.name||'',d.reasonText||'',d.nextAction,d.notes,d.createdAt,d.updatedAt]})],
+      CONTATOS_CLIENTES:[['Data','Nº Compra','Nº do cupom','Nº DOC','Nº Caixa','Nome do cliente','Telefone','Bairro','Situação consolidada','Última data programada','Próxima Ação','Observações'],...roots.map(d=>{const outcome=outcomeFor(d),summary=scheduleSummary(d,allRecords);return[d.date,d.orderNo,d.coupon,d.docNo||'',d.cashierNo||'',d.customerName||'',d.customerPhone||'',neighborhood(d.neighborhoodId)?.name||'',outcome.label,summary?.latestEvent?.scheduledDate||'',outcome.record?.nextAction||d.nextAction,outcome.record?.notes||d.notes]})],
       CLIENTES:customerRows,
       CAIXAS_PDV:cashierRows,
       OCORRENCIAS:occurrenceRows,
@@ -3236,10 +3327,10 @@
       VEICULOS:buildVehicleReportRows(deliveries,costs,cycles,odometers),
       COLABORADORES:buildEmployeeReportRows(deliveries),
       BAIRROS:buildNeighborhoodReportRows(deliveries),
-      PROGRAMADAS:[['Origem','Data Programada','Tipo','Nº Compra','Nº do cupom','Nº DOC','Nº Caixa','Nome do cliente','Telefone','Bairro','Status','Motivo padronizado','Motivo complementar','Próxima Ação','Observações'],...deliveries.filter(openScheduled).map(d=>[d.date,d.scheduledDate,d.scheduleKind,d.orderNo,d.coupon,d.docNo||'',d.cashierNo||'',d.customerName||'',d.customerPhone||'',neighborhood(d.neighborhoodId)?.name||'',d.status,reason(d.reasonId)?.name||'',d.reasonText||'',d.nextAction,d.notes])],
+      PROGRAMADAS:[['Origem da compra','Última data programada','Tipo consolidado','Nº Compra','Nº do cupom','Nº DOC','Nº Caixa','Nome do cliente','Telefone','Bairro','Situação consolidada','Entregue no cliente','Data da entrega','Hora da entrega','Tentativa entregue','Programações registradas','Tentativas ligadas','Motivo mais recente','Próxima ação'],...scheduleSummaries.map(summary=>{const delivered=summary.delivered?summary.outcome.record:null,latest=summary.latestEvent;return[summary.root.date,latest.scheduledDate,summary.kind,summary.root.orderNo,summary.root.coupon,summary.root.docNo||'',summary.root.cashierNo||'',summary.root.customerName||'',summary.root.customerPhone||'',neighborhood(summary.root.neighborhoodId)?.name||'',summary.situation,summary.delivered?'SIM':'NÃO',delivered?.date||'',delivered?.finalizationTime||'',delivered?.attemptNo||'',summary.events.length,summary.chain.length,reason(latest.reasonId)?.name||latest.reasonText||'',latest.nextAction||'']})],
       PENDENCIAS:[['Prioridade','Data','Tipo','Título','Detalhe','Meta'],...systemIssues({includeInfo:true}).filter(i=>inRange(i.date,r)||inRange(i.relatedDate,r)).map(i=>[i.severity==='critical'?'CRÍTICA':i.severity==='warning'?'ATENÇÃO':'INFORMATIVA',i.relatedDate||i.date,i.type,i.title,i.detail,i.meta||''])],
       FECHAMENTOS_DIA:[['Data','Encerrado em','Entregas no encerramento','Ciclos no encerramento','KM no encerramento','Avisos'],...closures.map(c=>[c.date,c.closedAt,c.snapshot?.deliveries||0,c.snapshot?.cycles||0,c.snapshot?.km||0,c.snapshot?.warnings||0])],
-      HISTORICO:[['ID','ID raiz','ID anterior','Tentativa','Data','Nº Compra','Nº do cupom','Nº DOC','Nº Caixa','Cliente','Telefone','Status','Criado em','Atualizado em'],...deliveries.map(d=>[d.id,d.rootId||d.id,d.parentId||'',d.attemptNo||1,d.date,d.orderNo,d.coupon,d.docNo||'',d.cashierNo||'',d.customerName||'',d.customerPhone||'',d.status,d.createdAt,d.updatedAt])]
+      HISTORICO:[['ID','ID raiz','ID anterior','Tentativa','Data','Nº Compra','Nº do cupom','Nº DOC','Nº Caixa','Cliente','Telefone','Status deste registro','Situação consolidada da compra','Entregue em alguma tentativa','Criado em','Atualizado em'],...deliveries.map(d=>{const outcome=purchaseOutcome(d,allRecords);return[d.id,d.rootId||d.id,d.parentId||'',d.attemptNo||1,d.date,d.orderNo,d.coupon,d.docNo||'',d.cashierNo||'',d.customerName||'',d.customerPhone||'',d.status,outcome.label,outcome.delivered?'SIM':'NÃO',d.createdAt,d.updatedAt]})]
     };
     const xml=buildSpreadsheetML(sheets);
     downloadBlob(new Blob(['\ufeff'+xml],{type:'application/vnd.ms-excel;charset=utf-8'}),`Relatorio_Controle_Entregas_${r.label}.xls`);
@@ -3248,17 +3339,17 @@
 
   function buildVehicleReportRows(deliveries,costs,cycles,odometers=filteredOdometers()) {
     const header=['Veículo','Registros','Finalizadas','Sucesso %','Faturamento','Custos','Saldo','KM','Custo por Entrega','Custo por KM','Ciclos','Entregas por Ciclo','Rota média min','Atrasadas','Taxa atraso %','Problemas','Nota qualidade'];
-    const rows=state.vehicles.map(v=>{const all=deliveries.filter(x=>x.vehicleId===v.id),d=all.filter(x=>x.status==='Finalizada'),c=costs.filter(x=>x.vehicleId===v.id),cy=cycles.filter(x=>x.vehicleId===v.id),odo=odometers.filter(x=>x.vehicleId===v.id),km=totalKmFromOdometers(odo),cost=sum(c.map(x=>x.value)),rev=revenueAttributedTo(all),delayed=all.filter(x=>deliveryCalc(x).delayed).length,problems=all.filter(recordHasProblem).length,quality=clamp(100-(percentage(delayed,all.length)+percentage(problems,all.length))/2,0,100);return[v.name,all.length,d.length,percentage(d.length,all.length),rev,cost,rev-cost,km,d.length?cost/d.length:0,km?cost/km:0,cy.length,cy.length?all.filter(x=>x.cycleId).length/cy.length:0,avg(all.map(x=>deliveryCalc(x).route)),delayed,percentage(delayed,all.length),problems,quality]});
+    const rows=state.vehicles.map(v=>{const all=deliveries.filter(x=>x.vehicleId===v.id),d=all.filter(deliveredToCustomer),c=costs.filter(x=>x.vehicleId===v.id),cy=cycles.filter(x=>x.vehicleId===v.id),odo=odometers.filter(x=>x.vehicleId===v.id),km=totalKmFromOdometers(odo),cost=sum(c.map(x=>x.value)),rev=revenueAttributedTo(all),delayed=all.filter(x=>deliveryCalc(x).delayed).length,problems=all.filter(recordHasProblem).length,quality=clamp(100-(percentage(delayed,all.length)+percentage(problems,all.length))/2,0,100);return[v.name,all.length,d.length,percentage(d.length,all.length),rev,cost,rev-cost,km,d.length?cost/d.length:0,km?cost/km:0,cy.length,cy.length?all.filter(x=>x.cycleId).length/cy.length:0,avg(all.map(x=>deliveryCalc(x).route)),delayed,percentage(delayed,all.length),problems,quality]});
     return [header,...rows.filter(r=>r.slice(1).some(Number))];
   }
   function buildEmployeeReportRows(deliveries) {
     const header=['Colaborador','Função','Registros','Finalizadas','Sucesso %','Faturamento','Espera média min','Até cliente média min','Rota média min','Devoluções','Reagendamentos','Atrasadas','Taxa atraso %','Problemas','Nota qualidade'];
-    const rows=state.employees.map(e=>{const d=deliveries.filter(x=>x.driverId===e.id),final=d.filter(x=>x.status==='Finalizada'),delayed=d.filter(x=>deliveryCalc(x).delayed).length,problems=d.filter(recordHasProblem).length,quality=clamp(100-(percentage(delayed,d.length)+percentage(problems,d.length))/2,0,100);return[e.name,e.role,d.length,final.length,percentage(final.length,d.length),revenueAttributedTo(d),avg(d.map(x=>deliveryCalc(x).wait)),avg(d.map(x=>deliveryCalc(x).toClient)),avg(d.map(x=>deliveryCalc(x).route)),d.filter(x=>x.status==='Devolvida').length,d.filter(x=>x.scheduleKind==='Reagendada').length,delayed,percentage(delayed,d.length),problems,quality]});
+    const rows=state.employees.map(e=>{const d=deliveries.filter(x=>x.driverId===e.id),final=d.filter(deliveredToCustomer),delayed=d.filter(x=>deliveryCalc(x).delayed).length,problems=d.filter(recordHasProblem).length,quality=clamp(100-(percentage(delayed,d.length)+percentage(problems,d.length))/2,0,100);return[e.name,e.role,d.length,final.length,percentage(final.length,d.length),revenueAttributedTo(d),avg(d.map(x=>deliveryCalc(x).wait)),avg(d.map(x=>deliveryCalc(x).toClient)),avg(d.map(x=>deliveryCalc(x).route)),d.filter(x=>x.status==='Devolvida').length,d.filter(x=>x.scheduleKind==='Reagendada').length,delayed,percentage(delayed,d.length),problems,quality]});
     return [header,...rows.filter(r=>r.slice(2).some(Number))];
   }
   function buildNeighborhoodReportRows(deliveries) {
-    const header=['Bairro','Registros','Entregas finalizadas','Sucesso %','Faturamento','Espera média min','Rota média min','Endereço Errado','Agendadas','Reagendadas','Devoluções','Atrasadas','Taxa atraso %','Taxa Devolução %','Taxa Problemas %','Nota qualidade'];
-    return [header,...buildNeighborhoodRows(deliveries).map(r=>[r.name,r.totalRecords,r.deliveries,percentage(r.deliveries,r.totalRecords),r.revenue,r.avgWait,r.avgRoute,r.wrongAddress,r.scheduled,r.rescheduled,r.devolutions,r.delayed,percentage(r.delayed,r.totalRecords),r.returnRate,r.problemRate,clamp(100-(percentage(r.delayed,r.totalRecords)+r.problemRate)/2,0,100)])];
+    const header=['Bairro','Registros','Compras entregues','Sucesso %','Faturamento','Espera média min','Rota média min','Endereço Errado','Programações registradas','Reagendamentos registrados','Programadas abertas','Reagendadas abertas','Entregues após programação','Devoluções','Atrasadas','Taxa atraso %','Taxa Devolução %','Taxa Problemas %','Nota qualidade'];
+    return [header,...buildNeighborhoodRows(deliveries).map(r=>[r.name,r.totalRecords,r.deliveries,percentage(r.deliveries,r.totalPurchases),r.revenue,r.avgWait,r.avgRoute,r.wrongAddress,r.scheduled,r.rescheduled,r.scheduledOpen,r.rescheduledOpen,r.scheduledDelivered,r.devolutions,r.delayed,percentage(r.delayed,r.totalRecords),r.returnRate,r.problemRate,clamp(100-(percentage(r.delayed,r.totalRecords)+r.problemRate)/2,0,100)])];
   }
 
   function buildSpreadsheetML(sheets) {
@@ -3306,30 +3397,33 @@
   function printReport() {
     const r=reportRangeFromForm();
     const analytics=buildReportAnalytics(r);
-    const {deliveries,roots,costs,odometers,current,comparisonRows,monthlyRows,dayRows,hourRows,customerRows,qualityRows,rankingRows}=analytics;
-    const final=deliveries.filter(d=>d.status==='Finalizada');
+    const {deliveries,roots,scheduleSummaries,costs,odometers,current,comparisonRows,monthlyRows,dayRows,hourRows,customerRows,qualityRows,rankingRows}=analytics;
+    const allRecords=scoped(state.deliveries);
+    const deliveredRoots=roots.filter(root=>rootWasFinalized(root,allRecords));
+    const outcomeFor=root=>purchaseOutcome(root,allRecords);
     const fin=financialsForRange(r);
     const nb=buildNeighborhoodRows(deliveries).slice(0,10);
     const peakDay=dayRows.slice(1).sort((a,b)=>b[1]-a[1])[0],peakHour=hourRows.slice(1).sort((a,b)=>b[1]-a[1])[0];
     const recurringCustomers=customerRows.slice(1).filter(row=>row[3]==='SIM').length;
     const completeIdentification=roots.filter(d=>d.coupon&&d.docNo&&d.cashierNo&&d.neighborhoodId&&d.purchaseTime).length;
-    const statusPrintRows=statusOptions.map(status=>({label:status,value:deliveries.filter(d=>d.status===status).length})).filter(row=>row.value),statusMax=Math.max(...statusPrintRows.map(row=>row.value),1);
+    const statusPrintRows=[...groupItems(roots,root=>outcomeFor(root).key).entries()].map(([label,rows])=>({label,value:rows.length})).sort((a,b)=>b.value-a.value),statusMax=Math.max(...statusPrintRows.map(row=>row.value),1);
     const slaPrintRows=[{label:'Compra → saída',within:current.departureWithin,outside:current.delayed,total:current.departureCalculable,rate:current.departureComplianceRate,limit:fmtMinutes(Number(state.settings.delayMinutes||120))},{label:'Compra → cliente',within:current.completionWithin,outside:current.completionDelayed,total:current.completionCalculable,rate:current.completionComplianceRate,limit:fmtMinutes(Number(state.settings.completionLimitMinutes||210))}];
     const html=`<!doctype html><html><head><meta charset="utf-8"><title>Relatório completo</title><style>@page{size:landscape;margin:10mm}body{font-family:Arial,sans-serif;color:#233743;padding:18px}h1{color:#173A5E;margin-bottom:4px}h2{color:#29495c;margin:24px 0 8px}p{margin-top:0}table{border-collapse:collapse;width:100%;margin-top:8px;page-break-inside:auto}tr{page-break-inside:avoid}th,td{border:1px solid #dfe7ec;padding:5px;font-size:9px;text-align:left;vertical-align:top}th{background:#173B5B;color:#fff}.cards{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}.c{border:1px solid #dfe7ec;border-radius:8px;padding:9px}.c small{color:#71808c}.c strong{display:block;font-size:16px;margin-top:3px}.muted{color:#71808c}.visual-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;page-break-inside:avoid}.visual-card{border:1px solid #dfe7ec;border-radius:10px;padding:12px}.visual-card h3{margin:0 0 10px;color:#173B5B;font-size:13px}.sla-item{margin-bottom:12px}.sla-head{display:flex;justify-content:space-between;gap:10px;font-size:10px;margin-bottom:5px}.sla-head span{color:#617582}.bar{height:13px;background:#e8eef2;border-radius:99px;overflow:hidden;display:flex}.bar .ok{background:#3E9363}.bar .bad{background:#C9575C}.legend{font-size:8px;color:#617582;margin-top:4px}.status-print{display:grid;gap:7px}.status-print>div{display:grid;grid-template-columns:100px 1fr 34px;gap:7px;align-items:center;font-size:9px}.status-print .track{height:10px;background:#e8eef2;border-radius:99px;overflow:hidden}.status-print i{height:100%;display:block;background:#E9AA1B;border-radius:99px}@media print{button{display:none}}</style></head><body>
       <h1>Controle de Entregas • Relatório completo</h1><p>${dateBR(r.start)} a ${dateBR(r.end)} • ${esc(modeLabel())} • V${APP_VERSION}</p>
       <div class="cards">
-        <div class="c"><small>Compras</small><strong>${roots.length}</strong></div><div class="c"><small>Finalizadas</small><strong>${final.length}</strong></div><div class="c"><small>Em rota</small><strong>${deliveries.filter(d=>d.status==='Em rota').length}</strong></div><div class="c"><small>Programadas</small><strong>${deliveries.filter(openScheduled).length}</strong></div><div class="c"><small>Saída &gt; 2h</small><strong>${current.delayed}</strong></div>
+        <div class="c"><small>Compras</small><strong>${roots.length}</strong></div><div class="c"><small>Entregues no cliente</small><strong>${deliveredRoots.length}</strong></div><div class="c"><small>Em rota</small><strong>${roots.filter(root=>outcomeFor(root).key==='Em rota').length}</strong></div><div class="c"><small>Programadas abertas</small><strong>${scheduleSummaries.filter(summary=>summary.open).length}</strong></div><div class="c"><small>Entregues após programação</small><strong>${scheduleSummaries.filter(summary=>summary.delivered).length}</strong></div><div class="c"><small>Saída &gt; 2h</small><strong>${current.delayed}</strong></div>
         <div class="c"><small>Faturamento bruto</small><strong>${money(fin.gross)}</strong></div><div class="c"><small>Reembolsos</small><strong>${money(fin.refundTotal)}</strong></div><div class="c"><small>Faturamento líquido</small><strong>${money(fin.net)}</strong></div><div class="c"><small>Custos</small><strong>${money(sum(costs.map(c=>c.value)))}</strong></div><div class="c"><small>KM total</small><strong>${number(totalKmFromOdometers(odometers),1)} km</strong></div>
         <div class="c"><small>Sucesso na 1ª tentativa</small><strong>${percent(current.firstAttemptRate)}</strong></div><div class="c"><small>Entrega &gt; 3h30</small><strong>${current.completionDelayed}</strong></div><div class="c"><small>Fora do padrão 3h30</small><strong>${percent(current.completionDelayRate)}</strong></div><div class="c"><small>Taxa de problemas</small><strong>${percent(current.problemRate)}</strong></div><div class="c"><small>Identificação completa</small><strong>${percent(percentage(completeIdentification,roots.length))}</strong></div><div class="c"><small>Clientes recorrentes</small><strong>${recurringCustomers}</strong></div>
       </div>
-      <h2>Painel visual dos indicadores</h2><div class="visual-grid"><div class="visual-card"><h3>Cumprimento dos prazos</h3>${slaPrintRows.map(row=>`<div class="sla-item"><div class="sla-head"><strong>${row.label}</strong><span>${percent(row.rate)} dentro • limite ${row.limit}</span></div><div class="bar"><i class="ok" style="width:${percentage(row.within,row.total)}%"></i><i class="bad" style="width:${percentage(row.outside,row.total)}%"></i></div><div class="legend">${row.within} dentro do padrão • ${row.outside} fora • ${row.total} calculáveis</div></div>`).join('')}</div><div class="visual-card"><h3>Distribuição por status</h3><div class="status-print">${statusPrintRows.map(row=>`<div><span>${esc(row.label)}</span><div class="track"><i style="width:${row.value/statusMax*100}%"></i></div><strong>${row.value}</strong></div>`).join('')}</div></div></div>
+      <h2>Painel visual dos indicadores</h2><div class="visual-grid"><div class="visual-card"><h3>Cumprimento dos prazos</h3>${slaPrintRows.map(row=>`<div class="sla-item"><div class="sla-head"><strong>${row.label}</strong><span>${percent(row.rate)} dentro • limite ${row.limit}</span></div><div class="bar"><i class="ok" style="width:${percentage(row.within,row.total)}%"></i><i class="bad" style="width:${percentage(row.outside,row.total)}%"></i></div><div class="legend">${row.within} dentro do padrão • ${row.outside} fora • ${row.total} calculáveis</div></div>`).join('')}</div><div class="visual-card"><h3>Situação consolidada das compras</h3><div class="status-print">${statusPrintRows.map(row=>`<div><span>${esc(row.label)}</span><div class="track"><i style="width:${row.value/statusMax*100}%"></i></div><strong>${row.value}</strong></div>`).join('')}</div></div></div>
       <h2>Principais insights</h2><table><tr><th>Indicador</th><th>Resultado</th><th>Leitura operacional</th></tr><tr><td>Dia com mais compras</td><td>${esc(peakDay?.[0]||'Sem dados')}</td><td>${peakDay?`${peakDay[1]} compra(s) no período`:'Ainda não há base suficiente'}</td></tr><tr><td>Horário de pico</td><td>${esc(peakHour?.[0]||'Sem dados')}</td><td>${peakHour?`${peakHour[1]} compra(s) nessa faixa`:'Ainda não há base suficiente'}</td></tr><tr><td>Compra → saída média</td><td>${fmtMinutes(current.avgWait)}</td><td>Padrão: até ${fmtMinutes(Number(state.settings.delayMinutes||120))}</td></tr><tr><td>Cumprimento compra → saída</td><td>${percent(current.departureComplianceRate)}</td><td>${current.departureWithin} dentro de ${current.departureCalculable} calculáveis</td></tr><tr><td>Compra → cliente média</td><td>${fmtMinutes(current.avgPurchaseToClient)}</td><td>Padrão: até ${fmtMinutes(Number(state.settings.completionLimitMinutes||210))}</td></tr><tr><td>Cumprimento compra → cliente</td><td>${percent(current.completionComplianceRate)}</td><td>${current.completionWithin} dentro de ${current.completionCalculable} calculáveis</td></tr><tr><td>Rota média</td><td>${fmtMinutes(current.avgRoute)}</td><td>Tempo entre saída e retorno à loja</td></tr></table>
       <h2>Comparação com o período anterior</h2><table><thead><tr>${comparisonRows[0].map(value=>`<th>${esc(value)}</th>`).join('')}</tr></thead><tbody>${comparisonRows.slice(1).map(row=>`<tr><td>${esc(row[0])}</td><td>${formattedReportValue(row[0],row[1])}</td><td>${formattedReportValue(row[0],row[2])}</td><td>${formattedReportValue(row[0],row[3])}</td><td>${typeof row[4]==='number'?percent(row[4]):esc(row[4]||'—')}</td></tr>`).join('')}</tbody></table>
       <h2>Resumo mensal</h2><table><thead><tr>${monthlyRows[0].map(value=>`<th>${esc(value)}</th>`).join('')}</tr></thead><tbody>${monthlyRows.slice(1).map(row=>`<tr>${row.map((value,index)=>`<td>${formattedReportValue(monthlyRows[0][index],value)}</td>`).join('')}</tr>`).join('')}</tbody></table>
       <h2>Ranking operacional</h2><table><thead><tr>${rankingRows[0].map(value=>`<th>${esc(value)}</th>`).join('')}</tr></thead><tbody>${rankingRows.slice(1,16).map(row=>`<tr>${row.map((value,index)=>`<td>${formattedReportValue(rankingRows[0][index],value)}</td>`).join('')}</tr>`).join('')}</tbody></table>
+      <h2>Programações e reagendamentos conferidos</h2><table><thead><tr><th>Origem</th><th>Última data programada</th><th>Tipo</th><th>Compra / cupom</th><th>Cliente</th><th>Situação consolidada</th><th>Entrega no cliente</th><th>Histórico ligado</th></tr></thead><tbody>${scheduleSummaries.length?scheduleSummaries.map(summary=>{const delivered=summary.delivered?summary.outcome.record:null;return`<tr><td>${dateBR(summary.root.date)}</td><td>${dateBR(summary.latestEvent.scheduledDate)}</td><td>${esc(summary.kind)}</td><td>Compra ${esc(summary.root.orderNo||'—')}<br><span class="muted">Cupom ${esc(summary.root.coupon||'—')}</span></td><td>${esc(summary.root.customerName||'—')}<br><span class="muted">${esc(summary.root.customerPhone||'—')}</span></td><td><strong>${esc(summary.situation)}</strong></td><td>${delivered?`${dateBR(delivered.date)} • ${esc(delivered.finalizationTime||'horário não informado')}<br><span class="muted">Tentativa ${delivered.attemptNo||1}</span>`:'—'}</td><td>${summary.events.length} programação(ões)<br><span class="muted">${summary.chain.length} tentativa(s)</span></td></tr>`}).join(''):'<tr><td colspan="8">Nenhuma programação registrada no período.</td></tr>'}</tbody></table>
       <h2>Entregas e identificação das compras</h2>
-      <table><thead><tr><th>Data</th><th>Compra</th><th>Nº do cupom</th><th>DOC</th><th>Caixa</th><th>Cliente / telefone</th><th>Bairro</th><th>Status</th><th>Entregador / veículo</th><th>Entrada / saída / finalização / retorno</th><th>Tempos e padrão</th><th>Taxa / reembolso</th><th>Programação / ocorrência</th></tr></thead><tbody>${deliveries.map(d=>{const calc=deliveryCalc(d),progress=completionProgress(d);return `<tr><td>${dateBR(d.date)}</td><td>${esc(d.orderNo||'—')}</td><td>${esc(d.coupon||'—')}</td><td>${esc(d.docNo||'—')}</td><td>${esc(d.cashierNo||'—')}</td><td>${esc(d.customerName||'—')}<br><span class="muted">${esc(d.customerPhone||'—')}</span></td><td>${esc(neighborhood(d.neighborhoodId)?.name||'—')}</td><td>${esc(d.status||'—')}</td><td>${esc(employee(d.driverId)?.name||'—')}<br><span class="muted">${esc(vehicle(d.vehicleId)?.name||'—')}</span></td><td>${d.purchaseTime||'—'} / ${d.departureTime||'—'} / ${d.finalizationTime||'—'} / ${d.returnTime||'—'}</td><td>Compra → saída: ${fmtMinutes(calc.wait)} (${calc.wait===null?'não calculável':calc.delayed?'fora':'OK'})<br>Compra → cliente: ${fmtMinutes(calc.purchaseToClient)} (${calc.purchaseToClient===null?'não calculável':calc.completionDelayed?'fora':'OK'})<br>Prazo agora: ${progress.balance===null?'não calculável':progress.balance>=0?`${fmtMinutes(progress.balance)} restantes`:`${fmtMinutes(Math.abs(progress.balance))} acima`}</td><td>${money(rootDelivery(d)?.fee||d.fee)} / ${money(rootDelivery(d)?.refundAmount||0)}</td><td>${d.scheduledDate?`${dateBR(d.scheduledDate)} • ${esc(d.scheduleKind||'Programada')}`:'—'}<br><span class="muted">${esc(reason(d.reasonId)?.name||d.reasonText||d.nextAction||'')}</span></td></tr>`}).join('')}</tbody></table>
-      <h2>Análise por bairro</h2><table><tr><th>Bairro</th><th>Entregas</th><th>Faturamento</th><th>Endereço errado</th><th>Agendadas</th><th>Reagendadas</th><th>Devoluções</th><th>Saída &gt; 2h</th><th>Taxa de problemas</th></tr>${nb.map(row=>`<tr><td>${esc(row.name)}</td><td>${row.deliveries}</td><td>${money(row.revenue)}</td><td>${row.wrongAddress}</td><td>${row.scheduled}</td><td>${row.rescheduled}</td><td>${row.devolutions}</td><td>${row.delayed}</td><td>${percent(row.problemRate)}</td></tr>`).join('')}</table>
+      <table><thead><tr><th>Data</th><th>Compra</th><th>Nº do cupom</th><th>DOC</th><th>Caixa</th><th>Cliente / telefone</th><th>Bairro</th><th>Status do registro / situação da compra</th><th>Entregador / veículo</th><th>Entrada / saída / finalização / retorno</th><th>Tempos e padrão</th><th>Taxa / reembolso</th><th>Programação / ocorrência</th></tr></thead><tbody>${deliveries.map(d=>{const calc=deliveryCalc(d),progress=completionProgress(d),outcome=outcomeFor(d);return `<tr><td>${dateBR(d.date)}</td><td>${esc(d.orderNo||'—')}</td><td>${esc(d.coupon||'—')}</td><td>${esc(d.docNo||'—')}</td><td>${esc(d.cashierNo||'—')}</td><td>${esc(d.customerName||'—')}<br><span class="muted">${esc(d.customerPhone||'—')}</span></td><td>${esc(neighborhood(d.neighborhoodId)?.name||'—')}</td><td>${esc(d.status||'—')}<br><strong>${esc(outcome.label)}</strong></td><td>${esc(employee(d.driverId)?.name||'—')}<br><span class="muted">${esc(vehicle(d.vehicleId)?.name||'—')}</span></td><td>${d.purchaseTime||'—'} / ${d.departureTime||'—'} / ${d.finalizationTime||'—'} / ${d.returnTime||'—'}</td><td>Compra → saída: ${fmtMinutes(calc.wait)} (${calc.wait===null?'não calculável':calc.delayed?'fora':'OK'})<br>Compra → cliente: ${fmtMinutes(calc.purchaseToClient)} (${calc.purchaseToClient===null?'não calculável':calc.completionDelayed?'fora':'OK'})<br>Prazo agora: ${progress.balance===null?'não calculável':progress.balance>=0?`${fmtMinutes(progress.balance)} restantes`:`${fmtMinutes(Math.abs(progress.balance))} acima`}</td><td>${money(rootDelivery(d)?.fee||d.fee)} / ${money(rootDelivery(d)?.refundAmount||0)}</td><td>${d.scheduledDate?`${dateBR(d.scheduledDate)} • ${esc(d.scheduleKind||'Programada')}`:'—'}<br><span class="muted">${esc(reason(d.reasonId)?.name||d.reasonText||d.nextAction||'')}</span></td></tr>`}).join('')}</tbody></table>
+      <h2>Análise por bairro</h2><table><tr><th>Bairro</th><th>Compras entregues</th><th>Faturamento</th><th>Endereço errado</th><th>Programações registradas</th><th>Reagendamentos registrados</th><th>Programadas abertas</th><th>Reagendadas abertas</th><th>Entregues após programação</th><th>Devoluções</th><th>Saída &gt; 2h</th><th>Taxa de problemas</th></tr>${nb.map(row=>`<tr><td>${esc(row.name)}</td><td>${row.deliveries}</td><td>${money(row.revenue)}</td><td>${row.wrongAddress}</td><td>${row.scheduled}</td><td>${row.rescheduled}</td><td>${row.scheduledOpen}</td><td>${row.rescheduledOpen}</td><td>${row.scheduledDelivered}</td><td>${row.devolutions}</td><td>${row.delayed}</td><td>${percent(row.problemRate)}</td></tr>`).join('')}</table>
       <h2>Qualidade dos dados</h2><table><thead><tr>${qualityRows[0].map(value=>`<th>${esc(value)}</th>`).join('')}</tr></thead><tbody>${qualityRows.slice(1).map(row=>`<tr>${row.map((value,index)=>`<td>${formattedReportValue(qualityRows[0][index],value)}</td>`).join('')}</tr>`).join('')}</tbody></table>
       <p class="muted" style="margin-top:16px">O arquivo Excel contém 30 abas, incluindo SLA dos prazos, fluxo operacional, resumo mensal, resumo diário, metodologia, dados completos, comparação, rankings, caixas, clientes, ocorrências, qualidade, financeiro, custos, ciclos, KM, equipe, bairros, pendências e histórico.</p><script>window.onload=()=>window.print()<\/script></body></html>`;
     const w=window.open('','_blank');w.document.write(html);w.document.close();

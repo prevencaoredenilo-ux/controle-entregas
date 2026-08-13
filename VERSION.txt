@@ -1,2 +1,2 @@
-V14.4.0 — Dashboard e Relatórios Gerenciais
-Dashboard ampliado com gráficos de SLA, fluxo, status, custos e finanças; Excel com 30 abas e formatação numérica correta em R$, %, h/min e km; PDF mais visual e detalhado, preservando todos os registros existentes.
+V14.4.1 — Contagem consolidada de programadas e reagendadas
+Antes de contabilizar, o sistema confere toda a cadeia da compra e identifica se houve entrega posterior. Agenda, Dashboard, Excel e PDF separam pendências reais de programações já entregues, preservando integralmente o histórico.
