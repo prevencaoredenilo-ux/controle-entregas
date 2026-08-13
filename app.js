@@ -7,7 +7,7 @@
   }
   'use strict';
 
-  const APP_VERSION = '14.3.8';
+  const APP_VERSION = '14.4.0';
   const DB_NAME = 'controle_entregas_nx';
   const DB_VERSION = 1;
   const STORE_NAME = 'app_state';
@@ -81,6 +81,9 @@
   }
   function number(value, digits = 0) {
     return new Intl.NumberFormat('pt-BR', { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(Number(value || 0));
+  }
+  function percent(value, digits = 1) {
+    return `${number(value,digits)}%`;
   }
   function dateBR(value) {
     if (!value) return '—';
@@ -288,7 +291,7 @@
 
   function initPWA() {
     if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-      navigator.serviceWorker.register('./sw.js?v=14.3.8').catch(console.warn);
+      navigator.serviceWorker.register('./sw.js?v=14.4.0').catch(console.warn);
     }
     window.addEventListener('beforeinstallprompt', (event) => {
       event.preventDefault();
@@ -898,6 +901,7 @@
   function renderDashboard() {
     const range = selectedRange();
     const deliveries = filteredDeliveries();
+    const roots = deliveries.filter(isRootPurchase);
     const final = deliveries.filter(d => d.status === 'Finalizada');
     const costs = filteredCosts();
     const cycles = filteredCycles();
@@ -916,6 +920,14 @@
     const avgRoute = avg(deliveries.map(d => deliveryCalc(d).route));
     const delayed = deliveries.filter(d => deliveryCalc(d).delayed).length;
     const completionDelayed = deliveries.filter(d => deliveryCalc(d).completionDelayed).length;
+    const departureCalculated = deliveries.filter(d => deliveryCalc(d).wait !== null);
+    const completionCalculated = deliveries.filter(d => deliveryCalc(d).purchaseToClient !== null);
+    const departureWithin = departureCalculated.length - delayed;
+    const completionWithin = completionCalculated.length - completionDelayed;
+    const departureCompliance = percentage(departureWithin,departureCalculated.length);
+    const completionCompliance = percentage(completionWithin,completionCalculated.length);
+    const finalizedPurchases = roots.filter(root=>rootWasFinalized(root,deliveries)).length;
+    const completionRate = percentage(finalizedPurchases,roots.length);
     const openSched = deliveries.filter(openScheduled).length;
     const weeklyRows = buildWeeklyRows(deliveries,costs,cycles,odometers);
     const nbRows = buildNeighborhoodRows(deliveries);
@@ -924,16 +936,20 @@
     const topReschedule = [...nbRows].sort((a,b) => b.rescheduled-a.rescheduled)[0];
     const issuesInRange = systemIssues({includeInfo:false}).filter(i => inRange(i.date, range) || inRange(i.relatedDate, range));
     const criticalCount = issuesInRange.filter(i=>i.severity==='critical').length;
+    const statusRows = statusOptions.map(status=>({label:status,value:deliveries.filter(d=>d.status===status).length})).filter(row=>row.value);
+    const departedPurchases = roots.filter(root=>chainForRoot(root,deliveries).some(d=>d.departureTime)).length;
+    const waitingDeparture = roots.filter(root=>chainForRoot(root,deliveries).some(d=>!d.departureTime&&!isFinal(d)&&!openScheduled(d))).length;
 
     $('#view').innerHTML = `
       <section class="hero-strip v11-dashboard-hero">
-        <div><span class="hero-mode-label">${currentMode()==='training'?'🧪 TREINAMENTO':'OPERAÇÃO REAL'}</span><h2>Resumo gerencial • ${esc(range.label)}</h2><p>Primeiro, os 5 indicadores essenciais. Depois, detalhes por assunto. Sem excesso de cards concorrendo pela sua atenção.</p></div>
+        <div><span class="hero-mode-label">${currentMode()==='training'?'🧪 TREINAMENTO':'OPERAÇÃO REAL'}</span><h2>Dashboard gerencial • ${esc(range.label)}</h2><p>Visão completa da operação, dos prazos, do resultado financeiro e da produtividade.</p></div>
         <div class="hero-meta"><span class="hero-chip">${fin.purchases.length} compras</span><span class="hero-chip">${cycles.length} ciclos</span><span class="hero-chip">${number(totalKm,1)} km</span></div>
       </section>
 
       <section class="executive-primary-grid">
         ${executiveMetric('Faturamento líquido',money(fin.net),'Bruto menos reembolsos','R$','focus')}
         ${executiveMetric('Entregas finalizadas',final.length,`${deliveries.length} registros no período`,'▣','info')}
+        ${executiveMetric('Conclusão das compras',percent(completionRate),`${finalizedPurchases} de ${roots.length} compras`,'✓',completionRate>=90?'success':'warning')}
         ${executiveMetric('Pendências críticas',criticalCount,criticalCount?'Exigem ação':'Sem críticas abertas','! ',criticalCount?'danger':'success')}
         ${executiveMetric('KM rodado',`${number(totalKm,1)} km`,`${activeDays} ${activeDays === 1 ? 'dia' : 'dias'} com movimento`,'KM','info')}
         ${executiveMetric('Custo por entrega',money(costPerDelivery),`${money(totalCosts)} em custos`,'CE','warning')}
@@ -962,6 +978,18 @@
         ])}
       </section>
 
+      <section class="dashboard-grid equal dashboard-priority-grid">
+        <article class="card section-card">${sectionHeader('◷','Cumprimento dos prazos','Percentual calculado somente sobre registros que possuem os horários necessários.')}<div class="chart-box small">${slaPerformanceChartHTML([
+          {label:'Compra → saída',within:departureWithin,outside:delayed,total:departureCalculated.length,rate:departureCompliance,limit:`até ${fmtMinutes(Number(state.settings.delayMinutes || 120))}`},
+          {label:'Compra → cliente',within:completionWithin,outside:completionDelayed,total:completionCalculated.length,rate:completionCompliance,limit:`até ${fmtMinutes(Number(state.settings.completionLimitMinutes || 210))}`}
+        ])}</div></article>
+        <article class="card section-card">${sectionHeader('⇢','Fluxo das entregas','Da compra registrada até a conclusão na casa do cliente.')}<div class="chart-box small">${operationalFlowChartHTML([
+          {label:'Compras registradas',value:roots.length},
+          {label:'Compras que já saíram',value:departedPurchases},
+          {label:'Compras finalizadas',value:finalizedPurchases}
+        ],waitingDeparture)}</div></article>
+      </section>
+
       <section class="dashboard-grid equal">
         <article class="card section-card">${sectionHeader('▥','Entregas por dia','Evolução das entregas finalizadas no período.')}<div class="chart-box">${lineChartHTML(groupCountByDate(final), '#F2B523')}</div></article>
         <article class="card section-card">${sectionHeader('★','Destaques dos bairros','Volume e principais ocorrências.')}<div class="stat-list">${statRow('Mais entregas',topDelivery?.name || '—',topDelivery?`${topDelivery.deliveries} entregas`:'Sem dados')}${statRow('Mais endereço errado',topWrong?.name || '—',topWrong?`${topWrong.wrongAddress} ocorrências`:'Sem dados')}${statRow('Mais reagendamentos',topReschedule?.name || '—',topReschedule?`${topReschedule.rescheduled} reagendamentos`:'Sem dados')}</div></article>
@@ -969,7 +997,12 @@
 
       <section class="dashboard-grid equal">
         <article class="card section-card">${sectionHeader('R$','Faturamento líquido x custos por semana','Compare resultado e gasto por semana.')}<div class="chart-box small">${groupedBarChartHTML(weeklyRows.map(r => ({label:r.label,a:r.netRevenue,b:r.costs})), 'Faturamento líquido','Custos')}</div></article>
+        <article class="card section-card">${sectionHeader('◉','Distribuição por status','Situação dos registros no período selecionado.')}<div class="chart-box small">${statusDistributionChartHTML(statusRows)}</div></article>
+      </section>
+
+      <section class="dashboard-grid equal">
         <article class="card section-card">${sectionHeader('◎','Top bairros por entregas','Quantidade de entregas finalizadas por bairro.')}<div class="chart-box small">${horizontalBarChartHTML(nbRows.slice(0,8).map(r=>({label:r.name,value:r.deliveries})),'#F2B523')}</div></article>
+        <article class="card section-card">${sectionHeader('R$','Distribuição dos custos','Participação de cada categoria no custo do período.')}<div class="chart-box small">${dashboardCostChartHTML(buildCostCategoryRows(costs))}</div></article>
       </section>
 
       <section class="card section-card" style="margin-top:12px">${sectionHeader('▤','Resultados semanais','Entregas, faturamento, custos, KM e eficiência por ciclo.')}${weeklyTable(weeklyRows)}</section>
@@ -1674,7 +1707,7 @@
     $('#view').innerHTML = `
       <section class="two-column">
         <article class="card section-card">
-          ${sectionHeader('⇩','Gerar relatório analítico em Excel','Escolha o recorte e baixe 27 abas formatadas, com dados completos, comparações e indicadores calculados.')}
+          ${sectionHeader('⇩','Gerar relatório analítico em Excel','Escolha o recorte e baixe 30 abas formatadas, com dados completos, comparações, SLA e indicadores calculados.')}
           <div class="form-grid" id="reportForm">
             <label>Tipo de período<select id="reportType"><option value="day">Dia</option><option value="week">Semana</option><option value="month">Mês</option><option value="year">Ano</option><option value="custom">Período personalizado</option></select></label>
             <label>Data de referência<input id="reportRef" type="date" value="${todayISO()}" /></label>
@@ -1687,9 +1720,9 @@
           </div>
         </article>
         <article class="card section-card">
-          ${sectionHeader('▤','27 abas do relatório','Estrutura completa para operação, gestão, análise e auditoria.')}
+          ${sectionHeader('▤','30 abas do relatório','Estrutura completa para operação, gestão, análise e auditoria.')}
           <div class="stat-list">
-            ${['RESUMO_EXECUTIVO','RESUMO_DIARIO','COMPARATIVO','DIAS_SEMANA','HORARIOS_PICO','TAXAS_PDV','STATUS','RANKING_OPERACIONAL','METODOLOGIA','ENTREGAS','CONTATOS_CLIENTES','CLIENTES','CAIXAS_PDV','OCORRENCIAS','QUALIDADE_DADOS','INCONSISTENCIAS','PREVISAO_AGENDA','CUSTOS','CICLOS','ODOMETRO_DIARIO','VEICULOS','COLABORADORES','BAIRROS','PROGRAMADAS','PENDENCIAS','FECHAMENTOS_DIA','HISTORICO'].map(name=>statRow(name,'Incluída','Gerada automaticamente')).join('')}
+            ${['RESUMO_EXECUTIVO','RESUMO_DIARIO','SLA_PRAZOS','FLUXO_OPERACIONAL','RESUMO_MENSAL','COMPARATIVO','DIAS_SEMANA','HORARIOS_PICO','TAXAS_PDV','STATUS','RANKING_OPERACIONAL','METODOLOGIA','ENTREGAS','CONTATOS_CLIENTES','CLIENTES','CAIXAS_PDV','OCORRENCIAS','QUALIDADE_DADOS','INCONSISTENCIAS','PREVISAO_AGENDA','CUSTOS','CICLOS','ODOMETRO_DIARIO','VEICULOS','COLABORADORES','BAIRROS','PROGRAMADAS','PENDENCIAS','FECHAMENTOS_DIA','HISTORICO'].map(name=>statRow(name,'Incluída','Gerada automaticamente')).join('')}
           </div>
         </article>
       </section>
@@ -2841,6 +2874,46 @@
     return `<div style="height:100%;display:flex;flex-direction:column"><div style="display:flex;gap:14px;font-size:9px;color:#71808C;margin-bottom:8px"><span><i style="display:inline-block;width:9px;height:9px;background:#2E73B9;border-radius:3px"></i> ${esc(labelA)}</span><span><i style="display:inline-block;width:9px;height:9px;background:#D95C5C;border-radius:3px"></i> ${esc(labelB)}</span></div><div style="display:flex;align-items:flex-end;gap:10px;flex:1;border-bottom:1px solid #E5ECEF;padding:6px 4px 0">${data.map(row=>`<div style="flex:1;min-width:42px;display:flex;align-items:flex-end;justify-content:center;gap:4px;height:100%;position:relative"><div title="${labelA}: ${money(row.a)}" style="width:30%;height:${clamp(row.a/max*100,1,100)}%;background:#2E73B9;border-radius:5px 5px 0 0"></div><div title="${labelB}: ${money(row.b)}" style="width:30%;height:${clamp(row.b/max*100,1,100)}%;background:#D95C5C;border-radius:5px 5px 0 0"></div><span style="position:absolute;bottom:-19px;font-size:8px;color:#7A8C98;white-space:nowrap">${esc(row.label)}</span></div>`).join('')}</div><div style="height:22px"></div></div>`;
   }
 
+  function slaPerformanceChartHTML(rows) {
+    if(!rows.some(row=>row.total)) return emptyState('◷','Prazos ainda não calculáveis','Informe os horários de compra, saída e finalização para gerar os percentuais.');
+    return `<div class="sla-chart">${rows.map(row=>{
+      const withinPct=percentage(row.within,row.total),outsidePct=percentage(row.outside,row.total);
+      const tone=row.rate>=90?'good':row.rate>=75?'attention':'critical';
+      return `<div class="sla-chart-row ${tone}">
+        <div class="sla-chart-head"><div><strong>${esc(row.label)}</strong><small>${esc(row.limit)} • ${row.total} registro(s) calculável(is)</small></div><b>${percent(row.rate)}</b></div>
+        <div class="sla-chart-track"><span class="within" style="width:${clamp(withinPct,0,100)}%" title="Dentro do padrão: ${row.within}"></span><span class="outside" style="width:${clamp(outsidePct,0,100)}%" title="Fora do padrão: ${row.outside}"></span></div>
+        <div class="sla-chart-legend"><span><i class="within"></i>${row.within} dentro</span><span><i class="outside"></i>${row.outside} fora</span></div>
+      </div>`;
+    }).join('')}</div>`;
+  }
+
+  function operationalFlowChartHTML(rows,waitingDeparture=0) {
+    const max=Math.max(...rows.map(row=>Number(row.value||0)),1);
+    if(!rows.some(row=>row.value)) return emptyState('⇢','Sem fluxo no período','Registre compras e movimentações para visualizar a conversão operacional.');
+    return `<div class="flow-chart">${rows.map((row,index)=>{
+      const rate=index===0?100:percentage(row.value,rows[0].value);
+      return `<div class="flow-stage"><div class="flow-copy"><span>${index+1}</span><div><strong>${esc(row.label)}</strong><small>${index===0?'Base do período':`${percent(rate)} das compras`}</small></div><b>${number(row.value)}</b></div><div class="flow-track"><i style="width:${clamp(Number(row.value||0)/max*100,0,100)}%"></i></div></div>`;
+    }).join('')}<div class="flow-alert ${waitingDeparture?'attention':'ok'}"><span>${waitingDeparture?'!':'✓'}</span><div><strong>${waitingDeparture} aguardando saída</strong><small>${waitingDeparture?'Precisam de movimentação operacional.':'Nenhuma compra parada aguardando saída.'}</small></div></div></div>`;
+  }
+
+  function statusDistributionChartHTML(rows) {
+    if(!rows.length) return emptyState('◉','Sem status no período','Os registros aparecerão aqui automaticamente.');
+    const total=sum(rows.map(row=>row.value));
+    const colors=['#F2B523','#5DA579','#56A6D8','#D06B70','#8D7BD0','#7FA2B4','#B4C1C7','#D19655'];
+    let offset=0;
+    const segments=rows.map((row,index)=>{const share=percentage(row.value,total),start=offset;offset+=share;return `${colors[index%colors.length]} ${start}% ${offset}%`;});
+    return `<div class="dashboard-donut"><div class="dashboard-donut-ring" style="background:conic-gradient(${segments.join(',')})"><div><strong>${number(total)}</strong><small>registros</small></div></div><div class="dashboard-donut-legend">${rows.map((row,index)=>`<div><span><i style="background:${colors[index%colors.length]}"></i>${esc(row.label)}</span><strong>${row.value} <small>${percent(percentage(row.value,total))}</small></strong></div>`).join('')}</div></div>`;
+  }
+
+  function dashboardCostChartHTML(rows) {
+    if(!rows.length) return emptyState('R$','Sem custos no período','Registre custos para visualizar a distribuição por categoria.');
+    const total=sum(rows.map(row=>row.value));
+    const colors=['#F2B523','#56A6D8','#D06B70','#5DA579','#8D7BD0','#D19655','#7FA2B4'];
+    let offset=0;
+    const segments=rows.map((row,index)=>{const share=percentage(row.value,total),start=offset;offset+=share;return `${colors[index%colors.length]} ${start}% ${offset}%`;});
+    return `<div class="dashboard-donut"><div class="dashboard-donut-ring" style="background:conic-gradient(${segments.join(',')})"><div><strong>${money(total)}</strong><small>custos</small></div></div><div class="dashboard-donut-legend">${rows.slice(0,7).map((row,index)=>`<div><span><i style="background:${colors[index%colors.length]}"></i>${esc(row.label)}</span><strong>${money(row.value)} <small>${percent(percentage(row.value,total))}</small></strong></div>`).join('')}</div></div>`;
+  }
+
   function donutChartHTML(rows) {
     if(!rows.length) return emptyState('◉','Sem custos no período','Registre custos para visualizar a distribuição.');
     const total=sum(rows.map(r=>r.value));
@@ -2858,6 +2931,16 @@
 
   function percentage(part,total) { return total ? Number(part || 0) / total * 100 : 0; }
   function variationPercent(current,previous) { return Number(previous) ? (Number(current || 0) - Number(previous)) / Math.abs(Number(previous)) * 100 : ''; }
+  function formattedReportValue(label,value,digits=1) {
+    if(value==='' || value===null || value===undefined) return '—';
+    if(typeof value!=='number' || !Number.isFinite(value)) return esc(value);
+    const normalized=String(label||'').toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    if(/%|percentual/.test(normalized)) return percent(value,digits);
+    if(/r\$|faturamento|reembols|receita|custos?$|saldo|^valor$|taxa cobrada|taxa registrada|taxa media|taxas vinculadas|custo por/.test(normalized)) return money(value);
+    if(/\bmin\b|em minutos|tempo min/.test(normalized)) return fmtMinutes(value);
+    if(/\bkm\b|quilometragem/.test(normalized)) return `${number(value,1)} km`;
+    return number(value,Number.isInteger(value)?0:digits);
+  }
   function reportDate(value) {
     const date=new Date(`${value}T12:00:00`);
     return Number.isNaN(date.getTime()) ? null : date;
@@ -2914,13 +2997,14 @@
     const routes=deliveries.map(d=>deliveryCalc(d).route).filter(v=>v!==null);
     const delayed=deliveries.filter(d=>deliveryCalc(d).delayed).length;
     const completionDelayed=deliveries.filter(d=>deliveryCalc(d).completionDelayed).length;
+    const departureWithin=waits.length-delayed,completionWithin=purchaseToClients.length-completionDelayed;
     const problems=roots.filter(root=>rootHadProblem(root,deliveries)).length;
     const financial=financialsForRange(range);
     return {
       purchases:roots.length,records:deliveries.length,finalized:final.length,
       firstAttempt:roots.filter(root=>root.status==='Finalizada').length,
       firstAttemptRate:percentage(roots.filter(root=>root.status==='Finalizada').length,roots.length),
-      delayed,delayRate:percentage(delayed,waits.length),completionDelayed,completionDelayRate:percentage(completionDelayed,purchaseToClients.length),problems,problemRate:percentage(problems,roots.length),
+      departureCalculable:waits.length,departureWithin,departureComplianceRate:percentage(departureWithin,waits.length),delayed,delayRate:percentage(delayed,waits.length),completionCalculable:purchaseToClients.length,completionWithin,completionComplianceRate:percentage(completionWithin,purchaseToClients.length),completionDelayed,completionDelayRate:percentage(completionDelayed,purchaseToClients.length),problems,problemRate:percentage(problems,roots.length),
       avgWait:avg(waits),avgPurchaseToClient:avg(purchaseToClients),avgRoute:avg(routes),gross:financial.gross,refunds:financial.refundTotal,net:financial.net,
       costs:sum(costs.map(c=>c.value)),km:totalKmFromOdometers(odometers)
     };
@@ -2935,7 +3019,7 @@
     const closures=scoped(state.dayClosures || []).filter(c=>inRange(c.date,range));
     const current=periodMetrics(range), previousRange=previousReportRange(range), previous=previousRange?periodMetrics(previousRange):null;
     const comparisonDefinitions=[
-      ['Compras originais','purchases'],['Entregas finalizadas','finalized'],['Sucesso na primeira tentativa %','firstAttemptRate'],['Saídas fora do padrão de 2h','delayed'],['Taxa de saída fora do padrão %','delayRate'],['Entregas fora do padrão de 3h30','completionDelayed'],['Taxa de entrega fora do padrão %','completionDelayRate'],['Taxa de problemas %','problemRate'],['Compra → saída média min','avgWait'],['Compra → cliente média min','avgPurchaseToClient'],['Rota média min','avgRoute'],['Faturamento bruto','gross'],['Reembolsos','refunds'],['Faturamento líquido','net'],['Custos','costs'],['KM total','km']
+      ['Compras originais','purchases'],['Entregas finalizadas','finalized'],['Sucesso na primeira tentativa %','firstAttemptRate'],['Cumprimento compra → saída %','departureComplianceRate'],['Saídas fora do padrão de 2h','delayed'],['Taxa de saída fora do padrão %','delayRate'],['Cumprimento compra → cliente %','completionComplianceRate'],['Entregas fora do padrão de 3h30','completionDelayed'],['Taxa de entrega fora do padrão %','completionDelayRate'],['Taxa de problemas %','problemRate'],['Compra → saída média min','avgWait'],['Compra → cliente média min','avgPurchaseToClient'],['Rota média min','avgRoute'],['Faturamento bruto','gross'],['Reembolsos','refunds'],['Faturamento líquido','net'],['Custos','costs'],['KM total','km']
     ];
     const comparisonRows=[['Indicador','Período atual',previousRange?`Período anterior (${previousRange.label})`:'Sem período anterior','Diferença','Variação %'],...comparisonDefinitions.map(([label,key])=>[label,current[key],previous?.[key]??'',previous?current[key]-previous[key]:'',previous?variationPercent(current[key],previous[key]):''])];
 
@@ -2943,6 +3027,23 @@
     const dailyRows=[['Data','Dia da semana','Compras','Registros','Finalizadas','Na loja','Em rota','Programadas','Reagendadas','Devolvidas','Retiradas','Canceladas','Saída > 2h','Entrega > 3h30','Sucesso 1ª tentativa %','Taxa saída fora do padrão %','Taxa entrega fora do padrão %','Faturamento bruto','Reembolsos','Faturamento líquido','Custos','Saldo','Ciclos','KM','Compra → saída média min','Loja → cliente média min','Compra → cliente média min','Rota média min','Clientes identificados','Telefones informados','Identificação completa %'],...reportDates.map(date=>{
       const dayDeliveries=deliveries.filter(d=>d.date===date),dayRoots=dayDeliveries.filter(isRootPurchase),dayCosts=sum(costs.filter(c=>c.date===date).map(c=>c.value)),gross=sum(dayRoots.map(d=>d.fee)),refunds=sum(dayRoots.map(d=>d.refundAmount)),delayed=dayDeliveries.filter(d=>deliveryCalc(d).delayed).length,completionDelayed=dayDeliveries.filter(d=>deliveryCalc(d).completionDelayed).length,waits=dayDeliveries.map(d=>deliveryCalc(d).wait).filter(v=>v!==null),purchaseToClients=dayDeliveries.map(d=>deliveryCalc(d).purchaseToClient).filter(v=>v!==null),dateObj=reportDate(date),complete=dayRoots.filter(d=>d.coupon&&d.docNo&&d.cashierNo&&d.neighborhoodId&&d.purchaseTime).length;
       return [date,dateObj?['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'][dateObj.getDay()]:'',dayRoots.length,dayDeliveries.length,dayDeliveries.filter(d=>d.status==='Finalizada').length,dayDeliveries.filter(d=>d.status==='Na loja').length,dayDeliveries.filter(d=>d.status==='Em rota').length,dayDeliveries.filter(d=>d.status==='Programada').length,dayDeliveries.filter(d=>d.status==='Reagendada').length,dayDeliveries.filter(d=>d.status==='Devolvida').length,dayDeliveries.filter(d=>d.status==='Retirada na loja').length,dayDeliveries.filter(d=>d.status==='Cancelada').length,delayed,completionDelayed,percentage(dayRoots.filter(d=>d.status==='Finalizada').length,dayRoots.length),percentage(delayed,waits.length),percentage(completionDelayed,purchaseToClients.length),gross,refunds,gross-refunds,dayCosts,gross-refunds-dayCosts,cycles.filter(c=>c.date===date).length,totalKmFromOdometers(odometers.filter(o=>o.date===date)),avg(waits),avg(dayDeliveries.map(d=>deliveryCalc(d).toClient)),avg(purchaseToClients),avg(dayDeliveries.map(d=>deliveryCalc(d).route)),dayRoots.filter(d=>d.customerName||d.customerPhone).length,dayRoots.filter(d=>d.customerPhone).length,percentage(complete,dayRoots.length)];
+    })];
+
+    const deliveryDates=unique(deliveries.map(d=>d.date).filter(Boolean)).sort();
+    const slaRows=[['Data','Registros com saída calculável','Saídas dentro de 2h','Saídas acima de 2h','Cumprimento saída %','Compra → saída média min','Entregas calculáveis','Entregas dentro de 3h30','Entregas acima de 3h30','Cumprimento entrega %','Compra → cliente média min'],...deliveryDates.map(date=>{
+      const rows=deliveries.filter(d=>d.date===date),waits=rows.map(d=>deliveryCalc(d).wait).filter(v=>v!==null),totals=rows.map(d=>deliveryCalc(d).purchaseToClient).filter(v=>v!==null),departureOutside=rows.filter(d=>deliveryCalc(d).delayed).length,completionOutside=rows.filter(d=>deliveryCalc(d).completionDelayed).length;
+      return [date,waits.length,waits.length-departureOutside,departureOutside,percentage(waits.length-departureOutside,waits.length),avg(waits),totals.length,totals.length-completionOutside,completionOutside,percentage(totals.length-completionOutside,totals.length),avg(totals)];
+    })];
+
+    const flowRows=[['Data','Compras originais','Registros','Com saída registrada','Aguardando saída','Finalizadas no cliente','Em rota','Programadas abertas','Taxa de finalização %'],...deliveryDates.map(date=>{
+      const rows=deliveries.filter(d=>d.date===date),dayRoots=rows.filter(isRootPurchase),finalizedPurchases=dayRoots.filter(root=>rootWasFinalized(root,deliveries)).length;
+      return [date,dayRoots.length,rows.length,rows.filter(d=>d.departureTime).length,rows.filter(d=>!d.departureTime&&!isFinal(d)&&!openScheduled(d)).length,finalizedPurchases,rows.filter(d=>d.status==='Em rota').length,rows.filter(openScheduled).length,percentage(finalizedPurchases,dayRoots.length)];
+    })];
+
+    const reportMonths=unique([...deliveries.map(d=>String(d.date||'').slice(0,7)),...roots.map(d=>String(d.refundDate||'').slice(0,7)),...costs.map(c=>String(c.date||'').slice(0,7)),...cycles.map(c=>String(c.date||'').slice(0,7)),...odometers.map(o=>String(o.date||'').slice(0,7))].filter(value=>/^\d{4}-\d{2}$/.test(value))).sort();
+    const monthlyRows=[['Mês','Compras','Registros','Finalizadas','Taxa de finalização %','Saídas dentro de 2h %','Entregas dentro de 3h30 %','Compra → saída média min','Compra → cliente média min','Faturamento bruto','Reembolsos','Faturamento líquido','Custos','Saldo','KM'],...reportMonths.map(month=>{
+      const [year,monthNo]=month.split('-').map(Number),lastDay=new Date(year,monthNo,0).getDate(),monthRange={start:[range.start,`${month}-01`].sort().at(-1),end:[range.end,`${month}-${String(lastDay).padStart(2,'0')}`].sort()[0]},rows=deliveries.filter(d=>inRange(d.date,monthRange)),monthRoots=rows.filter(isRootPurchase),monthFinalized=monthRoots.filter(root=>rootWasFinalized(root,deliveries)).length,waits=rows.map(d=>deliveryCalc(d).wait).filter(v=>v!==null),totals=rows.map(d=>deliveryCalc(d).purchaseToClient).filter(v=>v!==null),monthFinancial=financialsForRange(monthRange),monthCosts=sum(costs.filter(c=>inRange(c.date,monthRange)).map(c=>c.value));
+      return [`${String(monthNo).padStart(2,'0')}/${year}`,monthRoots.length,rows.length,monthFinalized,percentage(monthFinalized,monthRoots.length),percentage(waits.filter(value=>value<=Number(state.settings.delayMinutes||120)).length,waits.length),percentage(totals.filter(value=>value<=Number(state.settings.completionLimitMinutes||210)).length,totals.length),avg(waits),avg(totals),monthFinancial.gross,monthFinancial.refundTotal,monthFinancial.net,monthCosts,monthFinancial.net-monthCosts,totalKmFromOdometers(odometers.filter(o=>inRange(o.date,monthRange)))];
     })];
 
     const feeGroups=groupItems(roots,root=>Number(root.fee||0).toFixed(2));
@@ -3040,7 +3141,7 @@
     addRanking('Caixa PDV',groupItems(roots.filter(d=>d.cashierNo),d=>d.cashierNo),id=>`Caixa ${id}`);
     rankingRows.splice(1,rankingRows.length-1,...rankingRows.slice(1).sort((a,b)=>b[11]-a[11]||b[3]-a[3]));
 
-    return {deliveries,roots,costs,cycles,odometers,closures,current,previousRange,comparisonRows,dailyRows,dayRows,hourRows,feeRows,methodologyRows,cashierRows,customerRows,occurrenceRows,qualityRows,inconsistencyRows,forecastRows,rankingRows};
+    return {deliveries,roots,costs,cycles,odometers,closures,current,previousRange,comparisonRows,dailyRows,slaRows,flowRows,monthlyRows,dayRows,hourRows,feeRows,methodologyRows,cashierRows,customerRows,occurrenceRows,qualityRows,inconsistencyRows,forecastRows,rankingRows};
   }
 
   /* Excel-compatible SpreadsheetML 2003 export. Works offline and supports multiple worksheets. */
@@ -3048,7 +3149,7 @@
     const r=reportRangeFromForm();
     if(!r.start || !r.end){toast('Informe o período do relatório.','warning');return;}
     const analytics=buildReportAnalytics(r);
-    const {deliveries,roots,costs,cycles,odometers,closures,current,comparisonRows,dailyRows,dayRows,hourRows,feeRows,methodologyRows,cashierRows,customerRows,occurrenceRows,qualityRows,inconsistencyRows,forecastRows,rankingRows}=analytics;
+    const {deliveries,roots,costs,cycles,odometers,closures,current,comparisonRows,dailyRows,slaRows,flowRows,monthlyRows,dayRows,hourRows,feeRows,methodologyRows,cashierRows,customerRows,occurrenceRows,qualityRows,inconsistencyRows,forecastRows,rankingRows}=analytics;
     const final=deliveries.filter(d=>d.status==='Finalizada');
     const totalCosts=current.costs;
     const fin={gross:current.gross,refundTotal:current.refunds,net:current.net};
@@ -3077,8 +3178,10 @@
         ['Devolvidas',deliveries.filter(d=>d.status==='Devolvida').length],
         ['Retiradas na loja',deliveries.filter(d=>d.status==='Retirada na loja').length],
         ['Saídas fora do padrão de 2h',current.delayed],
+        ['Cumprimento compra até saída %',current.departureComplianceRate],
         ['Taxa de saída fora do padrão %',current.delayRate],
         ['Entregas fora do padrão de 3h30',current.completionDelayed],
+        ['Cumprimento compra até cliente %',current.completionComplianceRate],
         ['Taxa de entrega fora do padrão %',current.completionDelayRate],
         ['Sucesso na primeira tentativa %',current.firstAttemptRate],
         ['Taxa de problemas %',current.problemRate],
@@ -3109,6 +3212,9 @@
         ['Dias encerrados',closures.length]
       ],
       RESUMO_DIARIO:dailyRows,
+      SLA_PRAZOS:slaRows,
+      FLUXO_OPERACIONAL:flowRows,
+      RESUMO_MENSAL:monthlyRows,
       COMPARATIVO:comparisonRows,
       DIAS_SEMANA:dayRows,
       HORARIOS_PICO:hourRows,
@@ -3158,16 +3264,41 @@
   function buildSpreadsheetML(sheets) {
     const xmlEsc=v=>String(v??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
     const dataType=v=>typeof v==='number'&&Number.isFinite(v)?'Number':'String';
-    const styles='<Styles><Style ss:ID="Default" ss:Name="Normal"><Alignment ss:Vertical="Center"/><Font ss:FontName="Calibri" ss:Size="10"/></Style><Style ss:ID="Header"><Alignment ss:Horizontal="Center" ss:Vertical="Center" ss:WrapText="1"/><Font ss:FontName="Calibri" ss:Size="10" ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#173B5B" ss:Pattern="Solid"/></Style><Style ss:ID="Number"><Alignment ss:Vertical="Center"/><NumberFormat ss:Format="0.00"/></Style></Styles>';
+    const normalizedLabel=value=>String(value??'').toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    const cellFormat=(headers,row,rowIndex,columnIndex,value)=>{
+      if(rowIndex===0) return {style:'Header',value,type:'String'};
+      if(dataType(value)!=='Number') return {style:'Default',value,type:'String'};
+      const rawLabel=headers[0]==='Indicador'&&columnIndex===1?row[0]:headers[columnIndex];
+      const label=normalizedLabel(rawLabel);
+      if(/%|percentual/.test(label)) return {style:'Percent',value:Number(value)/100,type:'Number'};
+      if(/r\$|faturamento|reembols|receita|custos?$|saldo|^valor$|taxa cobrada|taxa registrada|taxa media|taxas vinculadas|custo por/.test(label)) return {style:'Currency',value,type:'Number'};
+      if(/saldo do prazo/.test(label)) return {style:'Minutes',value,type:'Number'};
+      if(/\bmin\b|em minutos|tempo min/.test(label)) return {style:'Duration',value:Number(value)/1440,type:'Number'};
+      if(/\bkm\b|quilometragem/.test(label)) return {style:'Km',value,type:'Number'};
+      return {style:Number.isInteger(Number(value))?'Integer':'Number',value,type:'Number'};
+    };
+    const styles=`<Styles>
+      <Style ss:ID="Default" ss:Name="Normal"><Alignment ss:Vertical="Center" ss:WrapText="1"/><Font ss:FontName="Calibri" ss:Size="10"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#DDE5EA"/></Borders></Style>
+      <Style ss:ID="Header"><Alignment ss:Horizontal="Center" ss:Vertical="Center" ss:WrapText="1"/><Font ss:FontName="Calibri" ss:Size="10" ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#173B5B" ss:Pattern="Solid"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="2" ss:Color="#F2B523"/></Borders></Style>
+      <Style ss:ID="Integer"><Alignment ss:Vertical="Center"/><NumberFormat ss:Format="0"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#DDE5EA"/></Borders></Style>
+      <Style ss:ID="Number"><Alignment ss:Vertical="Center"/><NumberFormat ss:Format="0.00"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#DDE5EA"/></Borders></Style>
+      <Style ss:ID="Currency"><Alignment ss:Vertical="Center"/><NumberFormat ss:Format="&quot;R$&quot; #,##0.00;[Red]-&quot;R$&quot; #,##0.00"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#DDE5EA"/></Borders></Style>
+      <Style ss:ID="Percent"><Alignment ss:Vertical="Center"/><NumberFormat ss:Format="0.0%"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#DDE5EA"/></Borders></Style>
+      <Style ss:ID="Duration"><Alignment ss:Vertical="Center"/><NumberFormat ss:Format="[h]&quot;h &quot;mm&quot;min&quot;"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#DDE5EA"/></Borders></Style>
+      <Style ss:ID="Minutes"><Alignment ss:Vertical="Center"/><NumberFormat ss:Format="0 &quot;min&quot;"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#DDE5EA"/></Borders></Style>
+      <Style ss:ID="Km"><Alignment ss:Vertical="Center"/><NumberFormat ss:Format="0.00 &quot;km&quot;"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#DDE5EA"/></Borders></Style>
+    </Styles>`;
     const sheetXml=Object.entries(sheets).map(([name,rows])=>{
       const maxColumns=Math.max(...rows.map(row=>row.length),1);
+      const headers=rows[0]||[];
       const columns=Array.from({length:maxColumns},(_,index)=>{
         const longest=Math.max(...rows.map(row=>String(row[index]??'').length),8);
         return `<Column ss:AutoFitWidth="0" ss:Width="${Math.min(Math.max(longest*5.6,58),210)}"/>`;
       }).join('');
-      const body=rows.map((row,rowIndex)=>`<Row ss:AutoFitHeight="1">${row.map(value=>`<Cell ss:StyleID="${rowIndex===0?'Header':dataType(value)==='Number'?'Number':'Default'}"><Data ss:Type="${dataType(value)}">${xmlEsc(value)}</Data></Cell>`).join('')}</Row>`).join('');
+      const body=rows.map((row,rowIndex)=>`<Row ss:AutoFitHeight="1">${row.map((value,columnIndex)=>{const formatted=cellFormat(headers,row,rowIndex,columnIndex,value);return `<Cell ss:StyleID="${formatted.style}"><Data ss:Type="${formatted.type}">${xmlEsc(formatted.value)}</Data></Cell>`;}).join('')}</Row>`).join('');
       const options='<WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel"><FreezePanes/><FrozenNoSplit/><SplitHorizontal>1</SplitHorizontal><TopRowBottomPane>1</TopRowBottomPane><ActivePane>2</ActivePane><ProtectObjects>False</ProtectObjects><ProtectScenarios>False</ProtectScenarios></WorksheetOptions>';
-      return `<Worksheet ss:Name="${xmlEsc(name.slice(0,31))}"><Table>${columns}${body}</Table>${options}</Worksheet>`;
+      const autoFilter=rows.length>1?`<AutoFilter x:Range="R1C1:R${rows.length}C${maxColumns}" xmlns="urn:schemas-microsoft-com:office:excel"/>`:'';
+      return `<Worksheet ss:Name="${xmlEsc(name.slice(0,31))}"><Table>${columns}${body}</Table>${options}${autoFilter}</Worksheet>`;
     }).join('');
     return `<?xml version="1.0"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">${styles}${sheetXml}</Workbook>`;
   }
@@ -3175,28 +3306,32 @@
   function printReport() {
     const r=reportRangeFromForm();
     const analytics=buildReportAnalytics(r);
-    const {deliveries,roots,costs,odometers,current,comparisonRows,dayRows,hourRows,customerRows,qualityRows,rankingRows}=analytics;
+    const {deliveries,roots,costs,odometers,current,comparisonRows,monthlyRows,dayRows,hourRows,customerRows,qualityRows,rankingRows}=analytics;
     const final=deliveries.filter(d=>d.status==='Finalizada');
     const fin=financialsForRange(r);
     const nb=buildNeighborhoodRows(deliveries).slice(0,10);
     const peakDay=dayRows.slice(1).sort((a,b)=>b[1]-a[1])[0],peakHour=hourRows.slice(1).sort((a,b)=>b[1]-a[1])[0];
     const recurringCustomers=customerRows.slice(1).filter(row=>row[3]==='SIM').length;
     const completeIdentification=roots.filter(d=>d.coupon&&d.docNo&&d.cashierNo&&d.neighborhoodId&&d.purchaseTime).length;
-    const html=`<!doctype html><html><head><meta charset="utf-8"><title>Relatório completo</title><style>@page{size:landscape;margin:10mm}body{font-family:Arial,sans-serif;color:#233743;padding:18px}h1{color:#173A5E;margin-bottom:4px}h2{color:#29495c;margin:24px 0 8px}p{margin-top:0}table{border-collapse:collapse;width:100%;margin-top:8px;page-break-inside:auto}tr{page-break-inside:avoid}th,td{border:1px solid #dfe7ec;padding:5px;font-size:9px;text-align:left;vertical-align:top}th{background:#eaf0f4}.cards{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}.c{border:1px solid #dfe7ec;border-radius:8px;padding:9px}.c small{color:#71808c}.c strong{display:block;font-size:16px;margin-top:3px}.muted{color:#71808c}@media print{button{display:none}}</style></head><body>
+    const statusPrintRows=statusOptions.map(status=>({label:status,value:deliveries.filter(d=>d.status===status).length})).filter(row=>row.value),statusMax=Math.max(...statusPrintRows.map(row=>row.value),1);
+    const slaPrintRows=[{label:'Compra → saída',within:current.departureWithin,outside:current.delayed,total:current.departureCalculable,rate:current.departureComplianceRate,limit:fmtMinutes(Number(state.settings.delayMinutes||120))},{label:'Compra → cliente',within:current.completionWithin,outside:current.completionDelayed,total:current.completionCalculable,rate:current.completionComplianceRate,limit:fmtMinutes(Number(state.settings.completionLimitMinutes||210))}];
+    const html=`<!doctype html><html><head><meta charset="utf-8"><title>Relatório completo</title><style>@page{size:landscape;margin:10mm}body{font-family:Arial,sans-serif;color:#233743;padding:18px}h1{color:#173A5E;margin-bottom:4px}h2{color:#29495c;margin:24px 0 8px}p{margin-top:0}table{border-collapse:collapse;width:100%;margin-top:8px;page-break-inside:auto}tr{page-break-inside:avoid}th,td{border:1px solid #dfe7ec;padding:5px;font-size:9px;text-align:left;vertical-align:top}th{background:#173B5B;color:#fff}.cards{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}.c{border:1px solid #dfe7ec;border-radius:8px;padding:9px}.c small{color:#71808c}.c strong{display:block;font-size:16px;margin-top:3px}.muted{color:#71808c}.visual-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;page-break-inside:avoid}.visual-card{border:1px solid #dfe7ec;border-radius:10px;padding:12px}.visual-card h3{margin:0 0 10px;color:#173B5B;font-size:13px}.sla-item{margin-bottom:12px}.sla-head{display:flex;justify-content:space-between;gap:10px;font-size:10px;margin-bottom:5px}.sla-head span{color:#617582}.bar{height:13px;background:#e8eef2;border-radius:99px;overflow:hidden;display:flex}.bar .ok{background:#3E9363}.bar .bad{background:#C9575C}.legend{font-size:8px;color:#617582;margin-top:4px}.status-print{display:grid;gap:7px}.status-print>div{display:grid;grid-template-columns:100px 1fr 34px;gap:7px;align-items:center;font-size:9px}.status-print .track{height:10px;background:#e8eef2;border-radius:99px;overflow:hidden}.status-print i{height:100%;display:block;background:#E9AA1B;border-radius:99px}@media print{button{display:none}}</style></head><body>
       <h1>Controle de Entregas • Relatório completo</h1><p>${dateBR(r.start)} a ${dateBR(r.end)} • ${esc(modeLabel())} • V${APP_VERSION}</p>
       <div class="cards">
         <div class="c"><small>Compras</small><strong>${roots.length}</strong></div><div class="c"><small>Finalizadas</small><strong>${final.length}</strong></div><div class="c"><small>Em rota</small><strong>${deliveries.filter(d=>d.status==='Em rota').length}</strong></div><div class="c"><small>Programadas</small><strong>${deliveries.filter(openScheduled).length}</strong></div><div class="c"><small>Saída &gt; 2h</small><strong>${current.delayed}</strong></div>
-        <div class="c"><small>Faturamento bruto</small><strong>${money(fin.gross)}</strong></div><div class="c"><small>Reembolsos</small><strong>${money(fin.refundTotal)}</strong></div><div class="c"><small>Faturamento líquido</small><strong>${money(fin.net)}</strong></div><div class="c"><small>Custos</small><strong>${money(sum(costs.map(c=>c.value)))}</strong></div><div class="c"><small>KM total</small><strong>${number(totalKmFromOdometers(odometers),1)}</strong></div>
-        <div class="c"><small>Sucesso na 1ª tentativa</small><strong>${number(current.firstAttemptRate,1)}%</strong></div><div class="c"><small>Entrega &gt; 3h30</small><strong>${current.completionDelayed}</strong></div><div class="c"><small>Fora do padrão 3h30</small><strong>${number(current.completionDelayRate,1)}%</strong></div><div class="c"><small>Taxa de problemas</small><strong>${number(current.problemRate,1)}%</strong></div><div class="c"><small>Identificação completa</small><strong>${number(percentage(completeIdentification,roots.length),1)}%</strong></div><div class="c"><small>Clientes recorrentes</small><strong>${recurringCustomers}</strong></div>
+        <div class="c"><small>Faturamento bruto</small><strong>${money(fin.gross)}</strong></div><div class="c"><small>Reembolsos</small><strong>${money(fin.refundTotal)}</strong></div><div class="c"><small>Faturamento líquido</small><strong>${money(fin.net)}</strong></div><div class="c"><small>Custos</small><strong>${money(sum(costs.map(c=>c.value)))}</strong></div><div class="c"><small>KM total</small><strong>${number(totalKmFromOdometers(odometers),1)} km</strong></div>
+        <div class="c"><small>Sucesso na 1ª tentativa</small><strong>${percent(current.firstAttemptRate)}</strong></div><div class="c"><small>Entrega &gt; 3h30</small><strong>${current.completionDelayed}</strong></div><div class="c"><small>Fora do padrão 3h30</small><strong>${percent(current.completionDelayRate)}</strong></div><div class="c"><small>Taxa de problemas</small><strong>${percent(current.problemRate)}</strong></div><div class="c"><small>Identificação completa</small><strong>${percent(percentage(completeIdentification,roots.length))}</strong></div><div class="c"><small>Clientes recorrentes</small><strong>${recurringCustomers}</strong></div>
       </div>
-      <h2>Principais insights</h2><table><tr><th>Indicador</th><th>Resultado</th><th>Leitura operacional</th></tr><tr><td>Dia com mais compras</td><td>${esc(peakDay?.[0]||'Sem dados')}</td><td>${peakDay?`${peakDay[1]} compra(s) no período`:'Ainda não há base suficiente'}</td></tr><tr><td>Horário de pico</td><td>${esc(peakHour?.[0]||'Sem dados')}</td><td>${peakHour?`${peakHour[1]} compra(s) nessa faixa`:'Ainda não há base suficiente'}</td></tr><tr><td>Compra → saída média</td><td>${number(current.avgWait,1)} min</td><td>Padrão: até ${state.settings.delayMinutes} minutos corridos</td></tr><tr><td>Compra → cliente média</td><td>${number(current.avgPurchaseToClient,1)} min</td><td>Padrão: até ${state.settings.completionLimitMinutes || 210} minutos corridos</td></tr><tr><td>Entregas fora do padrão</td><td>${current.completionDelayed}</td><td>${number(current.completionDelayRate,1)}% das entregas com horários calculáveis</td></tr><tr><td>Rota média</td><td>${number(current.avgRoute,1)} min</td><td>Tempo entre saída e retorno à loja</td></tr></table>
-      <h2>Comparação com o período anterior</h2><table><thead><tr>${comparisonRows[0].map(value=>`<th>${esc(value)}</th>`).join('')}</tr></thead><tbody>${comparisonRows.slice(1).map(row=>`<tr><td>${esc(row[0])}</td><td>${typeof row[1]==='number'?number(row[1],1):esc(row[1])}</td><td>${typeof row[2]==='number'?number(row[2],1):esc(row[2])}</td><td>${typeof row[3]==='number'?number(row[3],1):esc(row[3])}</td><td>${typeof row[4]==='number'?`${number(row[4],1)}%`:esc(row[4])}</td></tr>`).join('')}</tbody></table>
-      <h2>Ranking operacional</h2><table><thead><tr>${rankingRows[0].map(value=>`<th>${esc(value)}</th>`).join('')}</tr></thead><tbody>${rankingRows.slice(1,16).map(row=>`<tr>${row.map((value,index)=>`<td>${typeof value==='number'?number(value,index===11?1:0):esc(value)}</td>`).join('')}</tr>`).join('')}</tbody></table>
+      <h2>Painel visual dos indicadores</h2><div class="visual-grid"><div class="visual-card"><h3>Cumprimento dos prazos</h3>${slaPrintRows.map(row=>`<div class="sla-item"><div class="sla-head"><strong>${row.label}</strong><span>${percent(row.rate)} dentro • limite ${row.limit}</span></div><div class="bar"><i class="ok" style="width:${percentage(row.within,row.total)}%"></i><i class="bad" style="width:${percentage(row.outside,row.total)}%"></i></div><div class="legend">${row.within} dentro do padrão • ${row.outside} fora • ${row.total} calculáveis</div></div>`).join('')}</div><div class="visual-card"><h3>Distribuição por status</h3><div class="status-print">${statusPrintRows.map(row=>`<div><span>${esc(row.label)}</span><div class="track"><i style="width:${row.value/statusMax*100}%"></i></div><strong>${row.value}</strong></div>`).join('')}</div></div></div>
+      <h2>Principais insights</h2><table><tr><th>Indicador</th><th>Resultado</th><th>Leitura operacional</th></tr><tr><td>Dia com mais compras</td><td>${esc(peakDay?.[0]||'Sem dados')}</td><td>${peakDay?`${peakDay[1]} compra(s) no período`:'Ainda não há base suficiente'}</td></tr><tr><td>Horário de pico</td><td>${esc(peakHour?.[0]||'Sem dados')}</td><td>${peakHour?`${peakHour[1]} compra(s) nessa faixa`:'Ainda não há base suficiente'}</td></tr><tr><td>Compra → saída média</td><td>${fmtMinutes(current.avgWait)}</td><td>Padrão: até ${fmtMinutes(Number(state.settings.delayMinutes||120))}</td></tr><tr><td>Cumprimento compra → saída</td><td>${percent(current.departureComplianceRate)}</td><td>${current.departureWithin} dentro de ${current.departureCalculable} calculáveis</td></tr><tr><td>Compra → cliente média</td><td>${fmtMinutes(current.avgPurchaseToClient)}</td><td>Padrão: até ${fmtMinutes(Number(state.settings.completionLimitMinutes||210))}</td></tr><tr><td>Cumprimento compra → cliente</td><td>${percent(current.completionComplianceRate)}</td><td>${current.completionWithin} dentro de ${current.completionCalculable} calculáveis</td></tr><tr><td>Rota média</td><td>${fmtMinutes(current.avgRoute)}</td><td>Tempo entre saída e retorno à loja</td></tr></table>
+      <h2>Comparação com o período anterior</h2><table><thead><tr>${comparisonRows[0].map(value=>`<th>${esc(value)}</th>`).join('')}</tr></thead><tbody>${comparisonRows.slice(1).map(row=>`<tr><td>${esc(row[0])}</td><td>${formattedReportValue(row[0],row[1])}</td><td>${formattedReportValue(row[0],row[2])}</td><td>${formattedReportValue(row[0],row[3])}</td><td>${typeof row[4]==='number'?percent(row[4]):esc(row[4]||'—')}</td></tr>`).join('')}</tbody></table>
+      <h2>Resumo mensal</h2><table><thead><tr>${monthlyRows[0].map(value=>`<th>${esc(value)}</th>`).join('')}</tr></thead><tbody>${monthlyRows.slice(1).map(row=>`<tr>${row.map((value,index)=>`<td>${formattedReportValue(monthlyRows[0][index],value)}</td>`).join('')}</tr>`).join('')}</tbody></table>
+      <h2>Ranking operacional</h2><table><thead><tr>${rankingRows[0].map(value=>`<th>${esc(value)}</th>`).join('')}</tr></thead><tbody>${rankingRows.slice(1,16).map(row=>`<tr>${row.map((value,index)=>`<td>${formattedReportValue(rankingRows[0][index],value)}</td>`).join('')}</tr>`).join('')}</tbody></table>
       <h2>Entregas e identificação das compras</h2>
       <table><thead><tr><th>Data</th><th>Compra</th><th>Nº do cupom</th><th>DOC</th><th>Caixa</th><th>Cliente / telefone</th><th>Bairro</th><th>Status</th><th>Entregador / veículo</th><th>Entrada / saída / finalização / retorno</th><th>Tempos e padrão</th><th>Taxa / reembolso</th><th>Programação / ocorrência</th></tr></thead><tbody>${deliveries.map(d=>{const calc=deliveryCalc(d),progress=completionProgress(d);return `<tr><td>${dateBR(d.date)}</td><td>${esc(d.orderNo||'—')}</td><td>${esc(d.coupon||'—')}</td><td>${esc(d.docNo||'—')}</td><td>${esc(d.cashierNo||'—')}</td><td>${esc(d.customerName||'—')}<br><span class="muted">${esc(d.customerPhone||'—')}</span></td><td>${esc(neighborhood(d.neighborhoodId)?.name||'—')}</td><td>${esc(d.status||'—')}</td><td>${esc(employee(d.driverId)?.name||'—')}<br><span class="muted">${esc(vehicle(d.vehicleId)?.name||'—')}</span></td><td>${d.purchaseTime||'—'} / ${d.departureTime||'—'} / ${d.finalizationTime||'—'} / ${d.returnTime||'—'}</td><td>Compra → saída: ${fmtMinutes(calc.wait)} (${calc.wait===null?'não calculável':calc.delayed?'fora':'OK'})<br>Compra → cliente: ${fmtMinutes(calc.purchaseToClient)} (${calc.purchaseToClient===null?'não calculável':calc.completionDelayed?'fora':'OK'})<br>Prazo agora: ${progress.balance===null?'não calculável':progress.balance>=0?`${fmtMinutes(progress.balance)} restantes`:`${fmtMinutes(Math.abs(progress.balance))} acima`}</td><td>${money(rootDelivery(d)?.fee||d.fee)} / ${money(rootDelivery(d)?.refundAmount||0)}</td><td>${d.scheduledDate?`${dateBR(d.scheduledDate)} • ${esc(d.scheduleKind||'Programada')}`:'—'}<br><span class="muted">${esc(reason(d.reasonId)?.name||d.reasonText||d.nextAction||'')}</span></td></tr>`}).join('')}</tbody></table>
-      <h2>Análise por bairro</h2><table><tr><th>Bairro</th><th>Entregas</th><th>Faturamento</th><th>Endereço errado</th><th>Agendadas</th><th>Reagendadas</th><th>Devoluções</th><th>Atrasadas</th><th>Taxa de problemas</th></tr>${nb.map(row=>`<tr><td>${esc(row.name)}</td><td>${row.deliveries}</td><td>${money(row.revenue)}</td><td>${row.wrongAddress}</td><td>${row.scheduled}</td><td>${row.rescheduled}</td><td>${row.devolutions}</td><td>${row.delayed}</td><td>${number(row.problemRate,1)}%</td></tr>`).join('')}</table>
-      <h2>Qualidade dos dados</h2><table><thead><tr>${qualityRows[0].map(value=>`<th>${esc(value)}</th>`).join('')}</tr></thead><tbody>${qualityRows.slice(1).map(row=>`<tr>${row.map((value,index)=>`<td>${typeof value==='number'?number(value,index===4?1:0):esc(value)}</td>`).join('')}</tr>`).join('')}</tbody></table>
-      <p class="muted" style="margin-top:16px">O arquivo Excel contém 27 abas com resumo diário, distribuição das taxas do PDV, metodologia dos indicadores, dados completos, comparação, horários, rankings, caixas, clientes, ocorrências, qualidade, inconsistências, previsão da agenda, custos, ciclos, KM, equipe, bairros, pendências, fechamentos e histórico.</p><script>window.onload=()=>window.print()<\/script></body></html>`;
+      <h2>Análise por bairro</h2><table><tr><th>Bairro</th><th>Entregas</th><th>Faturamento</th><th>Endereço errado</th><th>Agendadas</th><th>Reagendadas</th><th>Devoluções</th><th>Saída &gt; 2h</th><th>Taxa de problemas</th></tr>${nb.map(row=>`<tr><td>${esc(row.name)}</td><td>${row.deliveries}</td><td>${money(row.revenue)}</td><td>${row.wrongAddress}</td><td>${row.scheduled}</td><td>${row.rescheduled}</td><td>${row.devolutions}</td><td>${row.delayed}</td><td>${percent(row.problemRate)}</td></tr>`).join('')}</table>
+      <h2>Qualidade dos dados</h2><table><thead><tr>${qualityRows[0].map(value=>`<th>${esc(value)}</th>`).join('')}</tr></thead><tbody>${qualityRows.slice(1).map(row=>`<tr>${row.map((value,index)=>`<td>${formattedReportValue(qualityRows[0][index],value)}</td>`).join('')}</tr>`).join('')}</tbody></table>
+      <p class="muted" style="margin-top:16px">O arquivo Excel contém 30 abas, incluindo SLA dos prazos, fluxo operacional, resumo mensal, resumo diário, metodologia, dados completos, comparação, rankings, caixas, clientes, ocorrências, qualidade, financeiro, custos, ciclos, KM, equipe, bairros, pendências e histórico.</p><script>window.onload=()=>window.print()<\/script></body></html>`;
     const w=window.open('','_blank');w.document.write(html);w.document.close();
   }
 

@@ -1,6 +1,16 @@
-# Controle de Entregas • Nilo Supermercado — V14.3.8
+# Controle de Entregas • Nilo Supermercado — V14.4.0
 
 Versão focada em **segurança dos dados, confiabilidade dos indicadores e acessibilidade**, mantendo os ciclos automáticos e todas as melhorias operacionais da V13.
+
+## Novidades da V14.4
+
+- Dashboard gerencial ampliado com indicadores financeiros, operacionais, SLA e produtividade, mantendo o tema e a estrutura conhecidos pela equipe.
+- Novos gráficos de cumprimento dos prazos, fluxo compra → saída → finalização, distribuição por status, custos por categoria, evolução diária, faturamento x custos e bairros.
+- Valores aparecem com unidades consistentes: moeda em **R$**, percentuais em **%**, duração em **h e min** e distância em **km**.
+- O Excel passou para **30 abas**, acrescentando `SLA_PRAZOS`, `FLUXO_OPERACIONAL` e `RESUMO_MENSAL`.
+- As células do Excel continuam numéricas e agora recebem formatos próprios de moeda brasileira, porcentagem, duração, minutos e quilômetros, permitindo filtros, fórmulas e novas análises.
+- Impressão/PDF ganhou painel visual de prazos, gráfico por status, resumo mensal e formatação contextual dos indicadores.
+- Nenhum dado de entrega é convertido ou removido: os novos painéis e relatórios são calculados sobre os registros já existentes.
 
 ## Novidades da V14.3
 

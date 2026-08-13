@@ -1,9 +1,9 @@
-const CACHE_NAME = 'controle-entregas-v14-3-8-prazos-entrega';
+const CACHE_NAME = 'controle-entregas-v14-4-0-dashboard-relatorios';
 const APP_SHELL = [
   './',
   './index.html',
-  './styles.css?v=14.3.8',
-  './app.js?v=14.3.8',
+  './styles.css?v=14.4.0',
+  './app.js?v=14.4.0',
   './manifest.webmanifest',
   './icons/icon-192.png',
   './icons/icon-512.png'

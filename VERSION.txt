@@ -1,2 +1,2 @@
-V14.3.8 — Prazos da Entrega
-Calcula compra até saída e compra até finalização no cliente, mostra o prazo restante e identifica saídas acima de 2h e entregas acima de 3h30, preservando todos os registros existentes.
+V14.4.0 — Dashboard e Relatórios Gerenciais
+Dashboard ampliado com gráficos de SLA, fluxo, status, custos e finanças; Excel com 30 abas e formatação numérica correta em R$, %, h/min e km; PDF mais visual e detalhado, preservando todos os registros existentes.
