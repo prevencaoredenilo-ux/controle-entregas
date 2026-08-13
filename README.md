@@ -1,6 +1,17 @@
-# Controle de Entregas • Nilo Supermercado — V14.4.2
+# Controle de Entregas • Nilo Supermercado — V14.4.3
 
 Versão focada em **segurança dos dados, confiabilidade dos indicadores e acessibilidade**, mantendo os ciclos automáticos e todas as melhorias operacionais da V13.
+
+## Previsão de movimento da V14.4.3
+
+- O Dashboard antecipa o movimento das **próximas 5 semanas completas**.
+- Mostra o próximo dia provável de maior movimento, a semana prevista de pico e o dia da semana mais forte.
+- A estimativa combina a média histórica do dia da semana com o comportamento da semana do mês.
+- Entregas programadas e reagendadas ainda abertas entram como **volume mínimo já conhecido** para a data futura.
+- A previsão informa o nível de confiança: Alta, Média, Inicial, Baixa ou Somente agenda, conforme a quantidade de histórico disponível.
+- O Excel passou para **31 abas**, incluindo `PREVISAO_MOVIMENTO` com a estimativa detalhada de cada um dos próximos 35 dias.
+- O PDF recebeu os principais alertas preventivos e uma tabela com o movimento esperado em cada semana.
+- A previsão é recalculada automaticamente conforme novas entregas são finalizadas, sem alterar os dados existentes.
 
 ## Novos insights da V14.4.2
 

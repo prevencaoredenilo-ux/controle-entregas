@@ -24,7 +24,7 @@ As pastas de versões antigas podem permanecer como histórico, mas não são ut
 
 1. Abra o sistema com internet.
 2. Recarregue a página uma vez para garantir a ativação do novo modo offline.
-3. Confira no rodapé se aparece **V14.4.2**.
+3. Confira no rodapé se aparece **V14.4.3**.
 4. Abra **Cadastros > Dados** e faça um novo backup.
 5. Se precisar conferir a cópia de segurança automática, use **Backup antes da atualização**.
 
@@ -44,15 +44,17 @@ Use o modo **Treino** para confirmar:
 - KM inicial e final;
 - registro de custo;
 - geração de relatório;
-- conferência das 30 abas do relatório Excel, incluindo `SLA_PRAZOS`, `FLUXO_OPERACIONAL` e `RESUMO_MENSAL`;
+- conferência das 31 abas do relatório Excel, incluindo `PREVISAO_MOVIMENTO`, `SLA_PRAZOS`, `FLUXO_OPERACIONAL` e `RESUMO_MENSAL`;
 - conferência da formatação em R$, %, h/min e km;
 - visualização dos novos gráficos no Dashboard e na impressão/PDF;
 - conferência de uma compra programada ou reagendada que tenha sido entregue em uma tentativa posterior: ela deve aparecer como entregue, e não como programação aberta;
 - conferência da aba `PROGRAMADAS` no Excel e da seção equivalente no PDF, com situação consolidada e data/hora da entrega;
 - conferência, nos principais insights, da data com mais entregas em dia/mês/ano;
 - conferência do dia da semana e da semana do mês com maior média, junto do período histórico usado no cálculo;
+- conferência, no Dashboard, do dia e da semana previstos como mais movimentados nas próximas 5 semanas;
+- conferência da aba `PREVISAO_MOVIMENTO` e do nível de confiança da estimativa;
 - prévia de restauração de backup, cancelando antes da substituição.
 
 ## Compatibilidade
 
-A V14.4.2 mantém os dados da V14.4.1, V14.4.0, V14.3.8, V14.3.7, V14.3.6, V14.3.5, V14.3.4, V14.3.3, V14.3.2, V14.3.1, V14.3, V14.2, V14.1, V14, V13 e das versões anteriores reconhecidas pelo sistema. Os novos insights são calculados durante a geração do relatório e não alteram nenhum registro. Na primeira abertura, nenhuma entrega, tentativa, programação, ciclo, custo, KM, configuração ou histórico é removido. Backups de uma versão futura são bloqueados para evitar perda de informações.
+A V14.4.3 mantém os dados da V14.4.2, V14.4.1, V14.4.0, V14.3.8, V14.3.7, V14.3.6, V14.3.5, V14.3.4, V14.3.3, V14.3.2, V14.3.1, V14.3, V14.2, V14.1, V14, V13 e das versões anteriores reconhecidas pelo sistema. A previsão é somente leitura e recalculada automaticamente; ela não altera entregas, programações ou históricos. Na primeira abertura, nenhum registro, ciclo, custo, KM ou configuração é removido. Backups de uma versão futura são bloqueados para evitar perda de informações.

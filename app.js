@@ -7,7 +7,7 @@
   }
   'use strict';
 
-  const APP_VERSION = '14.4.2';
+  const APP_VERSION = '14.4.3';
   const DB_NAME = 'controle_entregas_nx';
   const DB_VERSION = 1;
   const STORE_NAME = 'app_state';
@@ -291,7 +291,7 @@
 
   function initPWA() {
     if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-      navigator.serviceWorker.register('./sw.js?v=14.4.2').catch(console.warn);
+      navigator.serviceWorker.register('./sw.js?v=14.4.3').catch(console.warn);
     }
     window.addEventListener('beforeinstallprompt', (event) => {
       event.preventDefault();
@@ -980,6 +980,7 @@
     const openSched = roots.filter(root=>purchaseOutcome(root,allRecords).record?.scheduledDate&&purchaseOutcome(root,allRecords).open).length;
     const scheduleSummaries = roots.map(root=>scheduleSummary(root,allRecords)).filter(Boolean);
     const deliveredAfterSchedule = scheduleSummaries.filter(summary=>summary.delivered).length;
+    const movementForecast = buildMovementForecast(allRecords);
     const weeklyRows = buildWeeklyRows(deliveries,costs,cycles,odometers);
     const nbRows = buildNeighborhoodRows(deliveries);
     const topDelivery = nbRows[0];
@@ -1029,6 +1030,16 @@
           ['KM por entrega',`${number(finalizedPurchases?totalKm/finalizedPurchases:0,2)} km`,'Média das compras entregues'],
           ['KM médio por ciclo',`${number(cycles.length?totalKm/cycles.length:0,2)} km`,'A partir do KM diário']
         ])}
+      </section>
+
+      <section class="dashboard-grid equal dashboard-priority-grid">
+        <article class="card section-card">${sectionHeader('⌁','Previsão de movimento • próximas 5 semanas',`Estimativa baseada em até 1 ano de entregas e nas programações abertas • confiança ${movementForecast.confidence}.`)}<div class="stat-list">
+          ${statRow('Dia previsto de maior movimento',movementForecast.peakDay?`${dateBR(movementForecast.peakDay.date)} • ${movementForecast.peakDay.dayName}`:'Sem previsão',movementForecast.peakDay?`Cerca de ${number(movementForecast.peakDay.estimate,1)} entregas`: 'Aguardando histórico')}
+          ${statRow('Semana prevista de maior movimento',movementForecast.peakWeek?`${dateBR(movementForecast.peakWeek.start)} a ${dateBR(movementForecast.peakWeek.end)}`:'Sem previsão',movementForecast.peakWeek?`Cerca de ${number(movementForecast.peakWeek.estimate,1)} entregas na semana`:'Aguardando histórico')}
+          ${statRow('Dia da semana mais forte',movementForecast.peakWeekday?.label||'Sem previsão',movementForecast.peakWeekday?`Média prevista de ${number(movementForecast.peakWeekday.average,1)} por dia`:'Aguardando histórico')}
+          ${statRow('Programações já conhecidas',String(movementForecast.scheduledTotal),`${dateBR(movementForecast.forecastStart)} a ${dateBR(movementForecast.forecastEnd)}`)}
+        </div></article>
+        <article class="card section-card">${sectionHeader('▥','Movimento previsto por semana','Use a semana de maior volume para antecipar equipe, veículo e organização das saídas.')}<div class="chart-box small">${movementForecast.history.deliveredCount||movementForecast.scheduledTotal?horizontalBarChartHTML(movementForecast.weeks.map(week=>({label:`${dateBR(week.start).slice(0,5)}–${dateBR(week.end).slice(0,5)}`,value:week.estimate})),'#E9AA1B'):emptyState('⌁','Previsão ainda sem base','A estimativa aparecerá conforme as entregas forem finalizadas ou programadas.')}</div></article>
       </section>
 
       <section class="dashboard-grid equal dashboard-priority-grid">
@@ -1787,7 +1798,7 @@
     $('#view').innerHTML = `
       <section class="two-column">
         <article class="card section-card">
-          ${sectionHeader('⇩','Gerar relatório analítico em Excel','Escolha o recorte e baixe 30 abas formatadas, com dados completos, comparações, SLA e indicadores calculados.')}
+          ${sectionHeader('⇩','Gerar relatório analítico em Excel','Escolha o recorte e baixe 31 abas formatadas, incluindo previsão de movimento, comparações, SLA e indicadores calculados.')}
           <div class="form-grid" id="reportForm">
             <label>Tipo de período<select id="reportType"><option value="day">Dia</option><option value="week">Semana</option><option value="month">Mês</option><option value="year">Ano</option><option value="custom">Período personalizado</option></select></label>
             <label>Data de referência<input id="reportRef" type="date" value="${todayISO()}" /></label>
@@ -1795,14 +1806,14 @@
             <label>Mês<select id="reportMonth">${monthNames.map((m,i)=>`<option value="${String(i+1).padStart(2,'0')}">${m}</option>`).join('')}</select></label>
             <label>De<input id="reportStart" type="date" /></label>
             <label>Até<input id="reportEnd" type="date" /></label>
-            <div class="full form-note"><strong>Relatório completo:</strong> antes de contabilizar, o sistema confere se cada compra programada ou reagendada foi entregue em alguma tentativa. O Excel e o PDF separam pendências reais, atendimentos iniciados, entregues após programação e todo o histórico, além dos tempos, SLA, financeiro, KM, clientes e indicadores gerenciais.</div>
+            <div class="full form-note"><strong>Relatório completo:</strong> além de conferir o resultado final de cada programação, o sistema projeta as próximas 5 semanas e indica dia, semana e volume provável de pico. O Excel e o PDF também incluem tempos, SLA, financeiro, KM, clientes, agenda e histórico completo.</div>
             <div class="full form-actions"><button class="btn secondary" id="printReportBtn">Imprimir / PDF</button><button class="btn primary" id="exportExcelBtn">⇩ Baixar Excel</button></div>
           </div>
         </article>
         <article class="card section-card">
-          ${sectionHeader('▤','30 abas do relatório','Estrutura completa para operação, gestão, análise e auditoria.')}
+          ${sectionHeader('▤','31 abas do relatório','Estrutura completa para operação, previsão, gestão, análise e auditoria.')}
           <div class="stat-list">
-            ${['RESUMO_EXECUTIVO','RESUMO_DIARIO','SLA_PRAZOS','FLUXO_OPERACIONAL','RESUMO_MENSAL','COMPARATIVO','DIAS_SEMANA','HORARIOS_PICO','TAXAS_PDV','STATUS','RANKING_OPERACIONAL','METODOLOGIA','ENTREGAS','CONTATOS_CLIENTES','CLIENTES','CAIXAS_PDV','OCORRENCIAS','QUALIDADE_DADOS','INCONSISTENCIAS','PREVISAO_AGENDA','CUSTOS','CICLOS','ODOMETRO_DIARIO','VEICULOS','COLABORADORES','BAIRROS','PROGRAMADAS','PENDENCIAS','FECHAMENTOS_DIA','HISTORICO'].map(name=>statRow(name,'Incluída','Gerada automaticamente')).join('')}
+            ${['RESUMO_EXECUTIVO','RESUMO_DIARIO','SLA_PRAZOS','FLUXO_OPERACIONAL','RESUMO_MENSAL','COMPARATIVO','DIAS_SEMANA','HORARIOS_PICO','TAXAS_PDV','STATUS','RANKING_OPERACIONAL','METODOLOGIA','ENTREGAS','CONTATOS_CLIENTES','CLIENTES','CAIXAS_PDV','OCORRENCIAS','QUALIDADE_DADOS','INCONSISTENCIAS','PREVISAO_AGENDA','PREVISAO_MOVIMENTO','CUSTOS','CICLOS','ODOMETRO_DIARIO','VEICULOS','COLABORADORES','BAIRROS','PROGRAMADAS','PENDENCIAS','FECHAMENTOS_DIA','HISTORICO'].map(name=>statRow(name,'Incluída','Gerada automaticamente')).join('')}
           </div>
         </article>
       </section>
@@ -3066,19 +3077,20 @@
     }
     return gaps;
   }
-  function buildDeliveryInsights(range, records = scoped(state.deliveries)) {
+  function buildDeliveryInsights(range, records = scoped(state.deliveries), historicalEnd = '') {
     const dayNames=['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'];
     const deliveredRecords=records.filter(isRootPurchase).map(root=>purchaseOutcome(root,records)).filter(outcome=>outcome.delivered).map(outcome=>outcome.record).filter(record=>record?.date).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
     const countByDate=list=>[...groupItems(list,record=>record.date).entries()].map(([date,rows])=>({date,count:rows.length})).sort((a,b)=>b.count-a.count||String(b.date).localeCompare(String(a.date)));
     const reportPeak=countByDate(deliveredRecords.filter(record=>inRange(record.date,range)))[0] || null;
-    if(!deliveredRecords.length) return {reportPeak:null,start:'',end:'',calendarDays:0,deliveredCount:0,weekdayRows:[],weekOfMonthRows:[],peakWeekday:null,peakWeekOfMonth:null};
+    const historicalSource=historicalEnd?deliveredRecords.filter(record=>record.date<=historicalEnd):deliveredRecords;
+    if(!historicalSource.length) return {reportPeak,start:'',end:'',calendarDays:0,deliveredCount:0,weekdayRows:[],weekOfMonthRows:[],peakWeekday:null,peakWeekOfMonth:null};
 
-    const end=deliveredRecords.at(-1).date;
+    const end=historicalSource.at(-1).date;
     const oneYearStartDate=reportDate(end);
     oneYearStartDate.setDate(oneYearStartDate.getDate()-364);
     const oneYearStart=localDateISO(oneYearStartDate);
-    const start=deliveredRecords[0].date>oneYearStart?deliveredRecords[0].date:oneYearStart;
-    const historical=deliveredRecords.filter(record=>record.date>=start&&record.date<=end);
+    const start=historicalSource[0].date>oneYearStart?historicalSource[0].date:oneYearStart;
+    const historical=historicalSource.filter(record=>record.date>=start&&record.date<=end);
     const deliveriesByDate=new Map(countByDate(historical).map(row=>[row.date,row.count]));
     const weekdayTotals=Array.from({length:7},()=>({days:0,deliveries:0}));
     const monthWeekSegments=new Map();
@@ -3103,6 +3115,33 @@
     const peakWeekday=weekdayRows.slice().sort((a,b)=>b.average-a.average||b.deliveries-a.deliveries)[0]||null;
     const peakWeekOfMonth=weekOfMonthRows.slice().sort((a,b)=>b.average-a.average||b.deliveries-a.deliveries)[0]||null;
     return {reportPeak,start,end,calendarDays,deliveredCount:historical.length,weekdayRows,weekOfMonthRows,peakWeekday,peakWeekOfMonth};
+  }
+  function buildMovementForecast(records = scoped(state.deliveries), reference = todayISO()) {
+    const dayNames=['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'];
+    const history=buildDeliveryInsights({start:'0000-01-01',end:reference},records,reference);
+    const referenceDate=reportDate(reference)||new Date(),daysToNextMonday=((8-referenceDate.getDay())%7)||7,forecastStartDate=new Date(referenceDate);
+    forecastStartDate.setDate(forecastStartDate.getDate()+daysToNextMonday);
+    const forecastStart=localDateISO(forecastStartDate),forecastEndDate=new Date(forecastStartDate);
+    forecastEndDate.setDate(forecastEndDate.getDate()+34);
+    const forecastEnd=localDateISO(forecastEndDate);
+    const scheduledCounts=new Map([...groupItems(allScheduleSummaries(records).filter(summary=>summary.open).map(summary=>summary.outcome.record).filter(record=>record.scheduledDate>=forecastStart&&record.scheduledDate<=forecastEnd),record=>record.scheduledDate).entries()].map(([date,rows])=>[date,rows.length]));
+    const weekdayAverages=new Map(history.weekdayRows.map(row=>[row.index,row.average]));
+    const monthWeekAverages=new Map(history.weekOfMonthRows.map(row=>[row.week,row.average]));
+    const rows=[];
+    for(let index=0;index<35;index++){
+      const dateObj=new Date(forecastStartDate);dateObj.setDate(dateObj.getDate()+index);
+      const date=localDateISO(dateObj),weekday=dateObj.getDay(),monthWeek=Math.ceil(dateObj.getDate()/7),weekdayAverage=weekdayAverages.get(weekday)||0,monthWeekAverage=monthWeekAverages.get(monthWeek)||0;
+      const historicalEstimate=history.deliveredCount?(weekdayAverage*0.65+monthWeekAverage*0.35):0,scheduled=scheduledCounts.get(date)||0,estimate=Math.max(historicalEstimate,scheduled);
+      rows.push({date,dayName:dayNames[weekday],weekday,monthWeek,forecastWeek:Math.floor(index/7)+1,historicalEstimate,scheduled,estimate});
+    }
+    const weeks=[1,2,3,4,5].map(week=>{const days=rows.filter(row=>row.forecastWeek===week);return{week,start:days[0].date,end:days.at(-1).date,estimate:sum(days.map(day=>day.estimate)),scheduled:sum(days.map(day=>day.scheduled)),dailyAverage:avg(days.map(day=>day.estimate))};});
+    const weekdayRows=[0,1,2,3,4,5,6].map(weekday=>{const days=rows.filter(row=>row.weekday===weekday);return{weekday,label:dayNames[weekday],estimate:sum(days.map(day=>day.estimate)),average:avg(days.map(day=>day.estimate))};});
+    const estimatedTotal=sum(rows.map(row=>row.estimate)),scheduledTotal=sum(rows.map(row=>row.scheduled));
+    const peakDay=estimatedTotal?rows.slice().sort((a,b)=>b.estimate-a.estimate||String(a.date).localeCompare(String(b.date)))[0]:null;
+    const peakWeek=estimatedTotal?weeks.slice().sort((a,b)=>b.estimate-a.estimate||a.week-b.week)[0]:null;
+    const peakWeekday=estimatedTotal?weekdayRows.slice().sort((a,b)=>b.average-a.average||a.weekday-b.weekday)[0]:null;
+    const confidence=history.calendarDays>=270&&history.deliveredCount>=100?'Alta':history.calendarDays>=90&&history.deliveredCount>=30?'Média':history.calendarDays>=28&&history.deliveredCount>=10?'Inicial':history.deliveredCount?'Baixa':'Somente agenda';
+    return {reference,forecastStart,forecastEnd,history,rows,weeks,weekdayRows,peakDay,peakWeek,peakWeekday,confidence,scheduledTotal,estimatedTotal};
   }
   function periodMetrics(range) {
     const allRecords=scoped(state.deliveries);
@@ -3134,6 +3173,8 @@
     const roots=deliveries.filter(isRootPurchase);
     const scheduleSummaries=roots.map(root=>scheduleSummary(root,allRecords)).filter(Boolean);
     const deliveryInsights=buildDeliveryInsights(range,allRecords);
+    const movementForecast=buildMovementForecast(allRecords);
+    const movementForecastRows=[['Data prevista','Dia da semana','Semana da previsão','Semana do mês','Estimativa pelo histórico','Programadas em aberto','Movimento previsto','Nível de confiança','Base histórica'],...movementForecast.rows.map(row=>[row.date,row.dayName,`Semana ${row.forecastWeek}`,`${row.monthWeek}ª semana`,row.historicalEstimate,row.scheduled,row.estimate,movementForecast.confidence,movementForecast.history.start?`${dateBR(movementForecast.history.start)} a ${dateBR(movementForecast.history.end)}`:'Sem histórico'])];
     const rootNet=root=>Math.max(0,Number(root?.fee||0)-Number(root?.refundAmount||0));
     const costs=scoped(state.costs).filter(c=>inRange(c.date,range));
     const cycles=scoped(state.cycles).filter(c=>inRange(c.date,range));
@@ -3192,6 +3233,8 @@
       ['Data com mais entregas','Data exata do período do relatório com a maior quantidade de compras entregues no cliente','Mostrar o pico real em dia, mês e ano'],
       ['Dia da semana com maior média','Média diária das compras entregues em cada dia da semana, usando até os 365 dias mais recentes disponíveis','Identificar o dia da semana que normalmente concentra mais entregas'],
       ['Semana do mês com maior média','Média diária das entregas nos dias 1–7, 8–14, 15–21, 22–28 ou 29–fim do mês, usando até os 365 dias mais recentes disponíveis','Identificar em qual parte do mês a operação costuma ter maior volume'],
+      ['Previsão de movimento','Combina 65% da média histórica do dia da semana com 35% da média da semana do mês; programações abertas funcionam como volume mínimo conhecido','Antecipar equipe, veículo e organização das saídas nas próximas 5 semanas'],
+      ['Confiança da previsão','Alta com pelo menos 270 dias e 100 entregas; Média com 90 dias e 30 entregas; Inicial com 28 dias e 10 entregas; abaixo disso, Baixa','Deixar clara a quantidade de histórico disponível para projetar o movimento'],
       ['Situação consolidada da compra','Resultado de toda a cadeia ligada à compra original; uma finalização posterior prevalece sobre Programada ou Reagendada no histórico','Evitar contabilizar como pendente uma compra que já foi entregue'],
       ['Programações registradas','Todos os eventos de programação e reagendamento são mantidos como histórico','Preservar o que aconteceu sem confundir com pendência atual'],
       ['Previsão da agenda','Somente compras programadas ainda abertas, agrupadas pela data prevista','Antecipar a carga de trabalho real'],
@@ -3269,7 +3312,7 @@
     addRanking('Caixa PDV',groupItems(roots.filter(d=>d.cashierNo),d=>d.cashierNo),id=>`Caixa ${id}`);
     rankingRows.splice(1,rankingRows.length-1,...rankingRows.slice(1).sort((a,b)=>b[11]-a[11]||b[3]-a[3]));
 
-    return {deliveries,roots,scheduleSummaries,deliveryInsights,costs,cycles,odometers,closures,current,previousRange,comparisonRows,dailyRows,slaRows,flowRows,monthlyRows,dayRows,hourRows,feeRows,methodologyRows,cashierRows,customerRows,occurrenceRows,qualityRows,inconsistencyRows,forecastRows,rankingRows};
+    return {deliveries,roots,scheduleSummaries,deliveryInsights,movementForecast,movementForecastRows,costs,cycles,odometers,closures,current,previousRange,comparisonRows,dailyRows,slaRows,flowRows,monthlyRows,dayRows,hourRows,feeRows,methodologyRows,cashierRows,customerRows,occurrenceRows,qualityRows,inconsistencyRows,forecastRows,rankingRows};
   }
 
   /* Excel-compatible SpreadsheetML 2003 export. Works offline and supports multiple worksheets. */
@@ -3277,7 +3320,7 @@
     const r=reportRangeFromForm();
     if(!r.start || !r.end){toast('Informe o período do relatório.','warning');return;}
     const analytics=buildReportAnalytics(r);
-    const {deliveries,roots,scheduleSummaries,deliveryInsights,costs,cycles,odometers,closures,current,comparisonRows,dailyRows,slaRows,flowRows,monthlyRows,dayRows,hourRows,feeRows,methodologyRows,cashierRows,customerRows,occurrenceRows,qualityRows,inconsistencyRows,forecastRows,rankingRows}=analytics;
+    const {deliveries,roots,scheduleSummaries,deliveryInsights,movementForecast,movementForecastRows,costs,cycles,odometers,closures,current,comparisonRows,dailyRows,slaRows,flowRows,monthlyRows,dayRows,hourRows,feeRows,methodologyRows,cashierRows,customerRows,occurrenceRows,qualityRows,inconsistencyRows,forecastRows,rankingRows}=analytics;
     const allRecords=scoped(state.deliveries);
     const deliveredRoots=roots.filter(root=>rootWasFinalized(root,allRecords));
     const outcomeFor=root=>purchaseOutcome(root,allRecords);
@@ -3333,6 +3376,15 @@
         ['Média de entregas no melhor dia da semana',deliveryInsights.peakWeekday?.average||0],
         ['Semana do mês com maior média em até 1 ano',deliveryInsights.peakWeekOfMonth?`${deliveryInsights.peakWeekOfMonth.label} • ${deliveryInsights.peakWeekOfMonth.detail}`:'Sem dados'],
         ['Média diária de entregas na melhor semana do mês',deliveryInsights.peakWeekOfMonth?.average||0],
+        ['Horizonte da previsão de movimento',`${dateBR(movementForecast.forecastStart)} a ${dateBR(movementForecast.forecastEnd)}`],
+        ['Confiança da previsão',movementForecast.confidence],
+        ['Data prevista de maior movimento',movementForecast.peakDay?`${dateBR(movementForecast.peakDay.date)} • ${movementForecast.peakDay.dayName}`:'Sem previsão'],
+        ['Entregas previstas no dia de pico',movementForecast.peakDay?.estimate||0],
+        ['Semana prevista de maior movimento',movementForecast.peakWeek?`${dateBR(movementForecast.peakWeek.start)} a ${dateBR(movementForecast.peakWeek.end)}`:'Sem previsão'],
+        ['Entregas previstas na semana de pico',movementForecast.peakWeek?.estimate||0],
+        ['Dia da semana previsto como mais forte',movementForecast.peakWeekday?.label||'Sem previsão'],
+        ['Média prevista no dia da semana mais forte',movementForecast.peakWeekday?.average||0],
+        ['Programações abertas já consideradas',movementForecast.scheduledTotal],
         ['Horário com mais compras',peakHour?`${peakHour[0]} • ${peakHour[1]} compra(s)`:'Sem dados'],
         ['Caixa com mais compras',topCashier?`Caixa ${topCashier[0]} • ${topCashier[1]} compra(s)`:'Sem dados'],
         ['Faturamento bruto',fin.gross],
@@ -3372,6 +3424,7 @@
       QUALIDADE_DADOS:qualityRows,
       INCONSISTENCIAS:inconsistencyRows,
       PREVISAO_AGENDA:forecastRows,
+      PREVISAO_MOVIMENTO:movementForecastRows,
       CUSTOS:[['Data','Hora','Veículo','Categoria','Descrição','Valor','KM Atual','Fornecedor','Comprovante','Responsável','Observações'],...costs.map(c=>[c.date,c.time,vehicle(c.vehicleId)?.name||'',category(c.categoryId)?.name||'',c.description,c.value,c.km,c.supplier,c.receiptNo,employee(c.responsibleId)?.name||'',c.notes])],
       CICLOS:[['Data','Ciclo','Tipo','Veículo','Entregador','Saída','Retorno','Entregas','KM Médio por Ciclo','Tempo Min','Receita'],...cycles.map(c=>{const x=cycleCalc(c);return[c.date,c.code,c.autoGenerated?'AUTOMÁTICO':'MANUAL',vehicle(c.vehicleId)?.name||'',employee(c.driverId)?.name||'',c.departureTime,c.returnTime,x.deliveries,x.km,x.minutes,x.revenue]})],
       ODOMETRO_DIARIO:[['Data','Veículo','KM Inicial','KM Final','KM Rodado','Ciclos','Entregas','Entregas por Ciclo','KM por Ciclo','KM por Entrega','Status'],...odometers.map(o=>{const s=vehicleDayStats(o.date,o.vehicleId),x=odometerCalc(o);return[o.date,vehicle(o.vehicleId)?.name||'',o.kmStart,o.kmEnd,x.km,s.cycles,s.deliveries,s.deliveriesPerCycle,s.kmPerCycle,s.kmPerDelivery,x.complete?'FECHADO':'ABERTO']})],
@@ -3448,7 +3501,7 @@
   function printReport() {
     const r=reportRangeFromForm();
     const analytics=buildReportAnalytics(r);
-    const {deliveries,roots,scheduleSummaries,deliveryInsights,costs,odometers,current,comparisonRows,monthlyRows,dayRows,hourRows,customerRows,qualityRows,rankingRows}=analytics;
+    const {deliveries,roots,scheduleSummaries,deliveryInsights,movementForecast,costs,odometers,current,comparisonRows,monthlyRows,dayRows,hourRows,customerRows,qualityRows,rankingRows}=analytics;
     const allRecords=scoped(state.deliveries);
     const deliveredRoots=roots.filter(root=>rootWasFinalized(root,allRecords));
     const outcomeFor=root=>purchaseOutcome(root,allRecords);
@@ -3469,7 +3522,8 @@
         <div class="c"><small>Sucesso na 1ª tentativa</small><strong>${percent(current.firstAttemptRate)}</strong></div><div class="c"><small>Entrega &gt; 3h30</small><strong>${current.completionDelayed}</strong></div><div class="c"><small>Fora do padrão 3h30</small><strong>${percent(current.completionDelayRate)}</strong></div><div class="c"><small>Taxa de problemas</small><strong>${percent(current.problemRate)}</strong></div><div class="c"><small>Identificação completa</small><strong>${percent(percentage(completeIdentification,roots.length))}</strong></div><div class="c"><small>Clientes recorrentes</small><strong>${recurringCustomers}</strong></div>
       </div>
       <h2>Painel visual dos indicadores</h2><div class="visual-grid"><div class="visual-card"><h3>Cumprimento dos prazos</h3>${slaPrintRows.map(row=>`<div class="sla-item"><div class="sla-head"><strong>${row.label}</strong><span>${percent(row.rate)} dentro • limite ${row.limit}</span></div><div class="bar"><i class="ok" style="width:${percentage(row.within,row.total)}%"></i><i class="bad" style="width:${percentage(row.outside,row.total)}%"></i></div><div class="legend">${row.within} dentro do padrão • ${row.outside} fora • ${row.total} calculáveis</div></div>`).join('')}</div><div class="visual-card"><h3>Situação consolidada das compras</h3><div class="status-print">${statusPrintRows.map(row=>`<div><span>${esc(row.label)}</span><div class="track"><i style="width:${row.value/statusMax*100}%"></i></div><strong>${row.value}</strong></div>`).join('')}</div></div></div>
-      <h2>Principais insights</h2><table><tr><th>Indicador</th><th>Resultado</th><th>Leitura operacional</th></tr><tr><td>Data com mais entregas</td><td>${reportPeakDate?`${dateBR(reportPeakDate)} • ${esc(reportPeakWeekday)}`:'Sem dados'}</td><td>${deliveryInsights.reportPeak?`${deliveryInsights.reportPeak.count} entrega(s) no período deste relatório`:'Ainda não há entrega finalizada no período'}</td></tr><tr><td>Dia da semana com maior média</td><td>${esc(deliveryInsights.peakWeekday?.label||'Sem dados')}</td><td>${deliveryInsights.peakWeekday?`Média de ${number(deliveryInsights.peakWeekday.average,1)} entrega(s) por ${deliveryInsights.peakWeekday.label.toLocaleLowerCase('pt-BR')}`:'Ainda não há base suficiente'}</td></tr><tr><td>Semana do mês com maior média</td><td>${deliveryInsights.peakWeekOfMonth?`${esc(deliveryInsights.peakWeekOfMonth.label)} • ${esc(deliveryInsights.peakWeekOfMonth.detail)}`:'Sem dados'}</td><td>${deliveryInsights.peakWeekOfMonth?`Média diária de ${number(deliveryInsights.peakWeekOfMonth.average,1)} entrega(s) nessa semana do mês`:'Ainda não há base suficiente'}</td></tr><tr><td>Base usada nas médias</td><td>${deliveryInsights.start?`${dateBR(deliveryInsights.start)} a ${dateBR(deliveryInsights.end)}`:'Sem dados'}</td><td>${deliveryInsights.start?`${deliveryInsights.deliveredCount} entrega(s) em ${deliveryInsights.calendarDays} dia(s) de calendário • limite de 1 ano`:'As médias aparecerão conforme os dados forem preenchidos'}</td></tr><tr><td>Horário de pico</td><td>${esc(peakHour?.[0]||'Sem dados')}</td><td>${peakHour?`${peakHour[1]} compra(s) nessa faixa`:'Ainda não há base suficiente'}</td></tr><tr><td>Compra → saída média</td><td>${fmtMinutes(current.avgWait)}</td><td>Padrão: até ${fmtMinutes(Number(state.settings.delayMinutes||120))}</td></tr><tr><td>Cumprimento compra → saída</td><td>${percent(current.departureComplianceRate)}</td><td>${current.departureWithin} dentro de ${current.departureCalculable} calculáveis</td></tr><tr><td>Compra → cliente média</td><td>${fmtMinutes(current.avgPurchaseToClient)}</td><td>Padrão: até ${fmtMinutes(Number(state.settings.completionLimitMinutes||210))}</td></tr><tr><td>Cumprimento compra → cliente</td><td>${percent(current.completionComplianceRate)}</td><td>${current.completionWithin} dentro de ${current.completionCalculable} calculáveis</td></tr><tr><td>Rota média</td><td>${fmtMinutes(current.avgRoute)}</td><td>Tempo entre saída e retorno à loja</td></tr></table>
+      <h2>Principais insights</h2><table><tr><th>Indicador</th><th>Resultado</th><th>Leitura operacional</th></tr><tr><td>Próximo dia previsto de maior movimento</td><td>${movementForecast.peakDay?`${dateBR(movementForecast.peakDay.date)} • ${esc(movementForecast.peakDay.dayName)}`:'Sem previsão'}</td><td>${movementForecast.peakDay?`Cerca de ${number(movementForecast.peakDay.estimate,1)} entrega(s) • confiança ${movementForecast.confidence}`:'Aguardando histórico ou programações'}</td></tr><tr><td>Próxima semana prevista de maior movimento</td><td>${movementForecast.peakWeek?`${dateBR(movementForecast.peakWeek.start)} a ${dateBR(movementForecast.peakWeek.end)}`:'Sem previsão'}</td><td>${movementForecast.peakWeek?`Cerca de ${number(movementForecast.peakWeek.estimate,1)} entrega(s) • ${movementForecast.peakWeek.scheduled} já programada(s)`:'Aguardando histórico ou programações'}</td></tr><tr><td>Dia da semana previsto como mais forte</td><td>${esc(movementForecast.peakWeekday?.label||'Sem previsão')}</td><td>${movementForecast.peakWeekday?`Média prevista de ${number(movementForecast.peakWeekday.average,1)} entrega(s) por dia nas próximas 5 semanas`:'Ainda não há base suficiente'}</td></tr><tr><td>Data com mais entregas</td><td>${reportPeakDate?`${dateBR(reportPeakDate)} • ${esc(reportPeakWeekday)}`:'Sem dados'}</td><td>${deliveryInsights.reportPeak?`${deliveryInsights.reportPeak.count} entrega(s) no período deste relatório`:'Ainda não há entrega finalizada no período'}</td></tr><tr><td>Dia da semana com maior média</td><td>${esc(deliveryInsights.peakWeekday?.label||'Sem dados')}</td><td>${deliveryInsights.peakWeekday?`Média de ${number(deliveryInsights.peakWeekday.average,1)} entrega(s) por ${deliveryInsights.peakWeekday.label.toLocaleLowerCase('pt-BR')}`:'Ainda não há base suficiente'}</td></tr><tr><td>Semana do mês com maior média</td><td>${deliveryInsights.peakWeekOfMonth?`${esc(deliveryInsights.peakWeekOfMonth.label)} • ${esc(deliveryInsights.peakWeekOfMonth.detail)}`:'Sem dados'}</td><td>${deliveryInsights.peakWeekOfMonth?`Média diária de ${number(deliveryInsights.peakWeekOfMonth.average,1)} entrega(s) nessa semana do mês`:'Ainda não há base suficiente'}</td></tr><tr><td>Base usada nas médias</td><td>${deliveryInsights.start?`${dateBR(deliveryInsights.start)} a ${dateBR(deliveryInsights.end)}`:'Sem dados'}</td><td>${deliveryInsights.start?`${deliveryInsights.deliveredCount} entrega(s) em ${deliveryInsights.calendarDays} dia(s) de calendário • limite de 1 ano`:'As médias aparecerão conforme os dados forem preenchidos'}</td></tr><tr><td>Horário de pico</td><td>${esc(peakHour?.[0]||'Sem dados')}</td><td>${peakHour?`${peakHour[1]} compra(s) nessa faixa`:'Ainda não há base suficiente'}</td></tr><tr><td>Compra → saída média</td><td>${fmtMinutes(current.avgWait)}</td><td>Padrão: até ${fmtMinutes(Number(state.settings.delayMinutes||120))}</td></tr><tr><td>Cumprimento compra → saída</td><td>${percent(current.departureComplianceRate)}</td><td>${current.departureWithin} dentro de ${current.departureCalculable} calculáveis</td></tr><tr><td>Compra → cliente média</td><td>${fmtMinutes(current.avgPurchaseToClient)}</td><td>Padrão: até ${fmtMinutes(Number(state.settings.completionLimitMinutes||210))}</td></tr><tr><td>Cumprimento compra → cliente</td><td>${percent(current.completionComplianceRate)}</td><td>${current.completionWithin} dentro de ${current.completionCalculable} calculáveis</td></tr><tr><td>Rota média</td><td>${fmtMinutes(current.avgRoute)}</td><td>Tempo entre saída e retorno à loja</td></tr></table>
+      <h2>Previsão de movimento • próximas 5 semanas</h2><table><thead><tr><th>Semana</th><th>Período</th><th>Entregas previstas</th><th>Programadas já conhecidas</th><th>Média prevista por dia</th></tr></thead><tbody>${movementForecast.weeks.map(week=>`<tr><td>Semana ${week.week}</td><td>${dateBR(week.start)} a ${dateBR(week.end)}</td><td>${number(week.estimate,1)}</td><td>${week.scheduled}</td><td>${number(week.dailyAverage,1)}</td></tr>`).join('')}</tbody></table><p class="muted">Estimativa calculada com até 365 dias de histórico. As programações abertas funcionam como volume mínimo conhecido. Confiança atual: ${esc(movementForecast.confidence)}.</p>
       <h2>Comparação com o período anterior</h2><table><thead><tr>${comparisonRows[0].map(value=>`<th>${esc(value)}</th>`).join('')}</tr></thead><tbody>${comparisonRows.slice(1).map(row=>`<tr><td>${esc(row[0])}</td><td>${formattedReportValue(row[0],row[1])}</td><td>${formattedReportValue(row[0],row[2])}</td><td>${formattedReportValue(row[0],row[3])}</td><td>${typeof row[4]==='number'?percent(row[4]):esc(row[4]||'—')}</td></tr>`).join('')}</tbody></table>
       <h2>Resumo mensal</h2><table><thead><tr>${monthlyRows[0].map(value=>`<th>${esc(value)}</th>`).join('')}</tr></thead><tbody>${monthlyRows.slice(1).map(row=>`<tr>${row.map((value,index)=>`<td>${formattedReportValue(monthlyRows[0][index],value)}</td>`).join('')}</tr>`).join('')}</tbody></table>
       <h2>Ranking operacional</h2><table><thead><tr>${rankingRows[0].map(value=>`<th>${esc(value)}</th>`).join('')}</tr></thead><tbody>${rankingRows.slice(1,16).map(row=>`<tr>${row.map((value,index)=>`<td>${formattedReportValue(rankingRows[0][index],value)}</td>`).join('')}</tr>`).join('')}</tbody></table>
@@ -3478,7 +3532,7 @@
       <table><thead><tr><th>Data</th><th>Compra</th><th>Nº do cupom</th><th>DOC</th><th>Caixa</th><th>Cliente / telefone</th><th>Bairro</th><th>Status do registro / situação da compra</th><th>Entregador / veículo</th><th>Entrada / saída / finalização / retorno</th><th>Tempos e padrão</th><th>Taxa / reembolso</th><th>Programação / ocorrência</th></tr></thead><tbody>${deliveries.map(d=>{const calc=deliveryCalc(d),progress=completionProgress(d),outcome=outcomeFor(d);return `<tr><td>${dateBR(d.date)}</td><td>${esc(d.orderNo||'—')}</td><td>${esc(d.coupon||'—')}</td><td>${esc(d.docNo||'—')}</td><td>${esc(d.cashierNo||'—')}</td><td>${esc(d.customerName||'—')}<br><span class="muted">${esc(d.customerPhone||'—')}</span></td><td>${esc(neighborhood(d.neighborhoodId)?.name||'—')}</td><td>${esc(d.status||'—')}<br><strong>${esc(outcome.label)}</strong></td><td>${esc(employee(d.driverId)?.name||'—')}<br><span class="muted">${esc(vehicle(d.vehicleId)?.name||'—')}</span></td><td>${d.purchaseTime||'—'} / ${d.departureTime||'—'} / ${d.finalizationTime||'—'} / ${d.returnTime||'—'}</td><td>Compra → saída: ${fmtMinutes(calc.wait)} (${calc.wait===null?'não calculável':calc.delayed?'fora':'OK'})<br>Compra → cliente: ${fmtMinutes(calc.purchaseToClient)} (${calc.purchaseToClient===null?'não calculável':calc.completionDelayed?'fora':'OK'})<br>Prazo agora: ${progress.balance===null?'não calculável':progress.balance>=0?`${fmtMinutes(progress.balance)} restantes`:`${fmtMinutes(Math.abs(progress.balance))} acima`}</td><td>${money(rootDelivery(d)?.fee||d.fee)} / ${money(rootDelivery(d)?.refundAmount||0)}</td><td>${d.scheduledDate?`${dateBR(d.scheduledDate)} • ${esc(d.scheduleKind||'Programada')}`:'—'}<br><span class="muted">${esc(reason(d.reasonId)?.name||d.reasonText||d.nextAction||'')}</span></td></tr>`}).join('')}</tbody></table>
       <h2>Análise por bairro</h2><table><tr><th>Bairro</th><th>Compras entregues</th><th>Faturamento</th><th>Endereço errado</th><th>Programações registradas</th><th>Reagendamentos registrados</th><th>Programadas abertas</th><th>Reagendadas abertas</th><th>Entregues após programação</th><th>Devoluções</th><th>Saída &gt; 2h</th><th>Taxa de problemas</th></tr>${nb.map(row=>`<tr><td>${esc(row.name)}</td><td>${row.deliveries}</td><td>${money(row.revenue)}</td><td>${row.wrongAddress}</td><td>${row.scheduled}</td><td>${row.rescheduled}</td><td>${row.scheduledOpen}</td><td>${row.rescheduledOpen}</td><td>${row.scheduledDelivered}</td><td>${row.devolutions}</td><td>${row.delayed}</td><td>${percent(row.problemRate)}</td></tr>`).join('')}</table>
       <h2>Qualidade dos dados</h2><table><thead><tr>${qualityRows[0].map(value=>`<th>${esc(value)}</th>`).join('')}</tr></thead><tbody>${qualityRows.slice(1).map(row=>`<tr>${row.map((value,index)=>`<td>${formattedReportValue(qualityRows[0][index],value)}</td>`).join('')}</tr>`).join('')}</tbody></table>
-      <p class="muted" style="margin-top:16px">O arquivo Excel contém 30 abas, incluindo SLA dos prazos, fluxo operacional, resumo mensal, resumo diário, metodologia, dados completos, comparação, rankings, caixas, clientes, ocorrências, qualidade, financeiro, custos, ciclos, KM, equipe, bairros, pendências e histórico.</p><script>window.onload=()=>window.print()<\/script></body></html>`;
+      <p class="muted" style="margin-top:16px">O arquivo Excel contém 31 abas, incluindo previsão de movimento, previsão da agenda, SLA dos prazos, fluxo operacional, resumo mensal, metodologia, dados completos, comparação, rankings, qualidade, financeiro, custos, ciclos, KM, equipe, bairros, pendências e histórico.</p><script>window.onload=()=>window.print()<\/script></body></html>`;
     const w=window.open('','_blank');w.document.write(html);w.document.close();
   }
 

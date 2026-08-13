@@ -1,2 +1,2 @@
-V14.4.2 — Insights históricos de entregas
-PDF e Excel mostram a data exata de maior movimento, o dia da semana com maior média e a semana do mês com maior média. Os cálculos usam até 365 dias de dados disponíveis e informam claramente o período analisado.
+V14.4.3 — Previsão preventiva de movimento
+O sistema projeta as próximas 5 semanas, indicando dia e semana prováveis de pico, dia da semana mais forte, volume estimado e confiança. A previsão combina até 1 ano de histórico com as programações ainda abertas.

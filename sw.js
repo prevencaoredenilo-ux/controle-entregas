@@ -1,9 +1,9 @@
-const CACHE_NAME = 'controle-entregas-v14-4-2-insights-historicos';
+const CACHE_NAME = 'controle-entregas-v14-4-3-previsao-movimento';
 const APP_SHELL = [
   './',
   './index.html',
-  './styles.css?v=14.4.2',
-  './app.js?v=14.4.2',
+  './styles.css?v=14.4.3',
+  './app.js?v=14.4.3',
   './manifest.webmanifest',
   './icons/icon-192.png',
   './icons/icon-512.png'
