@@ -7,7 +7,7 @@
   }
   'use strict';
 
-  const APP_VERSION = '14.4.1';
+  const APP_VERSION = '14.4.2';
   const DB_NAME = 'controle_entregas_nx';
   const DB_VERSION = 1;
   const STORE_NAME = 'app_state';
@@ -291,7 +291,7 @@
 
   function initPWA() {
     if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-      navigator.serviceWorker.register('./sw.js?v=14.4.1').catch(console.warn);
+      navigator.serviceWorker.register('./sw.js?v=14.4.2').catch(console.warn);
     }
     window.addEventListener('beforeinstallprompt', (event) => {
       event.preventDefault();
@@ -3066,6 +3066,44 @@
     }
     return gaps;
   }
+  function buildDeliveryInsights(range, records = scoped(state.deliveries)) {
+    const dayNames=['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'];
+    const deliveredRecords=records.filter(isRootPurchase).map(root=>purchaseOutcome(root,records)).filter(outcome=>outcome.delivered).map(outcome=>outcome.record).filter(record=>record?.date).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+    const countByDate=list=>[...groupItems(list,record=>record.date).entries()].map(([date,rows])=>({date,count:rows.length})).sort((a,b)=>b.count-a.count||String(b.date).localeCompare(String(a.date)));
+    const reportPeak=countByDate(deliveredRecords.filter(record=>inRange(record.date,range)))[0] || null;
+    if(!deliveredRecords.length) return {reportPeak:null,start:'',end:'',calendarDays:0,deliveredCount:0,weekdayRows:[],weekOfMonthRows:[],peakWeekday:null,peakWeekOfMonth:null};
+
+    const end=deliveredRecords.at(-1).date;
+    const oneYearStartDate=reportDate(end);
+    oneYearStartDate.setDate(oneYearStartDate.getDate()-364);
+    const oneYearStart=localDateISO(oneYearStartDate);
+    const start=deliveredRecords[0].date>oneYearStart?deliveredRecords[0].date:oneYearStart;
+    const historical=deliveredRecords.filter(record=>record.date>=start&&record.date<=end);
+    const deliveriesByDate=new Map(countByDate(historical).map(row=>[row.date,row.count]));
+    const weekdayTotals=Array.from({length:7},()=>({days:0,deliveries:0}));
+    const monthWeekSegments=new Map();
+    let calendarDays=0;
+    const cursor=reportDate(start),last=reportDate(end);
+    while(cursor&&last&&cursor<=last){
+      const date=localDateISO(cursor),day=cursor.getDay(),week=Math.ceil(cursor.getDate()/7),segmentKey=`${date.slice(0,7)}-${week}`,deliveries=deliveriesByDate.get(date)||0;
+      weekdayTotals[day].days+=1;
+      weekdayTotals[day].deliveries+=deliveries;
+      if(!monthWeekSegments.has(segmentKey))monthWeekSegments.set(segmentKey,{week,days:0,deliveries:0});
+      const segment=monthWeekSegments.get(segmentKey);
+      segment.days+=1;
+      segment.deliveries+=deliveries;
+      calendarDays+=1;
+      cursor.setDate(cursor.getDate()+1);
+    }
+    const weekdayRows=weekdayTotals.map((item,index)=>({index,label:dayNames[index],days:item.days,deliveries:item.deliveries,average:item.days?item.deliveries/item.days:0})).filter(row=>row.days);
+    const weekOfMonthRows=[1,2,3,4,5].map(week=>{
+      const segments=[...monthWeekSegments.values()].filter(segment=>segment.week===week),days=sum(segments.map(segment=>segment.days)),deliveries=sum(segments.map(segment=>segment.deliveries));
+      return {week,label:`${week}ª semana`,detail:week<5?`dias ${(week-1)*7+1} a ${week*7}`:'dias 29 ao fim do mês',occurrences:segments.length,days,deliveries,average:days?deliveries/days:0};
+    }).filter(row=>row.occurrences);
+    const peakWeekday=weekdayRows.slice().sort((a,b)=>b.average-a.average||b.deliveries-a.deliveries)[0]||null;
+    const peakWeekOfMonth=weekOfMonthRows.slice().sort((a,b)=>b.average-a.average||b.deliveries-a.deliveries)[0]||null;
+    return {reportPeak,start,end,calendarDays,deliveredCount:historical.length,weekdayRows,weekOfMonthRows,peakWeekday,peakWeekOfMonth};
+  }
   function periodMetrics(range) {
     const allRecords=scoped(state.deliveries);
     const deliveries=scoped(state.deliveries).filter(d=>inRange(d.date,range));
@@ -3095,6 +3133,7 @@
     const deliveries=scoped(state.deliveries).filter(d=>inRange(d.date,range));
     const roots=deliveries.filter(isRootPurchase);
     const scheduleSummaries=roots.map(root=>scheduleSummary(root,allRecords)).filter(Boolean);
+    const deliveryInsights=buildDeliveryInsights(range,allRecords);
     const rootNet=root=>Math.max(0,Number(root?.fee||0)-Number(root?.refundAmount||0));
     const costs=scoped(state.costs).filter(c=>inRange(c.date,range));
     const cycles=scoped(state.cycles).filter(c=>inRange(c.date,range));
@@ -3150,6 +3189,9 @@
       ['Nota de qualidade','100 menos a média das taxas de atraso e problemas','Comparar qualidade entre bairros, equipe, veículos e caixas'],
       ['Identificação completa','Nº do cupom, DOC, caixa, bairro e hora de entrada preenchidos','Medir qualidade dos cadastros'],
       ['Comparativo','Período selecionado contra período anterior com a mesma quantidade de dias','Mostrar evolução ou queda'],
+      ['Data com mais entregas','Data exata do período do relatório com a maior quantidade de compras entregues no cliente','Mostrar o pico real em dia, mês e ano'],
+      ['Dia da semana com maior média','Média diária das compras entregues em cada dia da semana, usando até os 365 dias mais recentes disponíveis','Identificar o dia da semana que normalmente concentra mais entregas'],
+      ['Semana do mês com maior média','Média diária das entregas nos dias 1–7, 8–14, 15–21, 22–28 ou 29–fim do mês, usando até os 365 dias mais recentes disponíveis','Identificar em qual parte do mês a operação costuma ter maior volume'],
       ['Situação consolidada da compra','Resultado de toda a cadeia ligada à compra original; uma finalização posterior prevalece sobre Programada ou Reagendada no histórico','Evitar contabilizar como pendente uma compra que já foi entregue'],
       ['Programações registradas','Todos os eventos de programação e reagendamento são mantidos como histórico','Preservar o que aconteceu sem confundir com pendência atual'],
       ['Previsão da agenda','Somente compras programadas ainda abertas, agrupadas pela data prevista','Antecipar a carga de trabalho real'],
@@ -3227,7 +3269,7 @@
     addRanking('Caixa PDV',groupItems(roots.filter(d=>d.cashierNo),d=>d.cashierNo),id=>`Caixa ${id}`);
     rankingRows.splice(1,rankingRows.length-1,...rankingRows.slice(1).sort((a,b)=>b[11]-a[11]||b[3]-a[3]));
 
-    return {deliveries,roots,scheduleSummaries,costs,cycles,odometers,closures,current,previousRange,comparisonRows,dailyRows,slaRows,flowRows,monthlyRows,dayRows,hourRows,feeRows,methodologyRows,cashierRows,customerRows,occurrenceRows,qualityRows,inconsistencyRows,forecastRows,rankingRows};
+    return {deliveries,roots,scheduleSummaries,deliveryInsights,costs,cycles,odometers,closures,current,previousRange,comparisonRows,dailyRows,slaRows,flowRows,monthlyRows,dayRows,hourRows,feeRows,methodologyRows,cashierRows,customerRows,occurrenceRows,qualityRows,inconsistencyRows,forecastRows,rankingRows};
   }
 
   /* Excel-compatible SpreadsheetML 2003 export. Works offline and supports multiple worksheets. */
@@ -3235,15 +3277,16 @@
     const r=reportRangeFromForm();
     if(!r.start || !r.end){toast('Informe o período do relatório.','warning');return;}
     const analytics=buildReportAnalytics(r);
-    const {deliveries,roots,scheduleSummaries,costs,cycles,odometers,closures,current,comparisonRows,dailyRows,slaRows,flowRows,monthlyRows,dayRows,hourRows,feeRows,methodologyRows,cashierRows,customerRows,occurrenceRows,qualityRows,inconsistencyRows,forecastRows,rankingRows}=analytics;
+    const {deliveries,roots,scheduleSummaries,deliveryInsights,costs,cycles,odometers,closures,current,comparisonRows,dailyRows,slaRows,flowRows,monthlyRows,dayRows,hourRows,feeRows,methodologyRows,cashierRows,customerRows,occurrenceRows,qualityRows,inconsistencyRows,forecastRows,rankingRows}=analytics;
     const allRecords=scoped(state.deliveries);
     const deliveredRoots=roots.filter(root=>rootWasFinalized(root,allRecords));
     const outcomeFor=root=>purchaseOutcome(root,allRecords);
     const totalCosts=current.costs;
     const fin={gross:current.gross,refundTotal:current.refunds,net:current.net};
     const km=current.km;
-    const peakDay=dayRows.slice(1).sort((a,b)=>b[1]-a[1])[0];
     const peakHour=hourRows.slice(1).sort((a,b)=>b[1]-a[1])[0];
+    const reportPeakDate=deliveryInsights.reportPeak?.date||'';
+    const reportPeakWeekday=reportPeakDate?['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'][reportDate(reportPeakDate).getDay()]:'';
     const topCashier=cashierRows.slice(1).filter(row=>row[0]!=='Não informado').sort((a,b)=>b[1]-a[1])[0];
     const recurringCustomers=customerRows.slice(1).filter(row=>row[3]==='SIM').length;
     const completeIdentification=roots.filter(d=>d.coupon&&d.docNo&&d.cashierNo&&d.neighborhoodId&&d.purchaseTime).length;
@@ -3257,6 +3300,9 @@
         ['Versão do sistema',APP_VERSION],
         ['Ambiente',modeLabel()],
         ['Período',`${dateBR(r.start)} a ${dateBR(r.end)}`],
+        ['Período histórico usado nas médias',deliveryInsights.start?`${dateBR(deliveryInsights.start)} a ${dateBR(deliveryInsights.end)}`:'Sem dados'],
+        ['Dias de calendário analisados nas médias',deliveryInsights.calendarDays],
+        ['Compras entregues usadas nas médias',deliveryInsights.deliveredCount],
         ['Compras originais',roots.length],
         ['Registros de entrega e tentativas',deliveries.length],
         ['Compras entregues no cliente',deliveredRoots.length],
@@ -3281,7 +3327,12 @@
         ['Clientes recorrentes identificados',recurringCustomers],
         ['Identificações obrigatórias completas',completeIdentification],
         ['Completude da identificação %',percentage(completeIdentification,roots.length)],
-        ['Dia da semana com mais compras',peakDay?`${peakDay[0]} • ${peakDay[1]} compra(s)`:'Sem dados'],
+        ['Data com mais entregas no período',reportPeakDate?`${dateBR(reportPeakDate)} • ${reportPeakWeekday}`:'Sem dados'],
+        ['Entregas na data de maior movimento',deliveryInsights.reportPeak?.count||0],
+        ['Dia da semana com maior média em até 1 ano',deliveryInsights.peakWeekday?.label||'Sem dados'],
+        ['Média de entregas no melhor dia da semana',deliveryInsights.peakWeekday?.average||0],
+        ['Semana do mês com maior média em até 1 ano',deliveryInsights.peakWeekOfMonth?`${deliveryInsights.peakWeekOfMonth.label} • ${deliveryInsights.peakWeekOfMonth.detail}`:'Sem dados'],
+        ['Média diária de entregas na melhor semana do mês',deliveryInsights.peakWeekOfMonth?.average||0],
         ['Horário com mais compras',peakHour?`${peakHour[0]} • ${peakHour[1]} compra(s)`:'Sem dados'],
         ['Caixa com mais compras',topCashier?`Caixa ${topCashier[0]} • ${topCashier[1]} compra(s)`:'Sem dados'],
         ['Faturamento bruto',fin.gross],
@@ -3397,13 +3448,15 @@
   function printReport() {
     const r=reportRangeFromForm();
     const analytics=buildReportAnalytics(r);
-    const {deliveries,roots,scheduleSummaries,costs,odometers,current,comparisonRows,monthlyRows,dayRows,hourRows,customerRows,qualityRows,rankingRows}=analytics;
+    const {deliveries,roots,scheduleSummaries,deliveryInsights,costs,odometers,current,comparisonRows,monthlyRows,dayRows,hourRows,customerRows,qualityRows,rankingRows}=analytics;
     const allRecords=scoped(state.deliveries);
     const deliveredRoots=roots.filter(root=>rootWasFinalized(root,allRecords));
     const outcomeFor=root=>purchaseOutcome(root,allRecords);
     const fin=financialsForRange(r);
     const nb=buildNeighborhoodRows(deliveries).slice(0,10);
-    const peakDay=dayRows.slice(1).sort((a,b)=>b[1]-a[1])[0],peakHour=hourRows.slice(1).sort((a,b)=>b[1]-a[1])[0];
+    const peakHour=hourRows.slice(1).sort((a,b)=>b[1]-a[1])[0];
+    const reportPeakDate=deliveryInsights.reportPeak?.date||'';
+    const reportPeakWeekday=reportPeakDate?['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'][reportDate(reportPeakDate).getDay()]:'';
     const recurringCustomers=customerRows.slice(1).filter(row=>row[3]==='SIM').length;
     const completeIdentification=roots.filter(d=>d.coupon&&d.docNo&&d.cashierNo&&d.neighborhoodId&&d.purchaseTime).length;
     const statusPrintRows=[...groupItems(roots,root=>outcomeFor(root).key).entries()].map(([label,rows])=>({label,value:rows.length})).sort((a,b)=>b.value-a.value),statusMax=Math.max(...statusPrintRows.map(row=>row.value),1);
@@ -3416,7 +3469,7 @@
         <div class="c"><small>Sucesso na 1ª tentativa</small><strong>${percent(current.firstAttemptRate)}</strong></div><div class="c"><small>Entrega &gt; 3h30</small><strong>${current.completionDelayed}</strong></div><div class="c"><small>Fora do padrão 3h30</small><strong>${percent(current.completionDelayRate)}</strong></div><div class="c"><small>Taxa de problemas</small><strong>${percent(current.problemRate)}</strong></div><div class="c"><small>Identificação completa</small><strong>${percent(percentage(completeIdentification,roots.length))}</strong></div><div class="c"><small>Clientes recorrentes</small><strong>${recurringCustomers}</strong></div>
       </div>
       <h2>Painel visual dos indicadores</h2><div class="visual-grid"><div class="visual-card"><h3>Cumprimento dos prazos</h3>${slaPrintRows.map(row=>`<div class="sla-item"><div class="sla-head"><strong>${row.label}</strong><span>${percent(row.rate)} dentro • limite ${row.limit}</span></div><div class="bar"><i class="ok" style="width:${percentage(row.within,row.total)}%"></i><i class="bad" style="width:${percentage(row.outside,row.total)}%"></i></div><div class="legend">${row.within} dentro do padrão • ${row.outside} fora • ${row.total} calculáveis</div></div>`).join('')}</div><div class="visual-card"><h3>Situação consolidada das compras</h3><div class="status-print">${statusPrintRows.map(row=>`<div><span>${esc(row.label)}</span><div class="track"><i style="width:${row.value/statusMax*100}%"></i></div><strong>${row.value}</strong></div>`).join('')}</div></div></div>
-      <h2>Principais insights</h2><table><tr><th>Indicador</th><th>Resultado</th><th>Leitura operacional</th></tr><tr><td>Dia com mais compras</td><td>${esc(peakDay?.[0]||'Sem dados')}</td><td>${peakDay?`${peakDay[1]} compra(s) no período`:'Ainda não há base suficiente'}</td></tr><tr><td>Horário de pico</td><td>${esc(peakHour?.[0]||'Sem dados')}</td><td>${peakHour?`${peakHour[1]} compra(s) nessa faixa`:'Ainda não há base suficiente'}</td></tr><tr><td>Compra → saída média</td><td>${fmtMinutes(current.avgWait)}</td><td>Padrão: até ${fmtMinutes(Number(state.settings.delayMinutes||120))}</td></tr><tr><td>Cumprimento compra → saída</td><td>${percent(current.departureComplianceRate)}</td><td>${current.departureWithin} dentro de ${current.departureCalculable} calculáveis</td></tr><tr><td>Compra → cliente média</td><td>${fmtMinutes(current.avgPurchaseToClient)}</td><td>Padrão: até ${fmtMinutes(Number(state.settings.completionLimitMinutes||210))}</td></tr><tr><td>Cumprimento compra → cliente</td><td>${percent(current.completionComplianceRate)}</td><td>${current.completionWithin} dentro de ${current.completionCalculable} calculáveis</td></tr><tr><td>Rota média</td><td>${fmtMinutes(current.avgRoute)}</td><td>Tempo entre saída e retorno à loja</td></tr></table>
+      <h2>Principais insights</h2><table><tr><th>Indicador</th><th>Resultado</th><th>Leitura operacional</th></tr><tr><td>Data com mais entregas</td><td>${reportPeakDate?`${dateBR(reportPeakDate)} • ${esc(reportPeakWeekday)}`:'Sem dados'}</td><td>${deliveryInsights.reportPeak?`${deliveryInsights.reportPeak.count} entrega(s) no período deste relatório`:'Ainda não há entrega finalizada no período'}</td></tr><tr><td>Dia da semana com maior média</td><td>${esc(deliveryInsights.peakWeekday?.label||'Sem dados')}</td><td>${deliveryInsights.peakWeekday?`Média de ${number(deliveryInsights.peakWeekday.average,1)} entrega(s) por ${deliveryInsights.peakWeekday.label.toLocaleLowerCase('pt-BR')}`:'Ainda não há base suficiente'}</td></tr><tr><td>Semana do mês com maior média</td><td>${deliveryInsights.peakWeekOfMonth?`${esc(deliveryInsights.peakWeekOfMonth.label)} • ${esc(deliveryInsights.peakWeekOfMonth.detail)}`:'Sem dados'}</td><td>${deliveryInsights.peakWeekOfMonth?`Média diária de ${number(deliveryInsights.peakWeekOfMonth.average,1)} entrega(s) nessa semana do mês`:'Ainda não há base suficiente'}</td></tr><tr><td>Base usada nas médias</td><td>${deliveryInsights.start?`${dateBR(deliveryInsights.start)} a ${dateBR(deliveryInsights.end)}`:'Sem dados'}</td><td>${deliveryInsights.start?`${deliveryInsights.deliveredCount} entrega(s) em ${deliveryInsights.calendarDays} dia(s) de calendário • limite de 1 ano`:'As médias aparecerão conforme os dados forem preenchidos'}</td></tr><tr><td>Horário de pico</td><td>${esc(peakHour?.[0]||'Sem dados')}</td><td>${peakHour?`${peakHour[1]} compra(s) nessa faixa`:'Ainda não há base suficiente'}</td></tr><tr><td>Compra → saída média</td><td>${fmtMinutes(current.avgWait)}</td><td>Padrão: até ${fmtMinutes(Number(state.settings.delayMinutes||120))}</td></tr><tr><td>Cumprimento compra → saída</td><td>${percent(current.departureComplianceRate)}</td><td>${current.departureWithin} dentro de ${current.departureCalculable} calculáveis</td></tr><tr><td>Compra → cliente média</td><td>${fmtMinutes(current.avgPurchaseToClient)}</td><td>Padrão: até ${fmtMinutes(Number(state.settings.completionLimitMinutes||210))}</td></tr><tr><td>Cumprimento compra → cliente</td><td>${percent(current.completionComplianceRate)}</td><td>${current.completionWithin} dentro de ${current.completionCalculable} calculáveis</td></tr><tr><td>Rota média</td><td>${fmtMinutes(current.avgRoute)}</td><td>Tempo entre saída e retorno à loja</td></tr></table>
       <h2>Comparação com o período anterior</h2><table><thead><tr>${comparisonRows[0].map(value=>`<th>${esc(value)}</th>`).join('')}</tr></thead><tbody>${comparisonRows.slice(1).map(row=>`<tr><td>${esc(row[0])}</td><td>${formattedReportValue(row[0],row[1])}</td><td>${formattedReportValue(row[0],row[2])}</td><td>${formattedReportValue(row[0],row[3])}</td><td>${typeof row[4]==='number'?percent(row[4]):esc(row[4]||'—')}</td></tr>`).join('')}</tbody></table>
       <h2>Resumo mensal</h2><table><thead><tr>${monthlyRows[0].map(value=>`<th>${esc(value)}</th>`).join('')}</tr></thead><tbody>${monthlyRows.slice(1).map(row=>`<tr>${row.map((value,index)=>`<td>${formattedReportValue(monthlyRows[0][index],value)}</td>`).join('')}</tr>`).join('')}</tbody></table>
       <h2>Ranking operacional</h2><table><thead><tr>${rankingRows[0].map(value=>`<th>${esc(value)}</th>`).join('')}</tr></thead><tbody>${rankingRows.slice(1,16).map(row=>`<tr>${row.map((value,index)=>`<td>${formattedReportValue(rankingRows[0][index],value)}</td>`).join('')}</tr>`).join('')}</tbody></table>

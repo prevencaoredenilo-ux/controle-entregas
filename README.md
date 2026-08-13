@@ -1,6 +1,15 @@
-# Controle de Entregas • Nilo Supermercado — V14.4.1
+# Controle de Entregas • Nilo Supermercado — V14.4.2
 
 Versão focada em **segurança dos dados, confiabilidade dos indicadores e acessibilidade**, mantendo os ciclos automáticos e todas as melhorias operacionais da V13.
+
+## Novos insights da V14.4.2
+
+- O relatório mostra a **data exata com mais entregas**, em dia/mês/ano, acompanhada do dia da semana e da quantidade entregue.
+- Um novo indicador identifica o **dia da semana com maior média diária de entregas**.
+- Outro indicador identifica a **semana do mês com maior média diária**, separando dias 1–7, 8–14, 15–21, 22–28 e 29 até o fim do mês.
+- As médias usam automaticamente até os **365 dias mais recentes com histórico disponível**. Se houver menos de um ano, usam todo o intervalo existente.
+- O PDF e o resumo executivo do Excel informam o início, o fim, os dias de calendário e a quantidade de entregas usados no cálculo.
+- São contabilizadas compras realmente entregues ao cliente, considerando todas as tentativas ligadas e sem duplicar reagendamentos.
 
 ## Correção da V14.4.1
 
