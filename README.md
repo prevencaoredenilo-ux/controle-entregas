@@ -1,6 +1,15 @@
-# Controle de Entregas • Nilo Supermercado — V14.4.3
+# Controle de Entregas • Nilo Supermercado — V14.5.0
 
-Versão focada em **segurança dos dados, confiabilidade dos indicadores e acessibilidade**, mantendo os ciclos automáticos e todas as melhorias operacionais da V13.
+Versão focada em **agendamento operacional detalhado e controle do retorno das entregas**, mantendo a segurança dos dados e todas as melhorias anteriores.
+
+## Novidades da V14.5.0
+
+- Entregas programadas e reagendadas registram dia, hora e detalhes do agendamento.
+- A cadeia de uma entrega agendada fica fora dos indicadores comuns de atraso, sem perder seus tempos operacionais e seu histórico.
+- No fechamento do ciclo, o sistema pergunta se alguma entrega voltou sem ser entregue.
+- Ao responder **Sim**, aparecem somente as notas fiscais ainda não finalizadas; cada NF que voltou exige um motivo e aceita um detalhe complementar.
+- Somente nomes de clientes e nomes de bairros são convertidos para caixa alta.
+- Telefones são exibidos na máscara brasileira `( 99 ) 9 9999-9999`.
 
 ## Previsão de movimento da V14.4.3
 

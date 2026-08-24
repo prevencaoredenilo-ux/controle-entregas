@@ -1,2 +1,2 @@
-V14.4.3 — Previsão preventiva de movimento
-O sistema projeta as próximas 5 semanas, indicando dia e semana prováveis de pico, dia da semana mais forte, volume estimado e confiança. A previsão combina até 1 ano de histórico com as programações ainda abertas.
+V14.5.0 — Agendamentos detalhados e retorno por nota fiscal
+Entregas programadas recebem dia, hora e detalhes e ficam fora do indicador comum de atraso. Ao fechar um ciclo, o sistema pergunta se alguma entrega voltou; quando a resposta é sim, mostra somente as NFs não finalizadas e exige o motivo da volta. Nomes de clientes e bairros são gravados em caixa alta e telefones usam a máscara ( 99 ) 9 9999-9999.
