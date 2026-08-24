@@ -8,7 +8,7 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="icons/icon-192.png" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
-  <link rel="stylesheet" href="styles.css?v=14.6.0" />
+  <link rel="stylesheet" href="styles.css?v=14.7.0" />
   <title>Controle de Entregas • Nilo Supermercado</title>
 </head>
 <body>
@@ -83,7 +83,7 @@
       <div class="sidebar-footer">
         <div>
           <span>Modo local + offline</span>
-          <small>Tempo real + offline • V14.6.0</small>
+          <small>Rotas + tempo real + offline • V14.7.0</small>
         </div>
         <button class="mini-icon-btn" id="installBtn" title="Instalar aplicativo" hidden>⇩</button>
       </div>
@@ -140,6 +140,13 @@
     </main>
   </div>
 
+  <nav class="mobile-app-dock" id="mobileAppDock" aria-label="Ações rápidas">
+    <button type="button" data-mobile-view="today" class="active"><span>⌂</span><small>Central</small></button>
+    <button type="button" data-mobile-view="cycles"><span>↻</span><small>Ciclos</small></button>
+    <button type="button" class="mobile-new-delivery" id="mobileNewDeliveryBtn"><span>＋</span><small>Nova compra</small></button>
+    <button type="button" id="mobileMenuBtn"><span>☰</span><small>Menu</small></button>
+  </nav>
+
   <div class="modal-wrap hidden" id="modalWrap" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="modalTitle" aria-describedby="modalSubtitle">
     <div class="modal" id="modal">
       <div class="modal-head">
@@ -157,6 +164,6 @@
   <div class="toast-stack" id="toastStack" role="status" aria-live="polite" aria-atomic="true"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.4"></script>
-  <script src="app.js?v=14.6.0"></script>
+  <script src="app.js?v=14.7.0"></script>
 </body>
 </html>

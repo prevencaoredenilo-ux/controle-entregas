@@ -1,6 +1,18 @@
-# Controle de Entregas • Nilo Supermercado — V14.6.0
+# Controle de Entregas • Nilo Supermercado — V14.7.0
 
-Versão focada em **acesso seguro pelo celular, sincronização em tempo real e continuidade offline**, mantendo os agendamentos detalhados e todas as melhorias anteriores.
+Versão focada em **roteirização dos ciclos, prioridade operacional e uso mais simples no celular**, mantendo tempo real, continuidade offline, agendamentos e relatórios.
+
+## Novidades da V14.7.0
+
+- O cadastro da entrega possui rua/avenida, número, complemento e ponto de referência.
+- Uma entrega pode ser marcada como **prioritária** e passa obrigatoriamente para o início do roteiro do ciclo.
+- Ao montar a saída, o sistema mostra ao vivo a ordem sugerida por prioridade e sequência dos bairros.
+- Cada bairro possui uma ordem de roteiro configurável em **Cadastros > Bairros**.
+- O ciclo ganhou a ação **Rota no Google Maps**, com saída e retorno ao mercado, lista numerada das NFs e indicação de endereço exato ou parada aproximada pelo bairro.
+- Quando existem muitas paradas, o sistema também cria trechos menores para facilitar o uso no celular.
+- O Google Maps é aberto por URL universal e não exige chave de API; o mapa e o cálculo das ruas precisam de internet.
+- A interface mobile ganhou barra inferior de navegação, botão central de nova compra, campos maiores, formulários em uma coluna, modais em formato de painel e ações fixas mais acessíveis.
+- Excel e impressão/PDF passaram a incluir endereço, referência, prioridade e posição sugerida no roteiro.
 
 ## Novidades da V14.6.0
 

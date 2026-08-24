@@ -1,2 +1,2 @@
-V14.6.0 — Acesso pelo celular em tempo real com fila offline
-Celular e computador compartilham os mesmos dados no projeto Supabase existente. Sem internet, os lançamentos continuam salvos no aparelho e entram em uma fila por registro; ao reconectar, são sincronizados automaticamente. O acesso usa os usuários existentes e tabelas isoladas com RLS.
+V14.7.0 — Roteirização por prioridade e bairro + visual mobile
+Ao montar o ciclo, entregas prioritárias aparecem primeiro e as demais são agrupadas pela ordem dos bairros. Rua, número, complemento e referência permitem abrir o roteiro no Google Maps. O celular recebeu navegação inferior, formulários em uma coluna, modais em formato de painel e ações maiores.
