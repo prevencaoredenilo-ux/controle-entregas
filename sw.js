@@ -1,12 +1,13 @@
-const CACHE_NAME = 'controle-entregas-v14-5-0-agendamento-retorno';
+const CACHE_NAME = 'controle-entregas-v14-6-0-tempo-real-offline';
 const APP_SHELL = [
   './',
   './index.html',
-  './styles.css?v=14.5.0',
-  './app.js?v=14.5.0',
+  './styles.css?v=14.6.0',
+  './app.js?v=14.6.0',
   './manifest.webmanifest',
   './icons/icon-192.png',
-  './icons/icon-512.png'
+  './icons/icon-512.png',
+  'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.4'
 ];
 
 self.addEventListener('install', event => {

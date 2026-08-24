@@ -7,12 +7,19 @@
   }
   'use strict';
 
-  const APP_VERSION = '14.5.0';
+  const APP_VERSION = '14.6.0';
   const DB_NAME = 'controle_entregas_nx';
   const DB_VERSION = 1;
   const STORE_NAME = 'app_state';
   const STATE_KEY = 'main';
   const PRE_UPDATE_BACKUP_KEY = 'pre_update_backup';
+  const SYNC_QUEUE_KEY = 'delivery_sync_queue_v1';
+  const SYNC_SNAPSHOT_KEY = 'delivery_sync_snapshot_v1';
+  const SYNC_WORKSPACE_CODE = 'nilo-entregas';
+  const SUPABASE_URL = 'https://vwwkzenvcxedxiuopsgv.supabase.co';
+  const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_Vh9zdSxCUH0fMJOjf_G6Sw_UMU0t0to';
+  const SUPABASE_LOGIN_DOMAIN = 'centraltemp.invalid';
+  const SYNC_COLLECTIONS = ['vehicles','neighborhoods','employees','costCategories','reasons','deliveries','cycles','odometerLogs','costs','audit','dayClosures','trash'];
   const YEAR_PAST_RANGE = 10;
   const YEAR_FUTURE_RANGE = 20;
 
@@ -30,6 +37,29 @@
   let lastFocusedElement = null;
   let preUpdateBackup = null;
   let deliverySearch = { identifier: '', cashier: '', date: '', customerName: '' };
+  let cloudClient = null;
+  let cloudSession = null;
+  let cloudWorkspace = null;
+  let realtimeChannel = null;
+  let syncQueue = [];
+  let syncSnapshot = {};
+  let syncReady = false;
+  let syncApplyingRemote = false;
+  let syncFlushing = false;
+  let syncFlushTimer = null;
+  let syncRealtimeStatus = 'DISCONNECTED';
+  let hadLocalStateBeforeSync = false;
+  const syncClientId = (() => {
+    try {
+      const existing = localStorage.getItem('delivery_sync_client_id');
+      if (existing) return existing;
+      const value = `client_${crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}_${Math.random()}`}`;
+      localStorage.setItem('delivery_sync_client_id',value);
+      return value;
+    } catch {
+      return `client_${Date.now()}_${Math.random()}`;
+    }
+  })();
 
   const pageMeta = {
     dashboard: ['Dashboard', 'Visão geral da operação, custos, faturamento e produtividade.'],
@@ -282,11 +312,322 @@
     });
   }
 
+  function syncEntityKey(entityType, entityId) { return `${entityType}:${entityId}`; }
+  function syncEntityMap(source = state) {
+    const map = new Map();
+    if (!source) return map;
+    map.set(syncEntityKey('meta','main'), {entityType:'meta',entityId:'main',data:{version:APP_VERSION,createdAt:source.meta?.createdAt||nowISO()}});
+    const cloudSettings={...(source.settings||{})};
+    delete cloudSettings.appMode;
+    map.set(syncEntityKey('settings','main'), {entityType:'settings',entityId:'main',data:cloudSettings});
+    SYNC_COLLECTIONS.forEach(collection => {
+      (source[collection]||[]).forEach(item => {
+        if (!item?.id) return;
+        map.set(syncEntityKey(collection,item.id), {entityType:collection,entityId:item.id,data:cloneData(item)});
+      });
+    });
+    return map;
+  }
+  function serializedSyncData(value) { return JSON.stringify(value ?? null); }
+  function syncOperationTime(value) {
+    const parsed=Date.parse(value||'');
+    return Number.isFinite(parsed)?parsed:0;
+  }
+  async function persistSyncControl() {
+    if (!dbHandle) return;
+    await Promise.all([idbSet(SYNC_QUEUE_KEY,syncQueue),idbSet(SYNC_SNAPSHOT_KEY,syncSnapshot)]);
+  }
+  function replaceQueuedOperation(operation) {
+    const key=syncEntityKey(operation.entityType,operation.entityId);
+    const index=syncQueue.findIndex(item=>syncEntityKey(item.entityType,item.entityId)===key);
+    const entry={...operation,key,opId:uid('syncop')};
+    if(index>=0)syncQueue[index]=entry;else syncQueue.push(entry);
+  }
+  async function queueStateChanges({forceAll=false,deferFlush=false}={}) {
+    if (!syncReady || syncApplyingRemote || !state) return;
+    const current=syncEntityMap(state);
+    const changedAt=nowISO();
+    current.forEach((entity,key)=>{
+      const serialized=serializedSyncData(entity.data);
+      if(forceAll || syncSnapshot[key]!==serialized){
+        replaceQueuedOperation({...entity,deleted:false,changedAt});
+        syncSnapshot[key]=serialized;
+      }
+    });
+    if(!forceAll){
+      Object.keys(syncSnapshot).forEach(key=>{
+        if(current.has(key))return;
+        const separator=key.indexOf(':');
+        replaceQueuedOperation({entityType:key.slice(0,separator),entityId:key.slice(separator+1),data:null,deleted:true,changedAt});
+        delete syncSnapshot[key];
+      });
+    }
+    await persistSyncControl();
+    if(!deferFlush)scheduleSyncFlush();
+    updateConnectionStatus();
+  }
+  function scheduleSyncFlush(delay=180) {
+    clearTimeout(syncFlushTimer);
+    syncFlushTimer=setTimeout(()=>flushSyncQueue().catch(err=>console.warn('Sincronização pendente',err)),delay);
+  }
+  async function flushSyncQueue() {
+    if(syncFlushing || !syncQueue.length || !navigator.onLine || !cloudClient || !cloudSession || !cloudWorkspace)return;
+    syncFlushing=true;updateConnectionStatus();
+    try{
+      while(syncQueue.length && navigator.onLine){
+        const batch=syncQueue.slice(0,100);
+        const rows=batch.map(operation=>({
+          workspace_id:cloudWorkspace.id,
+          entity_type:operation.entityType,
+          entity_id:operation.entityId,
+          data:operation.deleted?null:operation.data,
+          deleted_at:operation.deleted?operation.changedAt:null,
+          client_updated_at:operation.changedAt,
+          source_client_id:syncClientId
+        }));
+        const {data:confirmedRows,error}=await cloudClient.from('delivery_sync_entities').upsert(rows,{onConflict:'workspace_id,entity_type,entity_id'}).select('*');
+        if(error)throw error;
+        const completed=new Map(batch.map(operation=>[operation.key,operation.opId]));
+        syncQueue=syncQueue.filter(operation=>completed.get(operation.key)!==operation.opId);
+        syncApplyingRemote=true;
+        (confirmedRows||[]).forEach(row=>{
+          const key=syncEntityKey(row.entity_type,row.entity_id);
+          const newerPending=syncQueue.find(operation=>operation.key===key&&syncOperationTime(operation.changedAt)>=syncOperationTime(row.client_updated_at));
+          if(newerPending)return;
+          applyEntityToState(row,state);
+          if(row.deleted_at||row.data===null)delete syncSnapshot[key];else syncSnapshot[key]=serializedSyncData(row.data);
+        });
+        state=migrateState(state);
+        await Promise.all([idbSet(STATE_KEY,state),persistSyncControl()]);
+        syncApplyingRemote=false;
+      }
+      syncRealtimeStatus='SUBSCRIBED';
+    }catch(err){
+      syncRealtimeStatus='ERROR';
+      console.warn('Não foi possível concluir a sincronização.',err);
+    }finally{
+      syncApplyingRemote=false;syncFlushing=false;updateConnectionStatus();
+    }
+  }
+  function applyEntityToState(row,target=state) {
+    const type=row.entity_type,id=row.entity_id,deleted=Boolean(row.deleted_at),data=row.data;
+    if(type==='settings'){
+      if(!deleted&&data){const localMode=target.settings?.appMode||'production';target.settings={...target.settings,...cloneData(data),appMode:localMode};}
+      return;
+    }
+    if(type==='meta'){
+      if(!deleted&&data)target.meta={...target.meta,...cloneData(data),version:APP_VERSION};
+      return;
+    }
+    if(!SYNC_COLLECTIONS.includes(type))return;
+    target[type]||=[];
+    const index=target[type].findIndex(item=>item.id===id);
+    if(deleted){if(index>=0)target[type].splice(index,1);return;}
+    if(!data)return;
+    if(index>=0)target[type][index]=cloneData(data);else target[type].push(cloneData(data));
+  }
+  async function restoreStateFromRemote(rows) {
+    const localMode=currentMode();
+    const restored=defaultState();
+    restored.settings.appMode=localMode;
+    SYNC_COLLECTIONS.forEach(collection=>{restored[collection]=[];});
+    const nextSnapshot={};
+    rows.forEach(row=>{
+      applyEntityToState(row,restored);
+      if(!row.deleted_at&&row.data!==null)nextSnapshot[syncEntityKey(row.entity_type,row.entity_id)]=serializedSyncData(row.data);
+    });
+    syncApplyingRemote=true;
+    state=migrateState(restored);
+    syncSnapshot=nextSnapshot;
+    syncQueue=[];
+    await Promise.all([idbSet(STATE_KEY,state),persistSyncControl()]);
+    syncApplyingRemote=false;
+    refreshYearOptions();refreshWeekOptions();render();updateBadges();
+  }
+  function snapshotFromRemoteRows(rows) {
+    const snapshot={};
+    rows.forEach(row=>{if(!row.deleted_at&&row.data!==null)snapshot[syncEntityKey(row.entity_type,row.entity_id)]=serializedSyncData(row.data);});
+    return snapshot;
+  }
+  function operationalRecordCount(source=state) {
+    return ['deliveries','cycles','odometerLogs','costs','dayClosures'].reduce((total,collection)=>total+(source?.[collection]?.length||0),0);
+  }
+  function entityDataTime(data) {
+    if(!data||typeof data!=='object')return 0;
+    return Math.max(...['updatedAt','createdAt','at','deletedAt'].map(field=>syncOperationTime(data[field])),0);
+  }
+  async function keepLocalStateOverRemote(rows) {
+    syncSnapshot=snapshotFromRemoteRows(rows);
+    await persistSyncControl();
+    await queueStateChanges({deferFlush:true});
+  }
+  async function mergeInitialLocalAndRemote(rows) {
+    const localEntities=syncEntityMap(state);
+    syncSnapshot=snapshotFromRemoteRows(rows);
+    syncApplyingRemote=true;
+    rows.forEach(row=>{
+      const key=syncEntityKey(row.entity_type,row.entity_id);
+      const local=localEntities.get(key);
+      if(!local){applyEntityToState(row,state);return;}
+      const localTime=entityDataTime(local.data),remoteTime=syncOperationTime(row.client_updated_at);
+      if(remoteTime>=localTime)applyEntityToState(row,state);
+    });
+    state=migrateState(state);
+    await Promise.all([idbSet(STATE_KEY,state),persistSyncControl()]);
+    syncApplyingRemote=false;
+    await queueStateChanges({deferFlush:true});
+    refreshYearOptions();refreshWeekOptions();render();updateBadges();
+  }
+  async function applyRemoteEntity(row,{renderAfter=true}={}) {
+    if(!row?.entity_type||!row?.entity_id)return;
+    const key=syncEntityKey(row.entity_type,row.entity_id);
+    const pending=syncQueue.find(operation=>operation.key===key);
+    if(pending&&syncOperationTime(pending.changedAt)>=syncOperationTime(row.client_updated_at))return;
+    if(!pending&&row.source_client_id===syncClientId)return;
+    if(pending)syncQueue=syncQueue.filter(operation=>operation.key!==key);
+    syncApplyingRemote=true;
+    applyEntityToState(row,state);
+    state=migrateState(state);
+    if(row.deleted_at||row.data===null)delete syncSnapshot[key];else syncSnapshot[key]=serializedSyncData(row.data);
+    await Promise.all([idbSet(STATE_KEY,state),persistSyncControl()]);
+    syncApplyingRemote=false;
+    if(renderAfter){refreshYearOptions();refreshWeekOptions();render();updateBadges();toast('Dados atualizados por outro aparelho.','success');}
+  }
+  async function fetchAllRemoteEntities() {
+    const rows=[];let from=0;const pageSize=500;
+    while(true){
+      const {data,error}=await cloudClient.from('delivery_sync_entities').select('*').eq('workspace_id',cloudWorkspace.id).order('entity_type').order('entity_id').range(from,from+pageSize-1);
+      if(error)throw error;
+      rows.push(...(data||[]));
+      if(!data||data.length<pageSize)break;
+      from+=pageSize;
+    }
+    return rows;
+  }
+  async function subscribeToRemoteChanges() {
+    if(realtimeChannel)await cloudClient.removeChannel(realtimeChannel).catch(()=>{});
+    realtimeChannel=cloudClient.channel(`delivery-sync-${cloudWorkspace.id}`)
+      .on('postgres_changes',{event:'*',schema:'public',table:'delivery_sync_entities',filter:`workspace_id=eq.${cloudWorkspace.id}`},payload=>{
+        const row=payload.new||payload.old;
+        applyRemoteEntity(row).catch(err=>console.warn('Atualização remota pendente',err));
+      })
+      .subscribe(status=>{syncRealtimeStatus=status;updateConnectionStatus();});
+  }
+  async function connectCloudSession() {
+    if(!cloudClient||!cloudSession||!navigator.onLine)return;
+    const {data:workspace,error:workspaceError}=await cloudClient.from('delivery_workspaces').select('id,code,name').eq('code',SYNC_WORKSPACE_CODE).single();
+    if(workspaceError)throw workspaceError;
+    cloudWorkspace=workspace;
+    try{localStorage.setItem('delivery_sync_workspace',JSON.stringify(workspace));}catch{}
+    syncReady=true;
+    if(Object.keys(syncSnapshot).length||syncQueue.length)await queueStateChanges({deferFlush:true});
+    const rows=await fetchAllRemoteEntities();
+    const hasLocalSync=Object.keys(syncSnapshot).length>0||syncQueue.length>0;
+    if(!rows.length){
+      syncSnapshot={};await persistSyncControl();await queueStateChanges({forceAll:true,deferFlush:true});
+    }else if(!hasLocalSync){
+      const localOperational=operationalRecordCount(state);
+      const remoteOperational=rows.filter(row=>!row.deleted_at&&['deliveries','cycles','odometerLogs','costs','dayClosures'].includes(row.entity_type)).length;
+      if((hadLocalStateBeforeSync||localOperational>0)&&remoteOperational===0)await keepLocalStateOverRemote(rows);
+      else if(localOperational>0&&remoteOperational>0)await mergeInitialLocalAndRemote(rows);
+      else await restoreStateFromRemote(rows);
+    }else{
+      for(const row of rows)await applyRemoteEntity(row,{renderAfter:false});
+      refreshYearOptions();refreshWeekOptions();render();updateBadges();
+    }
+    await subscribeToRemoteChanges();
+    await flushSyncQueue();
+    hideCloudAuth();updateCloudAccountButton();updateConnectionStatus();
+  }
+  function lastCloudUsername() { try{return localStorage.getItem('delivery_last_username')||'';}catch{return '';} }
+  function cloudUsername() { return cloudSession?.user?.email?.split('@')[0]||lastCloudUsername(); }
+  function showCloudAuth(message='') {
+    const screen=$('#cloudAuthScreen');if(!screen)return;
+    screen.classList.remove('hidden');screen.setAttribute('aria-hidden','false');
+    $('#cloudAuthMessage').textContent=message;
+    const username=$('#cloudAuthForm [name="username"]');if(username&&!username.value)username.value=lastCloudUsername();
+    $('#continueOfflineBtn').classList.toggle('hidden',!lastCloudUsername());
+    $('#appShell').setAttribute('aria-hidden','true');
+  }
+  function hideCloudAuth() {
+    const screen=$('#cloudAuthScreen');if(!screen)return;
+    screen.classList.add('hidden');screen.setAttribute('aria-hidden','true');$('#appShell').removeAttribute('aria-hidden');
+  }
+  function updateCloudAccountButton() {
+    const button=$('#syncAccountBtn');if(!button)return;
+    button.hidden=!cloudSession;
+    if(cloudSession)button.textContent=`☁ ${cloudUsername()||'Conta'} • Sair`;
+  }
+  async function cloudLogin(event) {
+    event.preventDefault();
+    const button=$('#cloudLoginBtn'),form=event.currentTarget;
+    const values=Object.fromEntries(new FormData(form).entries());
+    const username=String(values.username||'').trim().toLowerCase();
+    if(!/^[a-z0-9._-]{3,40}$/.test(username)){showCloudAuth('Informe um usuário válido.');return;}
+    if(!navigator.onLine){showCloudAuth('Sem internet. Conecte-se para entrar pela primeira vez.');return;}
+    if(!cloudClient){showCloudAuth('O serviço de sincronização não carregou. Atualize a página com internet.');return;}
+    button.disabled=true;button.textContent='Entrando...';$('#cloudAuthMessage').textContent='';
+    try{
+      const {data,error}=await cloudClient.auth.signInWithPassword({email:`${username}@${SUPABASE_LOGIN_DOMAIN}`,password:String(values.password||'')});
+      if(error)throw error;
+      cloudSession=data.session;
+      try{localStorage.setItem('delivery_last_username',username);}catch{}
+      await connectCloudSession();
+      toast('Conta conectada. Sincronização em tempo real ativada.','success');
+    }catch(err){
+      showCloudAuth(/invalid login|credentials/i.test(err.message||'')?'Usuário ou senha incorretos.':`Não foi possível entrar: ${err.message||err}`);
+    }finally{button.disabled=false;button.textContent='Entrar e sincronizar';}
+  }
+  async function cloudLogout() {
+    if(!cloudClient||!cloudSession)return;
+    if(!confirm('Sair da conta neste aparelho? Os dados locais continuarão guardados, mas a sincronização ficará pausada.'))return;
+    if(realtimeChannel)await cloudClient.removeChannel(realtimeChannel).catch(()=>{});
+    await cloudClient.auth.signOut();
+    cloudSession=null;cloudWorkspace=null;syncReady=false;syncRealtimeStatus='DISCONNECTED';updateCloudAccountButton();updateConnectionStatus();showCloudAuth('Conta desconectada deste aparelho.');
+  }
+  function bindCloudEvents() {
+    const form=$('#cloudAuthForm');
+    if(form&&!form.dataset.bound){form.dataset.bound='true';form.addEventListener('submit',cloudLogin);}
+    const offline=$('#continueOfflineBtn');
+    if(offline&&!offline.dataset.bound){offline.dataset.bound='true';offline.addEventListener('click',()=>{hideCloudAuth();toast('Modo offline ativo. As alterações serão sincronizadas quando você entrar novamente.','warning');});}
+    const account=$('#syncAccountBtn');
+    if(account&&!account.dataset.bound){account.dataset.bound='true';account.addEventListener('click',cloudLogout);}
+  }
+  async function initializeCloudSync() {
+    bindCloudEvents();
+    if(!window.supabase?.createClient){
+      showCloudAuth(lastCloudUsername()?'Biblioteca online indisponível. Você pode continuar com os dados deste aparelho.':'Conecte-se à internet para ativar o acesso em tempo real.');
+      return;
+    }
+    cloudClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{auth:{storageKey:'nilo-delivery-auth',persistSession:true,autoRefreshToken:true,detectSessionInUrl:false}});
+    cloudClient.auth.onAuthStateChange((event,session)=>{
+      cloudSession=session;
+      updateCloudAccountButton();updateConnectionStatus();
+      if(event==='SIGNED_OUT'){syncReady=false;showCloudAuth('Sua sessão foi encerrada.');}
+    });
+    const {data}=await cloudClient.auth.getSession();
+    cloudSession=data.session;
+    if(!cloudSession){showCloudAuth();updateCloudAccountButton();return;}
+    try{localStorage.setItem('delivery_last_username',cloudUsername());}catch{}
+    if(!navigator.onLine){
+      try{cloudWorkspace=JSON.parse(localStorage.getItem('delivery_sync_workspace')||'null');}catch{cloudWorkspace=null;}
+      syncReady=Boolean(cloudWorkspace);hideCloudAuth();updateCloudAccountButton();updateConnectionStatus();return;
+    }
+    try{await connectCloudSession();}
+    catch(err){console.warn(err);showCloudAuth(`Não foi possível conectar ao banco: ${err.message||err}`);}
+  }
+  async function resumeCloudSync() {
+    if(!cloudClient)return initializeCloudSync();
+    if(!cloudSession){const {data}=await cloudClient.auth.getSession();cloudSession=data.session;}
+    if(cloudSession)await connectCloudSession().catch(err=>{syncRealtimeStatus='ERROR';console.warn(err);updateConnectionStatus();});
+  }
+
   async function saveState(action = '') {
     state.meta.updatedAt = nowISO();
     if (action) state.audit.unshift({ id: uid('aud'), at: nowISO(), action });
     if (state.audit.length > 2000) state.audit = state.audit.slice(0, 2000);
     await idbSet(STATE_KEY, state);
+    await queueStateChanges();
     updateBadges();
   }
 
@@ -294,7 +635,10 @@
     try {
       await openDB();
       const stored = await idbGet(STATE_KEY);
+      hadLocalStateBeforeSync = Boolean(stored);
       preUpdateBackup = await idbGet(PRE_UPDATE_BACKUP_KEY);
+      syncQueue = await idbGet(SYNC_QUEUE_KEY) || [];
+      syncSnapshot = await idbGet(SYNC_SNAPSHOT_KEY) || {};
       if (stored && stored?.meta?.version !== APP_VERSION) {
         const safetyCopy = { savedAt:nowISO(), fromVersion:stored?.meta?.version || 'anterior', state:cloneData(stored) };
         try {
@@ -316,7 +660,7 @@
       bindStaticEvents();
       initPWA();
       updateConnectionStatus();
-      window.addEventListener('online', updateConnectionStatus);
+      window.addEventListener('online', () => { updateConnectionStatus(); resumeCloudSync().catch(console.warn); });
       window.addEventListener('offline', updateConnectionStatus);
       refreshYearOptions();
       refreshWeekOptions();
@@ -326,6 +670,7 @@
       $('#bootScreen').style.opacity = '0';
       setTimeout(() => $('#bootScreen').remove(), 260);
       $('#appShell').removeAttribute('aria-hidden');
+      initializeCloudSync().catch(err=>{console.warn(err);showCloudAuth('Não foi possível iniciar a sincronização. Os dados locais foram mantidos.');});
     } catch (err) {
       console.error(err);
       $('#bootScreen').innerHTML = `<div class="boot-card"><div class="brand-mark large">!</div><h1>Não foi possível iniciar</h1><p>${esc(err.message || err)}</p></div>`;
@@ -334,7 +679,7 @@
 
   function initPWA() {
     if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-      navigator.serviceWorker.register('./sw.js?v=14.5.0').catch(console.warn);
+      navigator.serviceWorker.register('./sw.js?v=14.6.0').catch(console.warn);
     }
     window.addEventListener('beforeinstallprompt', (event) => {
       event.preventDefault();
@@ -353,10 +698,28 @@
   function updateConnectionStatus() {
     const online = navigator.onLine;
     $('#connectionDot').className = `connection-dot ${online ? 'online' : 'offline'}`;
-    $('#connectionTitle').textContent = online ? `Internet disponível • ${modeLabel()}` : `Sem internet • ${modeLabel()}`;
-    $('#connectionSubtitle').textContent = online
-      ? 'Dados locais neste dispositivo • não sincronizados'
-      : 'Modo offline ativo • dados continuam neste dispositivo';
+    if(!online){
+      $('#connectionTitle').textContent=syncQueue.length?`Sem internet • ${syncQueue.length} alteração(ões) pendente(s)`:`Sem internet • ${modeLabel()}`;
+      $('#connectionSubtitle').textContent=cloudSession?'Salvo neste aparelho • sincroniza automaticamente ao reconectar':'Modo offline local • entre na conta quando a internet voltar';
+      return;
+    }
+    if(!cloudSession){
+      $('#connectionTitle').textContent=`Online • login necessário`;
+      $('#connectionSubtitle').textContent='Entre na conta para compartilhar os dados com o celular';
+      return;
+    }
+    if(syncFlushing||syncQueue.length){
+      $('#connectionTitle').textContent=`Sincronizando • ${syncQueue.length} alteração(ões)`;
+      $('#connectionSubtitle').textContent='Enviando os lançamentos salvos neste aparelho';
+      return;
+    }
+    if(syncRealtimeStatus==='SUBSCRIBED'){
+      $('#connectionTitle').textContent=`Sincronizado em tempo real • ${cloudUsername()||modeLabel()}`;
+      $('#connectionSubtitle').textContent='Celular e computador compartilham os mesmos dados';
+      return;
+    }
+    $('#connectionTitle').textContent='Conectando ao banco online...';
+    $('#connectionSubtitle').textContent='Os dados locais permanecem disponíveis durante a conexão';
   }
 
   async function switchMode(mode) {

@@ -8,7 +8,7 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="icons/icon-192.png" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
-  <link rel="stylesheet" href="styles.css?v=14.5.0" />
+  <link rel="stylesheet" href="styles.css?v=14.6.0" />
   <title>Controle de Entregas • Nilo Supermercado</title>
 </head>
 <body>
@@ -19,6 +19,18 @@
       <p>Preparando sua operação...</p>
       <div class="boot-progress"><span></span></div>
     </div>
+  </div>
+
+  <div id="cloudAuthScreen" class="cloud-auth-screen hidden" aria-hidden="true">
+    <form id="cloudAuthForm" class="cloud-auth-card">
+      <div class="cloud-auth-brand"><div class="brand-mark large">N</div><div><span>ACESSO SEGURO</span><h1>Controle de Entregas</h1><p>Entre com o mesmo usuário do sistema Nilo para sincronizar celular e computador.</p></div></div>
+      <label>Usuário<input name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required /></label>
+      <label>Senha<input name="password" type="password" autocomplete="current-password" minlength="6" required /></label>
+      <p class="cloud-auth-message" id="cloudAuthMessage" aria-live="polite"></p>
+      <button type="submit" class="btn primary large-action" id="cloudLoginBtn">Entrar e sincronizar</button>
+      <button type="button" class="btn secondary hidden" id="continueOfflineBtn">Continuar com os dados deste aparelho</button>
+      <small class="cloud-auth-note">Sem internet, os lançamentos ficam salvos neste aparelho e sincronizam automaticamente quando a conexão voltar.</small>
+    </form>
   </div>
 
   <div class="app-shell" id="appShell" aria-hidden="true">
@@ -71,7 +83,7 @@
       <div class="sidebar-footer">
         <div>
           <span>Modo local + offline</span>
-          <small>Pronto para GitHub Pages • V14.5.0</small>
+          <small>Tempo real + offline • V14.6.0</small>
         </div>
         <button class="mini-icon-btn" id="installBtn" title="Instalar aplicativo" hidden>⇩</button>
       </div>
@@ -92,6 +104,7 @@
           <span class="desktop-mode-chip" id="desktopModeChip">● Ambiente real</span>
           <button class="btn secondary desktop-only" id="backupBtn">↓ Backup</button>
           <label class="btn secondary desktop-only file-btn">↑ Restaurar backup<input id="restoreInput" type="file" accept=".json,application/json" hidden /></label>
+          <button class="btn secondary" id="syncAccountBtn" hidden>Conta</button>
           <button class="btn primary" id="quickNewDeliveryBtn">＋ Registrar compra</button>
         </div>
       </header>
@@ -143,6 +156,7 @@
 
   <div class="toast-stack" id="toastStack" role="status" aria-live="polite" aria-atomic="true"></div>
 
-  <script src="app.js?v=14.5.0"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.4"></script>
+  <script src="app.js?v=14.6.0"></script>
 </body>
 </html>

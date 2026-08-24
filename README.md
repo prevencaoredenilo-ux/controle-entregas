@@ -1,6 +1,15 @@
-# Controle de Entregas • Nilo Supermercado — V14.5.0
+# Controle de Entregas • Nilo Supermercado — V14.6.0
 
-Versão focada em **agendamento operacional detalhado e controle do retorno das entregas**, mantendo a segurança dos dados e todas as melhorias anteriores.
+Versão focada em **acesso seguro pelo celular, sincronização em tempo real e continuidade offline**, mantendo os agendamentos detalhados e todas as melhorias anteriores.
+
+## Novidades da V14.6.0
+
+- Celular e computador usam os mesmos dados após entrar com o usuário e a senha já cadastrados no sistema Nilo.
+- Cada alteração é sincronizada separadamente pelo Supabase Realtime, sem misturar as tabelas do outro sistema existente.
+- Sem internet, o aplicativo continua funcionando e registra uma fila local por entrega, ciclo, custo ou cadastro.
+- Quando a conexão volta, a fila é enviada automaticamente e as outras telas conectadas recebem as atualizações.
+- As tabelas online usam Row Level Security e aceitam somente usuários vinculados ao espaço de entregas.
+- O indicador lateral informa se o sistema está sincronizado, offline ou com alterações aguardando envio.
 
 ## Novidades da V14.5.0
 
