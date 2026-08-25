@@ -1,0 +1,53 @@
+ATUALIZAÇÃO NILO • V15.1 • SEM SENHA + TEMPO REAL
+
+O QUE ESTA ATUALIZAÇÃO FAZ
+- mantém o layout V15 aprovado;
+- não pede usuário;
+- não pede senha;
+- abre o sistema diretamente;
+- mantém os dados no aparelho para continuar funcionando sem internet;
+- quando a internet volta, sincroniza novamente;
+- dados ficam compartilhados entre PC, celular e outros aparelhos;
+- mantém Central de Operação, Dashboard, Entregas, Programadas, Pendências,
+  Ciclos, Quilometragem, Rotas dos entregadores, Custos, Bairros,
+  Pesquisa, Relatórios, Lixeira, Cadastros e Backup;
+- mantém Desempenho diário e Entregas do dia;
+- não adiciona Ranking de entregadores.
+
+ARQUIVOS DESTA ATUALIZAÇÃO
+1. index.html                 -> substituir o index.html atual
+2. nilo-layout-v15.css        -> enviar para a raiz
+3. public-sync.js             -> enviar para a raiz
+
+NÃO APAGUE
+- app.js
+- styles.css
+- manifest.webmanifest
+- sw.js
+- pasta icons
+- os demais arquivos existentes no repositório
+
+COMO ATUALIZAR NO GITHUB
+1. Abra o repositório controle-entregas.
+2. Entre na raiz (onde estão index.html, app.js e styles.css).
+3. Faça upload dos 3 arquivos desta pasta.
+4. Confirme a substituição do index.html.
+5. Confirme o commit.
+6. Aguarde o GitHub Pages atualizar.
+7. Abra o sistema e pressione Ctrl+F5 no PC. No celular, feche e abra novamente.
+
+BANCO EM TEMPO REAL
+A estrutura necessária no Supabase já foi preparada para o workspace
+"nilo-entregas". Não é necessário criar usuário ou senha.
+
+IMPORTANTE SOBRE ACESSO SEM SENHA
+Como solicitado, o sistema não possui barreira de login para estes dados.
+Quem tiver acesso ao link publicado poderá abrir o sistema. Portanto,
+não compartilhe o link publicamente com pessoas que não devem acessar
+ou alterar os dados.
+
+SEGURANÇA DA ATUALIZAÇÃO
+Esta versão não substitui app.js nem styles.css originais. Ela acrescenta:
+- uma camada visual (nilo-layout-v15.css);
+- uma camada de sincronização sem login (public-sync.js).
+Assim, as regras de negócio existentes permanecem no app.js V14.8.
