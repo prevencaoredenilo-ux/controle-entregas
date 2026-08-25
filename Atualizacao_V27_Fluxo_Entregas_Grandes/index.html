@@ -1,0 +1,598 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#123D3C" />
+  <meta name="description" content="Sistema anual de gestão de entregas, frota, custos, ciclos, programadas, pendências e relatórios." />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="stylesheet" href="styles.css?v=14.8.0" />
+  <link rel="stylesheet" href="nilo-layout-v15.css?v=15.0.0" />
+  <link rel="stylesheet" href="ui-stable-v19.css?v=19.0.0" />
+<title>Controle de Entregas • Nilo Supermercado</title>
+
+<style id="nilo-visibility-hotfix-v21">
+/* ================================================================
+   NILO V21 • HOTFIX DIRETO DE VISIBILIDADE
+   Embutido no index.html para não depender de arquivo CSS extra.
+   ================================================================ */
+
+/* 1) Dashboard: Financeiro / Operação / Frota e eficiência */
+html body #view .management-panel{
+  background:#fff!important;
+  color:#1c3a40!important;
+}
+html body #view .management-panel .management-panel-head strong{
+  color:#12343b!important;
+  -webkit-text-fill-color:#12343b!important;
+  opacity:1!important;
+}
+html body #view .management-panel .management-panel-head small{
+  color:#526d73!important;
+  -webkit-text-fill-color:#526d73!important;
+  opacity:1!important;
+}
+html body #view .management-panel .management-row span{
+  color:#35555c!important;
+  -webkit-text-fill-color:#35555c!important;
+  font-weight:850!important;
+  opacity:1!important;
+}
+html body #view .management-panel .management-row small{
+  color:#657d83!important;
+  -webkit-text-fill-color:#657d83!important;
+  font-weight:700!important;
+  opacity:1!important;
+}
+html body #view .management-panel .management-row > strong{
+  color:#102f36!important;
+  -webkit-text-fill-color:#102f36!important;
+  font-weight:950!important;
+  opacity:1!important;
+}
+
+/* 2) Histórico de entregas: Cupom / Compra */
+html body #view .table-wrap table tbody tr td .history-identification-number,
+html body #view .table-wrap .history-identification-number,
+html body #view table .history-identification-number{
+  color:#12363d!important;
+  -webkit-text-fill-color:#12363d!important;
+  text-shadow:none!important;
+  opacity:1!important;
+  font-weight:950!important;
+}
+html body #view .table-wrap td .cell-title,
+html body #view .table-wrap td strong:not(.badge):not(.btn),
+html body #view .table-wrap td b:not(.badge){
+  color:#17383f!important;
+  -webkit-text-fill-color:#17383f!important;
+  opacity:1!important;
+}
+html body #view .table-wrap td .cell-sub{
+  color:#556f75!important;
+  -webkit-text-fill-color:#556f75!important;
+  opacity:1!important;
+}
+
+/* 3) Heros escuros: ciclos, quilometragem, rotas, lixeira */
+html body #view .hero-strip,
+html body #view .cycle-hero,
+html body #view .mileage-hero,
+html body #view .route-history-hero,
+html body #view .trash-hero{
+  background:linear-gradient(135deg,#15484a,#315f56)!important;
+  color:#fff!important;
+}
+html body #view .hero-strip h1,
+html body #view .hero-strip h2,
+html body #view .hero-strip h3,
+html body #view .cycle-hero h1,
+html body #view .cycle-hero h2,
+html body #view .mileage-hero h1,
+html body #view .mileage-hero h2,
+html body #view .route-history-hero h1,
+html body #view .route-history-hero h2,
+html body #view .trash-hero h1,
+html body #view .trash-hero h2{
+  color:#fff!important;
+  -webkit-text-fill-color:#fff!important;
+  opacity:1!important;
+}
+html body #view .hero-strip p,
+html body #view .hero-strip small,
+html body #view .cycle-hero p,
+html body #view .mileage-hero p,
+html body #view .route-history-hero p,
+html body #view .route-history-hero small,
+html body #view .trash-hero p,
+html body #view .trash-hero small{
+  color:#e0ece9!important;
+  -webkit-text-fill-color:#e0ece9!important;
+  opacity:1!important;
+}
+html body #view .hero-strip .eyebrow,
+html body #view .cycle-hero .eyebrow,
+html body #view .route-history-hero > div:first-child > span,
+html body #view .trash-hero .eyebrow{
+  color:#f1f8a9!important;
+  -webkit-text-fill-color:#f1f8a9!important;
+  opacity:1!important;
+}
+html body #view .hero-strip .hero-chip,
+html body #view .hero-strip .hero-chip *,
+html body #view .route-history-live,
+html body #view .route-history-live *{
+  color:#fff!important;
+  -webkit-text-fill-color:#fff!important;
+  opacity:1!important;
+}
+
+/* 4) Gráfico: legenda realmente identificável */
+html body #view .v16-chart-legend{
+  display:flex!important;
+  flex-wrap:wrap!important;
+  align-items:center!important;
+  gap:9px 18px!important;
+  margin:6px 0 12px 38px!important;
+}
+html body #view .v16-chart-legend span{
+  display:inline-flex!important;
+  align-items:center!important;
+  gap:7px!important;
+  font-size:11px!important;
+  font-weight:950!important;
+  color:#24464d!important;
+  -webkit-text-fill-color:#24464d!important;
+  opacity:1!important;
+}
+html body #view .v16-chart-legend span::before{
+  content:""!important;
+  display:inline-block!important;
+  width:26px!important;
+  height:6px!important;
+  border-radius:999px!important;
+  flex:0 0 26px!important;
+}
+html body #view .v16-chart-legend .green::before{background:#26a779!important}
+html body #view .v16-chart-legend .orange::before{background:#ef8d37!important}
+html body #view .v16-chart-legend .purple::before{background:#7c6dd0!important}
+html body #view .v16-chart-legend .green{color:#176c50!important;-webkit-text-fill-color:#176c50!important}
+html body #view .v16-chart-legend .orange{color:#a95718!important;-webkit-text-fill-color:#a95718!important}
+html body #view .v16-chart-legend .purple{color:#5949a8!important;-webkit-text-fill-color:#5949a8!important}
+html body #view .v16-axis{
+  fill:#3f5d64!important;
+  font-size:10.5px!important;
+  font-weight:850!important;
+}
+
+/* 5) Resumo do período e insights inferiores */
+html body #view .v16-card-title span,
+html body #view .v16-insight-card small,
+html body #view .v16-summary-grid small{
+  color:#36575e!important;
+  -webkit-text-fill-color:#36575e!important;
+  opacity:1!important;
+  font-weight:900!important;
+}
+html body #view .v16-card-title strong,
+html body #view .v16-insight-card strong,
+html body #view .v16-summary-grid strong{
+  color:#12363d!important;
+  -webkit-text-fill-color:#12363d!important;
+  opacity:1!important;
+  font-weight:950!important;
+}
+html body #view .v16-insight-card p,
+html body #view .v16-summary-grid span{
+  color:#5b747a!important;
+  -webkit-text-fill-color:#5b747a!important;
+  opacity:1!important;
+}
+
+/* 6) Campos e formulários: sempre claro */
+html body input,
+html body select,
+html body textarea,
+html body .modal input,
+html body .modal select,
+html body .modal textarea{
+  background:#fff!important;
+  color:#17383f!important;
+  -webkit-text-fill-color:#17383f!important;
+  border-color:#b8c9c3!important;
+  opacity:1!important;
+}
+html body input::placeholder,
+html body textarea::placeholder{
+  color:#657f85!important;
+  -webkit-text-fill-color:#657f85!important;
+  opacity:1!important;
+}
+html body label,
+html body #view label,
+html body .modal label{
+  color:#284950!important;
+  -webkit-text-fill-color:#284950!important;
+  opacity:1!important;
+}
+html body label small,
+html body #view label small,
+html body .modal label small{
+  color:#5f787e!important;
+  -webkit-text-fill-color:#5f787e!important;
+  opacity:1!important;
+}
+html body select option,
+html body select optgroup{
+  background:#fff!important;
+  color:#17383f!important;
+  -webkit-text-fill-color:#17383f!important;
+}
+
+/* 7) Relatórios e cadastros */
+html body #view .stat-row,
+html body #view .settings-stat{
+  color:#294950!important;
+}
+html body #view .stat-row span,
+html body #view .stat-row strong,
+html body #view .settings-stat span{
+  color:#294950!important;
+  -webkit-text-fill-color:#294950!important;
+  opacity:1!important;
+}
+html body #view .stat-row small,
+html body #view .settings-stat small{
+  color:#5b747a!important;
+  -webkit-text-fill-color:#5b747a!important;
+  opacity:1!important;
+}
+
+/* 8) Regra final para textos auxiliares em superfície clara */
+html body #view .card:not(.hero-strip):not(.trash-hero):not(.route-history-hero) p,
+html body #view .card:not(.hero-strip):not(.trash-hero):not(.route-history-hero) small,
+html body #view .section-card p,
+html body #view .section-card small{
+  opacity:1!important;
+}
+</style>
+
+
+<style id="nilo-visual-hotfix-v23">
+/* ================================================================
+   NILO V23 • HOTFIX DE CORES EXATAS
+   Pedido do usuário:
+   - 1º print: letras pretas nas áreas marcadas da tabela
+   - 2º e 3º print: mesmo padrão de cores do 4º print
+   ================================================================ */
+
+/* 1) HISTÓRICO DE ENTREGAS: áreas marcadas em PRETO */
+html body #view .table-wrap table tbody tr td:nth-child(1),
+html body #view .table-wrap table tbody tr td:nth-child(1) *,
+html body #view .table-wrap table tbody tr td:nth-child(2),
+html body #view .table-wrap table tbody tr td:nth-child(2) *,
+html body #view .table-wrap table tbody tr td:nth-child(3),
+html body #view .table-wrap table tbody tr td:nth-child(3) *,
+html body #view .table-wrap table tbody tr td:nth-child(4),
+html body #view .table-wrap table tbody tr td:nth-child(4) *,
+html body #view .table-wrap table tbody tr td:nth-child(6),
+html body #view .table-wrap table tbody tr td:nth-child(6) *,
+html body #view .table-wrap table tbody tr td:nth-child(7),
+html body #view .table-wrap table tbody tr td:nth-child(7) *,
+html body #view .table-wrap table tbody tr td:nth-child(8),
+html body #view .table-wrap table tbody tr td:nth-child(8) *,
+html body #view .table-wrap table tbody tr td:nth-child(9),
+html body #view .table-wrap table tbody tr td:nth-child(9) *,
+html body #view .table-wrap table tbody tr td:nth-child(10),
+html body #view .table-wrap table tbody tr td:nth-child(10) *,
+html body #view .table-wrap table tbody tr td:nth-child(11),
+html body #view .table-wrap table tbody tr td:nth-child(11) *{
+  color:#000000!important;
+  -webkit-text-fill-color:#000000!important;
+  opacity:1!important;
+  text-shadow:none!important;
+}
+
+/* Garante compra/cupom ainda mais forte */
+html body #view .table-wrap .history-identification-number,
+html body #view .table-wrap .history-identification-number *{
+  color:#000000!important;
+  -webkit-text-fill-color:#000000!important;
+  font-weight:950!important;
+  opacity:1!important;
+}
+
+/* Mantém badges e botões fora da regra preta */
+html body #view .table-wrap table tbody tr td:nth-child(5) .badge,
+html body #view .table-wrap table tbody tr td:nth-child(12) .badge,
+html body #view .table-wrap table tbody tr td:nth-child(13) .btn,
+html body #view .table-wrap table tbody tr td:nth-child(13) button{
+  -webkit-text-fill-color:initial!important;
+}
+
+/* 2) CICLOS E QUILOMETRAGEM: usar o mesmo PADRÃO do 4º print */
+html body #view .hero-strip,
+html body #view .cycle-hero,
+html body #view .mileage-hero{
+  background:linear-gradient(135deg,#0f4a4d 0%, #1f5b58 100%)!important;
+  color:#ffffff!important;
+}
+html body #view .hero-strip h1,
+html body #view .hero-strip h2,
+html body #view .hero-strip h3,
+html body #view .cycle-hero h1,
+html body #view .cycle-hero h2,
+html body #view .cycle-hero h3,
+html body #view .mileage-hero h1,
+html body #view .mileage-hero h2,
+html body #view .mileage-hero h3{
+  color:#ffffff!important;
+  -webkit-text-fill-color:#ffffff!important;
+  opacity:1!important;
+}
+html body #view .hero-strip p,
+html body #view .hero-strip small,
+html body #view .cycle-hero p,
+html body #view .cycle-hero small,
+html body #view .mileage-hero p,
+html body #view .mileage-hero small{
+  color:#e4f0ec!important;
+  -webkit-text-fill-color:#e4f0ec!important;
+  opacity:1!important;
+}
+html body #view .hero-strip .eyebrow,
+html body #view .cycle-hero .eyebrow,
+html body #view .mileage-hero .eyebrow{
+  color:#dff07b!important;
+  -webkit-text-fill-color:#dff07b!important;
+  opacity:1!important;
+}
+html body #view .hero-strip .hero-chip,
+html body #view .hero-strip .hero-chip *,
+html body #view .cycle-hero .hero-chip,
+html body #view .cycle-hero .hero-chip *,
+html body #view .mileage-hero .hero-chip,
+html body #view .mileage-hero .hero-chip *{
+  color:#ffffff!important;
+  -webkit-text-fill-color:#ffffff!important;
+  border-color:rgba(255,255,255,.28)!important;
+}
+
+/* 3) ROTAS (4º print) preservado e alinhado como referência */
+html body #view .route-history-hero,
+html body #view .route-history-hero h1,
+html body #view .route-history-hero h2,
+html body #view .route-history-hero h3{
+  color:#ffffff!important;
+  -webkit-text-fill-color:#ffffff!important;
+}
+html body #view .route-history-hero p,
+html body #view .route-history-hero small{
+  color:#e4f0ec!important;
+  -webkit-text-fill-color:#e4f0ec!important;
+}
+html body #view .route-history-hero > div:first-child > span{
+  color:#dff07b!important;
+  -webkit-text-fill-color:#dff07b!important;
+}
+</style>
+
+
+<style id="nilo-route-v24-styles">
+/* NILO V24 • ROTA PLANEJADA */
+html body #view .v24-route-planner{display:grid;gap:12px}
+html body #view .v24-route-head{display:flex;justify-content:space-between;gap:14px;align-items:flex-start}
+html body #view .v24-route-head h3{margin:4px 0;color:#12363d!important;-webkit-text-fill-color:#12363d!important}
+html body #view .v24-route-head p{margin:0;color:#536f75!important;-webkit-text-fill-color:#536f75!important;max-width:680px}
+html body #view .v24-kicker{display:block;color:#637d00!important;-webkit-text-fill-color:#637d00!important;font-weight:950;letter-spacing:.08em;font-size:9px}
+html body #view .v24-cycle-select{min-width:250px}
+html body #view .v24-cycle-select label{display:grid;gap:5px;color:#17383f!important;-webkit-text-fill-color:#17383f!important;font-weight:900}
+html body #view .v24-route-origin{display:flex;align-items:center;gap:8px;padding:10px 12px;background:#f1f6f2;border:1px solid #d3dfda;border-radius:11px;color:#24464d!important;-webkit-text-fill-color:#24464d!important;font-size:10px}
+html body #view .v24-route-origin strong{color:#12363d!important;-webkit-text-fill-color:#12363d!important}
+html body #view .v24-map-frame{width:100%;height:390px;border:1px solid #cddbd5;border-radius:16px;background:#edf3ef}
+html body #view .v24-map-fallback{min-height:340px;display:grid;place-items:center;text-align:center;padding:28px;background:#f1f6f2;border:1px dashed #c8d6d0;border-radius:16px}
+html body #view .v24-map-fallback strong{color:#12363d!important;-webkit-text-fill-color:#12363d!important}
+html body #view .v24-map-fallback p{color:#5a747a!important;-webkit-text-fill-color:#5a747a!important;max-width:560px}
+html body #view .v24-route-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+html body #view .v24-route-summary>div{padding:10px 12px;background:#fff;border:1px solid #d6e1dc;border-radius:11px}
+html body #view .v24-route-summary small{display:block;color:#5d777d!important;-webkit-text-fill-color:#5d777d!important;font-weight:800}
+html body #view .v24-route-summary strong{display:block;margin-top:4px;color:#000!important;-webkit-text-fill-color:#000!important;font-size:16px}
+html body #view .v24-route-actions{display:flex;gap:8px;flex-wrap:wrap}
+html body #view .v24-stop-list{display:grid;gap:6px}
+html body #view .v24-stop{display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:9px;align-items:center;padding:9px 10px;background:#fff;border:1px solid #d9e3df;border-radius:11px}
+html body #view .v24-stop>span{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:#153f45;color:#fff!important;-webkit-text-fill-color:#fff!important;font-weight:950}
+html body #view .v24-stop.priority>span{background:#b9d531;color:#17343b!important;-webkit-text-fill-color:#17343b!important}
+html body #view .v24-stop strong{display:block;color:#000!important;-webkit-text-fill-color:#000!important}
+html body #view .v24-stop small{display:block;color:#526c72!important;-webkit-text-fill-color:#526c72!important;margin-top:3px}
+html body #view .v24-stop b{color:#607900!important;-webkit-text-fill-color:#607900!important;font-size:9px}
+html body #view .v24-note{padding:9px 11px;background:#f7faf8;border:1px solid #d6e1dd;border-radius:10px;color:#526d73!important;-webkit-text-fill-color:#526d73!important;font-size:9px;line-height:1.5}
+html body #view .v24-note strong{color:#17383f!important;-webkit-text-fill-color:#17383f!important}
+@media(max-width:800px){
+  html body #view .v24-route-head{display:grid}
+  html body #view .v24-cycle-select{min-width:0;width:100%}
+  html body #view .v24-route-summary{grid-template-columns:1fr 1fr}
+  html body #view .v24-map-frame{height:300px}
+}
+@media(max-width:520px){
+  html body #view .v24-route-actions{display:grid}
+  html body #view .v24-route-actions .btn{width:100%}
+  html body #view .v24-stop{grid-template-columns:32px minmax(0,1fr)}
+  html body #view .v24-stop b{grid-column:2}
+}
+</style>
+
+  <link rel="stylesheet" href="nilo-contrast-v27.css?v=27.0.0" />
+
+<style id="nilo-v27-critical-contrast">
+/* V27: contraste crítico embutido para funcionar mesmo antes do CSS externo carregar */
+html body{background:#f3f7f5!important;color:#17383f!important}
+html body #view table td{color:#102f36!important;-webkit-text-fill-color:#102f36!important}
+html body #view table th{color:#13343a!important;-webkit-text-fill-color:#13343a!important}
+html body input,html body select,html body textarea{background:#fff!important;color:#15363d!important;-webkit-text-fill-color:#15363d!important}
+html body .sidebar,html body #view .hero-strip,html body #view .cycle-hero,html body #view .mileage-hero,html body #view .route-history-hero,html body #view .trash-hero{background:linear-gradient(135deg,#154849,#285b54)!important;color:#fff!important}
+html body .sidebar :where(strong,small,span,a,button),html body #view :where(.hero-strip,.cycle-hero,.mileage-hero,.route-history-hero,.trash-hero) :where(h1,h2,h3,h4,strong,b,p,small,span){color:#fff!important;-webkit-text-fill-color:#fff!important}
+</style>
+</head>
+<body>
+  <div id="bootScreen" class="boot-screen">
+    <div class="boot-card">
+      <div class="brand-mark large">N</div>
+      <h1>Controle de Entregas</h1>
+      <p>Preparando sua operação...</p>
+      <div class="boot-progress"><span></span></div>
+    </div>
+  </div>
+
+  <div id="cloudAuthScreen" class="cloud-auth-screen hidden" aria-hidden="true">
+    <form id="cloudAuthForm" class="cloud-auth-card">
+      <div class="cloud-auth-brand"><div class="brand-mark large">N</div><div><span>ACESSO SEGURO</span><h1>Controle de Entregas</h1><p>Entre com o mesmo usuário do sistema Nilo para sincronizar celular e computador.</p></div></div>
+      <label>Usuário<input name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required /></label>
+      <label>Senha<input name="password" type="password" autocomplete="current-password" minlength="6" required /></label>
+      <p class="cloud-auth-message" id="cloudAuthMessage" aria-live="polite"></p>
+      <button type="submit" class="btn primary large-action" id="cloudLoginBtn">Entrar e sincronizar</button>
+      <button type="button" class="btn secondary hidden" id="continueOfflineBtn">Continuar com os dados deste aparelho</button>
+      <small class="cloud-auth-note">Sem internet, os lançamentos ficam salvos neste aparelho e sincronizam automaticamente quando a conexão voltar.</small>
+    </form>
+  </div>
+
+  <div class="app-shell" id="appShell" aria-hidden="true">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-top">
+        <div class="brand-block">
+          <div class="brand-mark">N</div>
+          <div class="brand-copy">
+            <strong>NILO</strong>
+            <small>CONTROLE DE ENTREGAS</small>
+          </div>
+        </div>
+
+        <div class="connection-card" id="connectionCard" aria-live="polite">
+          <span class="connection-dot" id="connectionDot"></span>
+          <div>
+            <strong id="connectionTitle">Verificando conexão...</strong>
+            <small id="connectionSubtitle">Dados locais neste dispositivo • não sincronizados</small>
+          </div>
+        </div>
+
+        <div class="mode-card">
+          <div class="mode-card-head"><span>AMBIENTE</span><strong id="topModeBadge" class="top-mode-badge production">● Operação real</strong></div>
+          <div class="mode-switch"><button class="mode-choice active" data-mode="production"><span>●</span> Real</button><button class="mode-choice" data-mode="training"><span>🧪</span> Treino</button></div>
+          <small id="modeHint">Dados oficiais da operação.</small>
+        </div>
+      </div>
+
+      <nav class="main-nav" id="mainNav">
+        <p class="nav-caption">VISÃO GERAL</p>
+        <button class="nav-item active" data-view="today"><span class="nav-ico">⌂</span><span>Central de Operação</span><span class="nav-badge" id="todayPendingBadge">0</span></button>
+        <button class="nav-item" data-view="dashboard"><span class="nav-ico">▦</span><span>Dashboard</span></button>
+
+        <p class="nav-caption">OPERAÇÃO</p>
+        <button class="nav-item" data-view="deliveries"><span class="nav-ico">▣</span><span>Entregas</span></button>
+        <button class="nav-item" data-view="scheduled"><span class="nav-ico">◷</span><span>Programadas</span><span class="nav-badge" id="scheduledBadge">0</span></button>
+        <button class="nav-item" data-view="pending"><span class="nav-ico">!</span><span>Erros e Pendências</span><span class="nav-badge danger" id="pendingBadge">0</span></button>
+        <button class="nav-item" data-view="cycles"><span class="nav-ico">↻</span><span>Ciclos</span></button>
+        <button class="nav-item" data-view="odometer"><span class="nav-ico">KM</span><span>Quilometragem</span></button>
+        <button class="nav-item" data-view="route-history"><span class="nav-ico">⌁</span><span>Rotas dos entregadores</span></button>
+
+        <p class="nav-caption">GESTÃO</p>
+        <button class="nav-item" data-view="costs"><span class="nav-ico">R$</span><span>Custos</span></button>
+        <button class="nav-item" data-view="neighborhoods"><span class="nav-ico">◎</span><span>Análise por bairro</span></button>
+        <button class="nav-item" data-view="trace"><span class="nav-ico">⌕</span><span>Pesquisar entregas</span></button>
+        <button class="nav-item" data-view="reports"><span class="nav-ico">⇩</span><span>Relatórios</span></button>
+        <button class="nav-item" data-view="trash"><span class="nav-ico">⌫</span><span>Lixeira</span><span class="nav-badge" id="trashBadge">0</span></button>
+        <button class="nav-item" data-view="settings"><span class="nav-ico">⚙</span><span>Cadastros</span></button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div>
+          <span>Modo local + offline</span>
+          <small>Operação + sincronização • Layout V15</small>
+        </div>
+        <button class="mini-icon-btn" id="installBtn" title="Instalar aplicativo" hidden>⇩</button>
+      </div>
+    </aside>
+
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <main class="main-content">
+      <header class="topbar">
+        <div class="topbar-title">
+          <button class="menu-btn mobile-only" id="menuBtn" aria-label="Abrir menu">☰</button>
+          <div>
+            <h1 id="pageTitle">Central de Operação</h1>
+            <p id="pageSubtitle">O que está acontecendo agora, o que precisa de ação e qual é o próximo passo.</p>
+          </div>
+        </div>
+        <div class="topbar-actions">
+          <span class="desktop-mode-chip" id="desktopModeChip">● Ambiente real</span>
+          <button class="btn secondary desktop-only" id="backupBtn">↓ Backup</button>
+          <label class="btn secondary desktop-only file-btn">↑ Restaurar backup<input id="restoreInput" type="file" accept=".json,application/json" hidden /></label>
+          <button class="btn secondary" id="syncAccountBtn" hidden>Conta</button>
+          <button class="btn primary" id="quickNewDeliveryBtn">＋ Registrar compra</button>
+        </div>
+      </header>
+
+      <section class="filter-panel card" id="globalFilterPanel">
+        <div class="filter-intro">
+          <div class="filter-icon">⌁</div>
+          <div>
+            <strong>Recorte de análise</strong>
+            <small>Escolha ano, mês, semana ou período personalizado.</small>
+          </div>
+        </div>
+        <div class="filter-fields">
+          <label>Ano<select id="filterYear"></select></label>
+          <label>Mês<select id="filterMonth">
+            <option value="">Todos</option>
+            <option value="01">Janeiro</option><option value="02">Fevereiro</option>
+            <option value="03">Março</option><option value="04">Abril</option>
+            <option value="05">Maio</option><option value="06">Junho</option>
+            <option value="07">Julho</option><option value="08">Agosto</option>
+            <option value="09">Setembro</option><option value="10">Outubro</option>
+            <option value="11">Novembro</option><option value="12">Dezembro</option>
+          </select></label>
+          <label>Semana<select id="filterWeek"><option value="">Todas</option></select></label>
+          <label>De<input id="filterStart" type="date" /></label>
+          <label>Até<input id="filterEnd" type="date" /></label>
+          <button class="btn primary compact" id="applyFiltersBtn">Aplicar</button>
+          <button class="btn secondary compact" id="clearFiltersBtn">Limpar</button>
+        </div>
+      </section>
+
+      <section id="view" class="view"></section>
+    </main>
+  </div>
+
+  <nav class="mobile-app-dock" id="mobileAppDock" aria-label="Ações rápidas">
+    <button type="button" data-mobile-view="today" class="active"><span>⌂</span><small>Central</small></button>
+    <button type="button" data-mobile-view="cycles"><span>↻</span><small>Ciclos</small></button>
+    <button type="button" class="mobile-new-delivery" id="mobileNewDeliveryBtn"><span>＋</span><small>Nova compra</small></button>
+    <button type="button" id="mobileMenuBtn"><span>☰</span><small>Menu</small></button>
+  </nav>
+
+  <div class="modal-wrap hidden" id="modalWrap" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="modalTitle" aria-describedby="modalSubtitle">
+    <div class="modal" id="modal">
+      <div class="modal-head">
+        <div>
+          <span class="modal-kicker" id="modalKicker">CADASTRO OPERACIONAL</span>
+          <h2 id="modalTitle"></h2>
+          <p id="modalSubtitle"></p>
+        </div>
+        <button class="close-modal" id="modalClose" aria-label="Fechar">✕</button>
+      </div>
+      <div id="modalBody"></div>
+    </div>
+  </div>
+
+  <div class="toast-stack" id="toastStack" role="status" aria-live="polite" aria-atomic="true"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.4"></script>
+  <script src="app.js?v=14.8.0"></script>
+  <script src="public-sync.js?v=15.2.0"></script>
+  <script src="route-view-stable-v19.js?v=19.0.0"></script>
+<script src="route-planner-stable-v24.js?v=24.0.0"></script>
+  <script src="operational-fixes-v27.js?v=27.0.0"></script>
+</body>
+</html>

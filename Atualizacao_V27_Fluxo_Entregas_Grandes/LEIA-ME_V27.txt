@@ -1,0 +1,27 @@
+NILO ENTREGAS • V27
+
+OBJETIVO DESTA ATUALIZAÇÃO
+- Deixar a configuração de ENTREGA GRANDE fácil de encontrar no LANÇAMENTO e na EDIÇÃO.
+- Ao selecionar "Entrega grande", pedir imediatamente quantas viagens estão previstas.
+- Mostrar o fluxo das viagens na própria entrega.
+- Liberar os campos da próxima viagem conforme a anterior for concluída como carga parcial.
+
+COMO FUNCIONA
+1. No lançamento, escolha Entrega normal ou Entrega grande.
+2. Se escolher Entrega grande, informe 2, 3, 4... viagens previstas.
+3. O sistema mostra a Viagem 1 e deixa as próximas identificadas como aguardando.
+4. Ao retornar o ciclo com carga parcial, a viagem atual registra saída, entrega parcial, retorno e duração.
+5. A próxima viagem é criada/liberada automaticamente.
+6. Na edição da entrega, ficam visíveis todas as viagens, horários, duração, ciclo, resultado e observação.
+7. Horários podem ser corrigidos na edição e o tempo é recalculado.
+
+MANTIDO
+- Rota planejada V24 aprovada.
+- Histórico das tentativas.
+- Retorno sem conclusão gera nova tentativa.
+- Gráfico de um dia com marcadores.
+- Padronização/checagem de contraste da V26.
+
+PUBLICAÇÃO
+Envie/substitua TODOS os arquivos deste pacote no GitHub.
+Depois feche as abas antigas do sistema e use Ctrl + F5 uma vez.
