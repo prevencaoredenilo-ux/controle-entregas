@@ -1,4 +1,4 @@
-const CACHE_NAME = 'controle-entregas-v24-rota-planejada';
+const CACHE_NAME = 'controle-entregas-v25-correcoes-operacionais';
 const APP_SHELL = [
   './',
   './index.html',
@@ -11,6 +11,8 @@ const APP_SHELL = [
   './route-planner-stable-v19.js?v=19.0.0',
   './manifest.webmanifest',
   './route-planner-stable-v24.js?v=24.0.0',
+  './nilo-contrast-v25.css?v=25.0.0',
+  './operational-fixes-v25.js?v=25.0.0',
   './icons/icon-192.png',
   './icons/icon-512.png',
   'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.4'

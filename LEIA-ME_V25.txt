@@ -1,0 +1,34 @@
+NILO ENTREGAS • ATUALIZAÇÃO V25
+
+Esta versão mantém a V24 aprovada e adiciona as correções solicitadas:
+
+1) GRÁFICO DE 1 DIA
+- Agora os pontos aparecem mesmo quando existe apenas uma data no filtro.
+- Entregues, retornadas e tentativas ficam visíveis por marcadores.
+- Quando Entregues e Tentativas têm o mesmo valor, os marcadores concêntricos permitem enxergar as duas séries.
+
+2) ENTREGA QUE VOLTOU
+- Ao registrar que uma entrega voltou sem concluir, o registro original continua no ciclo anterior.
+- O sistema cria automaticamente uma nova tentativa ligada à anterior.
+- A nova tentativa volta para "Na loja" e fica disponível para ser adicionada a outro ciclo.
+- O histórico da primeira tentativa não é apagado.
+
+3) ENTREGA GRANDE / MÚLTIPLAS VIAGENS
+- No fechamento do ciclo aparece a opção "Entrega grande / carga parcial".
+- Use quando uma parte da compra foi entregue e o veículo precisa voltar à loja para buscar o restante.
+- O ciclo anterior fica registrado como carga parcial, sem ser contado como ocorrência de retorno sem entrega.
+- Uma nova viagem é criada automaticamente e fica disponível para outro ciclo.
+
+4) CORES E CONTRASTE
+- Fundo claro -> texto escuro.
+- Fundo escuro -> texto branco/claro.
+- Padronização aplicada em tabelas, cards, formulários, filtros, heros e gráficos.
+
+ARQUIVOS PARA ENVIAR AO GITHUB
+- index.html
+- operational-fixes-v25.js
+- nilo-contrast-v25.css
+- route-planner-stable-v24.js
+- sw.js
+
+Depois de publicar, feche as abas antigas e faça Ctrl+F5 uma vez.

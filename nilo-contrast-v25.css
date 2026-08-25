@@ -1,0 +1,148 @@
+/* ================================================================
+   NILO ENTREGAS • V25 • CONTRASTE GLOBAL
+   Regra: fundo claro = texto escuro | fundo escuro = texto claro
+   ================================================================ */
+:root{
+  --nilo-ink:#17383f;
+  --nilo-ink-strong:#0f2f35;
+  --nilo-muted:#526d73;
+  --nilo-surface:#ffffff;
+  --nilo-surface-soft:#f4f8f6;
+  --nilo-border:#c8d5d1;
+  --nilo-dark:#16494a;
+  --nilo-dark-2:#315f56;
+  --nilo-light:#eef6f2;
+  --nilo-lime:#e7f58e;
+}
+
+html body{background:#f3f7f5!important;color:var(--nilo-ink)!important}
+html body .main-content,html body #view{color:var(--nilo-ink)!important}
+
+/* Superfícies claras */
+html body #view .card,
+html body #view .panel,
+html body #view .table-wrap,
+html body #view .management-panel,
+html body #view .route-map-panel,
+html body #view .v16-route-analytics,
+html body #view .v16-route-kpi,
+html body #view .v16-insight-card,
+html body #view .v16-summary-grid,
+html body .filter-panel,
+html body .modal{
+  background:var(--nilo-surface)!important;
+  color:var(--nilo-ink)!important;
+}
+
+html body #view .card h1,html body #view .card h2,html body #view .card h3,html body #view .card h4,
+html body #view .panel h1,html body #view .panel h2,html body #view .panel h3,html body #view .panel h4,
+html body #view .table-wrap th,html body #view .table-wrap td,
+html body #view .table-wrap strong,html body #view .table-wrap b,
+html body #view .management-panel strong,
+html body .filter-panel strong,html body .modal h1,html body .modal h2,html body .modal h3,
+html body .modal strong{
+  color:var(--nilo-ink-strong)!important;
+  -webkit-text-fill-color:var(--nilo-ink-strong)!important;
+  opacity:1!important;
+}
+
+html body #view .card p,html body #view .card small,html body #view .card span:not(.badge):not(.status-dot),
+html body #view .panel p,html body #view .panel small,
+html body #view .table-wrap small,html body #view .table-wrap .muted,
+html body #view .management-panel small,
+html body .filter-panel small,html body .modal p,html body .modal small,
+html body .modal label{
+  color:var(--nilo-muted)!important;
+  -webkit-text-fill-color:var(--nilo-muted)!important;
+  opacity:1!important;
+}
+
+/* Tabelas: nenhuma célula clara com texto branco */
+html body #view table{color:var(--nilo-ink)!important}
+html body #view table th{background:#edf4f1!important;color:#16383f!important;-webkit-text-fill-color:#16383f!important}
+html body #view table td{background:#fff!important;color:#132f36!important;-webkit-text-fill-color:#132f36!important}
+html body #view table tbody tr:nth-child(even) td{background:#f8fbfa!important}
+html body #view table td .cell-title,html body #view table td .history-identification-number{color:#102f36!important;-webkit-text-fill-color:#102f36!important}
+html body #view table td .cell-sub{color:#587279!important;-webkit-text-fill-color:#587279!important}
+
+/* Formulários */
+html body input,html body select,html body textarea,
+html body .modal input,html body .modal select,html body .modal textarea{
+  background:#fff!important;
+  color:#17383f!important;
+  -webkit-text-fill-color:#17383f!important;
+  border-color:#aebfba!important;
+  caret-color:#17383f!important;
+}
+html body input::placeholder,html body textarea::placeholder{color:#6a8085!important;-webkit-text-fill-color:#6a8085!important;opacity:1!important}
+html body option{background:#fff!important;color:#17383f!important}
+
+/* Painéis escuros */
+html body .sidebar,
+html body #view .hero-strip,
+html body #view .cycle-hero,
+html body #view .mileage-hero,
+html body #view .route-history-hero,
+html body #view .trash-hero{
+  background:linear-gradient(135deg,var(--nilo-dark),var(--nilo-dark-2))!important;
+  color:#fff!important;
+}
+html body .sidebar *,
+html body #view .hero-strip h1,html body #view .hero-strip h2,html body #view .hero-strip h3,
+html body #view .cycle-hero h1,html body #view .cycle-hero h2,html body #view .cycle-hero h3,
+html body #view .mileage-hero h1,html body #view .mileage-hero h2,html body #view .mileage-hero h3,
+html body #view .route-history-hero h1,html body #view .route-history-hero h2,html body #view .route-history-hero h3,
+html body #view .trash-hero h1,html body #view .trash-hero h2,html body #view .trash-hero h3{
+  color:#fff!important;
+  -webkit-text-fill-color:#fff!important;
+}
+html body #view .hero-strip p,html body #view .hero-strip small,
+html body #view .cycle-hero p,html body #view .cycle-hero small,
+html body #view .mileage-hero p,html body #view .mileage-hero small,
+html body #view .route-history-hero p,html body #view .route-history-hero small,
+html body #view .trash-hero p,html body #view .trash-hero small{
+  color:#e6f0ed!important;
+  -webkit-text-fill-color:#e6f0ed!important;
+}
+html body #view .hero-strip .eyebrow,html body #view .cycle-hero .eyebrow,
+html body #view .mileage-hero .eyebrow,html body #view .trash-hero .eyebrow{
+  color:var(--nilo-lime)!important;
+  -webkit-text-fill-color:var(--nilo-lime)!important;
+}
+
+/* Botões e chips mantêm contraste próprio */
+html body .btn.primary{color:#fff!important;-webkit-text-fill-color:#fff!important}
+html body .btn.secondary{color:#17383f!important;-webkit-text-fill-color:#17383f!important;background:#fff!important}
+html body .sidebar .btn,html body .sidebar button{color:#fff!important;-webkit-text-fill-color:#fff!important}
+html body .badge.green{color:#126347!important;-webkit-text-fill-color:#126347!important}
+html body .badge.yellow{color:#7a4b00!important;-webkit-text-fill-color:#7a4b00!important}
+html body .badge.red{color:#8a2727!important;-webkit-text-fill-color:#8a2727!important}
+html body .badge.purple{color:#4f3b94!important;-webkit-text-fill-color:#4f3b94!important}
+
+/* Gráficos */
+html body #view .v16-axis{fill:#38575e!important;font-weight:850!important}
+html body #view .v16-chart-legend span{color:#24464d!important;-webkit-text-fill-color:#24464d!important;opacity:1!important}
+.v25-chart-point{stroke:#fff;stroke-width:1.8;vector-effect:non-scaling-stroke}
+.v25-chart-point.green{fill:#26a779}
+.v25-chart-point.orange{fill:#ef8d37}
+.v25-chart-point.purple{fill:#7c6dd0}
+.v25-single-day-note{margin:6px 0 0 36px;font-size:11px;font-weight:800;color:#526d73}
+
+/* Entregas grandes / múltiplas viagens */
+.v25-multitrip-note{margin:0 0 12px;padding:10px 12px;border:1px solid #c4d9d1;border-radius:12px;background:#f2f8f5;color:#26494f;font-size:12px;line-height:1.45}
+.v25-multitrip-choice{display:flex;gap:10px;align-items:flex-start;margin:10px 0;padding:11px 12px;border:1px dashed #91aea5;border-radius:12px;background:#f8fbfa;cursor:pointer}
+.v25-multitrip-choice input{margin-top:3px;accent-color:#1e7567}
+.v25-multitrip-choice span{display:grid;gap:3px}
+.v25-multitrip-choice strong{color:#17383f!important;-webkit-text-fill-color:#17383f!important}
+.v25-multitrip-choice small{color:#5a7378!important;-webkit-text-fill-color:#5a7378!important}
+.cycle-return-delivery.v25-partial-selected{outline:2px solid #64a58e;outline-offset:2px}
+
+.v25-continuation-banner{position:fixed;right:18px;bottom:18px;z-index:99999;max-width:420px;display:grid;gap:3px;padding:14px 16px;border-radius:14px;background:#16494a;color:#fff;box-shadow:0 14px 34px rgba(13,45,48,.25);transform:translateY(18px);opacity:0;transition:.25s ease}
+.v25-continuation-banner.show{transform:translateY(0);opacity:1}
+.v25-continuation-banner strong,.v25-continuation-banner span{color:#fff!important;-webkit-text-fill-color:#fff!important}
+.v25-continuation-banner span{font-size:12px;color:#e6f0ed!important;-webkit-text-fill-color:#e6f0ed!important}
+
+@media (max-width:760px){
+  .v25-single-day-note{margin-left:0}
+  .v25-continuation-banner{left:12px;right:12px;bottom:82px;max-width:none}
+}
