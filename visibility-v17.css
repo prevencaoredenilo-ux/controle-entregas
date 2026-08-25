@@ -1,0 +1,383 @@
+/* ================================================================
+   NILO ENTREGAS • V17
+   VISIBILIDADE — correção por contexto.
+   Corrige o contraste sem alterar as funções e a estrutura das telas.
+   ================================================================ */
+:root{
+  --v17-ink:#102f36;
+  --v17-text:#29474e;
+  --v17-muted:#60777d;
+  --v17-muted-strong:#4c666d;
+  --v17-border:#c8d7d1;
+  --v17-petrol:#0b3738;
+  --v17-petrol-2:#153f45;
+  --v17-lime:#b9d531;
+  --v17-lime-dark:#607900;
+}
+
+/* ---------- CLARO: leitura firme ---------- */
+.main-content,.view{color:var(--v17-text)!important}
+.card:not(.issue-group),.section-card,.modal,.settings-side{
+  color:var(--v17-text)!important;
+}
+.card:not(.issue-group) h2,.card:not(.issue-group) h3,
+.section-card h2,.section-card h3,.settings-side h3,
+.modal h2,.modal h3{
+  color:var(--v17-ink)!important;
+}
+.card:not(.issue-group) p,.card:not(.issue-group) small,
+.section-card p,.section-card small,.settings-side p,
+.modal p,.modal small{
+  color:var(--v17-muted)!important;
+}
+
+/* Labels dos filtros e formulários */
+.view label,.modal label,.filter-panel label,.trace-search-grid label,
+.quick-entry-grid label,.form-grid label{
+  color:#28474e!important;
+  font-weight:900!important;
+  opacity:1!important;
+}
+.view label>small,.modal label>small,.quick-entry-grid label>small,.form-grid label>small{
+  color:#657c82!important;
+  opacity:1!important;
+  font-weight:700!important;
+}
+input,select,textarea{
+  color:#17383e!important;
+  background:#fff!important;
+  border-color:#b9cbc4!important;
+  -webkit-text-fill-color:#17383e!important;
+}
+input::placeholder,textarea::placeholder{
+  color:#71878d!important;
+  opacity:1!important;
+  -webkit-text-fill-color:#71878d!important;
+}
+
+/* Pesquisa: o fundo é escuro, então labels precisam ser claros */
+.trace-search-grid{
+  background:#294954!important;
+  border-color:#395d68!important;
+}
+.trace-search-grid label{
+  color:#f3f8f6!important;
+  text-shadow:0 1px 1px rgba(0,0,0,.18);
+}
+.trace-search-grid label small{color:#d5e1de!important}
+.trace-search-grid input,.trace-search-grid select{
+  background:#fff!important;
+  color:#15363c!important;
+  -webkit-text-fill-color:#15363c!important;
+}
+.trace-search-grid input::placeholder{color:#789096!important}
+
+/* ---------- ESCURO: nunca herdar texto escuro da V16 ---------- */
+.trash-hero,
+.route-history-hero,
+.v11-operation-hero,
+.hero-strip,
+.next-best-action,
+.operation-pulse-card,
+.executive-metric,
+.management-panel,
+.management-row,
+.severity-summary,
+.issue-group-head,
+.stat-list .stat-row{
+  color:#f7fbfa!important;
+}
+
+/* Lixeira */
+.trash-hero .eyebrow{color:#e6f28c!important}
+.trash-hero h2{color:#fff!important}
+.trash-hero p{color:#d6e4e1!important}
+.trash-hero .hero-chip{
+  color:#fff!important;
+  border-color:rgba(255,255,255,.3)!important;
+  background:rgba(255,255,255,.09)!important;
+}
+
+/* Histórico/Rotas hero */
+.route-history-hero>div:first-child>span{color:#dff181!important}
+.route-history-hero h2{color:#fff!important}
+.route-history-hero p{color:#d7e5e2!important}
+.route-history-live strong{color:#fff!important}
+.route-history-live small{color:#c4d7d3!important}
+
+/* Pendências / severidade */
+.severity-summary small{color:#d7e3e1!important}
+.severity-summary strong{color:#fff!important}
+.severity-summary em{
+  color:#c7d8d5!important;
+  font-style:normal!important;
+  opacity:1!important;
+}
+.issue-group-head span{color:#e1ef86!important}
+.issue-group-head h3{color:#fff!important}
+.issue-group-head p{color:#d1dfdd!important}
+.issue-group-head>strong{color:#fff!important}
+
+/* Lista de abas do relatório */
+.stat-list .stat-row{
+  background:#345561!important;
+  border-color:#486a75!important;
+}
+.stat-list .stat-row span,
+.stat-list .stat-row>div>span{
+  color:#f6fbfa!important;
+}
+.stat-list .stat-row strong{
+  color:#fff0a8!important;
+}
+.stat-list .stat-row small{
+  color:#c6d7d4!important;
+}
+
+/* Painéis operacionais escuros */
+.executive-metric span,.operation-pulse-copy small,
+.operation-pulse-copy em,.management-panel-head small,
+.management-row small,.next-best-copy p,.v11-operation-hero p{
+  color:#cbdad8!important;
+}
+.executive-metric strong,.operation-pulse-copy strong,
+.management-panel-head strong,.management-row>strong,
+.next-best-copy h3,.v11-operation-hero h2{
+  color:#fff!important;
+}
+
+/* Cadastros mestres */
+.settings-side h3{color:#14353b!important}
+.settings-side p{color:#536e74!important}
+.settings-stat{
+  border-color:#d8e2de!important;
+}
+.settings-stat span{
+  color:#526d73!important;
+  font-weight:800!important;
+}
+.settings-stat strong{
+  color:#657d00!important;
+  font-weight:950!important;
+}
+
+/* Cards e tabelas */
+th{color:#36565d!important}
+td{color:#29484f!important}
+.cell-title{color:#18383f!important}
+.cell-sub{color:#607a80!important}
+.metric-card small,.metric-sub{color:#647d83!important}
+
+/* Modal nova compra: conteúdo claro e sem campos pretos */
+.modal,.modal-body,.quick-step-card{
+  background:#fff!important;
+}
+.modal-head{
+  background:#f8fbf9!important;
+  border-bottom-color:#d7e2dd!important;
+}
+.modal-kicker{color:#667d00!important}
+.modal-head h2{color:#12343a!important}
+.modal-head p{color:#587177!important}
+.purchase-number-input input,.coupon-number-input input{
+  background:#fff!important;
+  color:#16383f!important;
+  border-color:#aebfb8!important;
+  -webkit-text-fill-color:#16383f!important;
+  text-shadow:none!important;
+}
+.quick-step-card{
+  border-color:#d5e1dc!important;
+}
+.quick-step-head strong{color:#18383f!important}
+.quick-step-head small{color:#5f787e!important}
+
+/* Rodapé sticky sem cobrir o último campo */
+.modal .form-actions{
+  background:rgba(255,255,255,.97)!important;
+  border-top:1px solid #d8e2de!important;
+  box-shadow:0 -10px 24px rgba(25,55,52,.10)!important;
+}
+
+/* ---------- V17 ROTEIRIZAÇÃO ---------- */
+.v17-planner{
+  display:grid;
+  gap:12px;
+}
+.v17-planner-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:14px;
+}
+.v17-planner-kicker{
+  display:block;
+  color:#668000;
+  font-size:9px;
+  font-weight:950;
+  letter-spacing:.09em;
+}
+.v17-planner-head h3{
+  margin:4px 0 3px;
+  color:#15373e!important;
+  font-size:17px;
+}
+.v17-planner-head p{
+  margin:0;
+  color:#5e787e!important;
+  font-size:10px;
+  line-height:1.45;
+}
+.v17-route-selector{
+  min-width:235px;
+}
+.v17-route-selector label{
+  display:grid;
+  gap:4px;
+  color:#46636a!important;
+  font-size:9px;
+  font-weight:900;
+}
+.v17-route-selector select{
+  min-height:40px!important;
+  font-size:11px!important;
+}
+.v17-route-status{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  min-height:42px;
+  padding:9px 11px;
+  border:1px solid #d4e0db;
+  border-radius:11px;
+  background:#f5f8f6;
+  color:#4b686f;
+  font-size:9px;
+}
+.v17-route-status.loading:before{
+  content:"";
+  width:13px;height:13px;border-radius:50%;
+  border:2px solid #c4d2cd;border-top-color:#758f00;
+  animation:v17spin .8s linear infinite;
+}
+@keyframes v17spin{to{transform:rotate(360deg)}}
+.v17-map{
+  min-height:370px;
+  border:1px solid #cddbd5;
+  border-radius:16px;
+  overflow:hidden;
+  background:#eef4f0;
+  z-index:1;
+}
+.v17-route-empty{
+  min-height:330px;
+  display:grid;
+  place-items:center;
+  align-content:center;
+  text-align:center;
+  padding:28px;
+  border:1px dashed #c8d6d0;
+  border-radius:16px;
+  background:#f1f6f2;
+}
+.v17-route-empty span{
+  width:50px;height:50px;border-radius:15px;
+  display:grid;place-items:center;
+  background:#e9f4bd;color:#607900;font-size:22px;
+}
+.v17-route-empty strong{
+  margin-top:10px;color:#16383f!important;font-size:14px;
+}
+.v17-route-empty p{
+  max-width:510px;margin:5px 0 0;
+  color:#60787e!important;font-size:9px;line-height:1.5;
+}
+.v17-route-summary{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:8px;
+}
+.v17-route-summary>div{
+  padding:10px 11px;
+  border:1px solid #d5e1dc;
+  border-radius:11px;
+  background:#fff;
+}
+.v17-route-summary small{
+  display:block;color:#657c82!important;font-size:8px;font-weight:800;
+}
+.v17-route-summary strong{
+  display:block;color:#17383e!important;font-size:16px;margin-top:4px;
+}
+.v17-route-actions{
+  display:flex;gap:8px;flex-wrap:wrap;
+}
+.v17-route-actions .btn{min-height:40px}
+.v17-stop-list{
+  display:grid;gap:6px;
+}
+.v17-stop{
+  display:grid;
+  grid-template-columns:34px minmax(0,1fr) auto;
+  gap:9px;align-items:center;
+  padding:9px 10px;
+  border:1px solid #d9e3df;
+  border-radius:11px;
+  background:#fff;
+}
+.v17-stop>span{
+  width:34px;height:34px;border-radius:10px;
+  display:grid;place-items:center;
+  background:#153f45;color:#fff;font-weight:950;font-size:11px;
+}
+.v17-stop.priority>span{background:#b9d531;color:#17343b}
+.v17-stop strong{display:block;color:#193a40!important;font-size:10px}
+.v17-stop small{display:block;color:#657c82!important;font-size:8px;margin-top:3px}
+.v17-stop b{
+  color:#668000;font-size:8px;font-weight:950;white-space:nowrap;
+}
+.v17-route-note{
+  padding:9px 11px;
+  border:1px solid #d6e1dd;
+  border-radius:10px;
+  background:#f7faf8;
+  color:#5b747a;
+  font-size:8px;
+  line-height:1.5;
+}
+.v17-route-note strong{color:#28474e!important}
+
+/* Leaflet dentro do design do app */
+.v17-map .leaflet-control-attribution{
+  font-size:8px!important;
+}
+.v17-map .leaflet-popup-content{
+  color:#17383e!important;
+  font-size:10px!important;
+}
+.v17-leaflet-stop{
+  background:#153f45;
+  color:#fff;
+  width:28px;height:28px;border-radius:50%;
+  display:grid;place-items:center;
+  font-size:10px;font-weight:950;
+  border:3px solid #fff;
+  box-shadow:0 3px 12px rgba(16,48,48,.22);
+}
+.v17-leaflet-stop.priority{
+  background:#b9d531;color:#18353a;
+}
+
+@media(max-width:900px){
+  .v17-planner-head{display:grid}
+  .v17-route-selector{min-width:0;width:100%}
+  .v17-route-summary{grid-template-columns:1fr 1fr}
+}
+@media(max-width:520px){
+  .v17-map{min-height:280px}
+  .v17-route-summary{grid-template-columns:1fr 1fr}
+  .v17-route-actions{display:grid;grid-template-columns:1fr}
+  .v17-route-actions .btn{width:100%}
+  .v17-stop{grid-template-columns:32px minmax(0,1fr)}
+  .v17-stop b{grid-column:2}
+}

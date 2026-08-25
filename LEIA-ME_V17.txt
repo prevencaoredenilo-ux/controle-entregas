@@ -1,0 +1,79 @@
+NILO ENTREGAS • ATUALIZAÇÃO V17
+VISIBILIDADE + ROTAS DOS ENTREGADORES + ROTEIRIZAÇÃO
+
+O QUE ESTA VERSÃO CORRIGE
+1. VISIBILIDADE GERAL
+- corrige texto escuro em painéis escuros;
+- melhora títulos e subtítulos da Lixeira;
+- melhora Críticas / Atenção / Informativas;
+- melhora as 31 abas do relatório;
+- melhora Cadastros mestres;
+- melhora labels de Pesquisar entregas;
+- melhora labels e textos auxiliares dos formulários;
+- mantém inputs claros e legíveis;
+- não altera a estrutura das outras telas.
+
+2. ROTAS DOS ENTREGADORES
+Mantém a composição V16:
+- Entregas do dia;
+- Desempenho diário;
+- Resumo do período;
+- Taxa de sucesso;
+- Taxa de retorno;
+- Total de tentativas;
+- Tempo médio compra → cliente;
+- Melhor dia da semana;
+- Semana com mais entregas;
+- Dia com mais entregas;
+- Faixa horária de maior movimento.
+
+3. ROTEIRIZAÇÃO PLANEJADA
+- não depende do GPS do entregador;
+- usa Rua/Avenida + Número + Bairro já cadastrados;
+- escolhe uma saída/ciclo;
+- localiza as paradas;
+- calcula um trajeto viário eficiente;
+- mostra distância e tempo estimados;
+- desenha a rota em mapa;
+- lista a ordem das entregas;
+- abre a sequência no Google Maps;
+- entrega prioritária continua destacada.
+
+OBSERVAÇÃO TÉCNICA SOBRE O MAPA
+Para não exigir chave paga do Google Maps nesta versão:
+- a localização/traçado automático no painel usa serviços abertos de mapa/roteamento;
+- o botão de navegação abre a sequência final no Google Maps.
+Se futuramente você quiser que o próprio cálculo seja feito pela API oficial do
+Google Maps, será necessário habilitar Google Maps Platform e configurar uma
+chave de API/faturamento.
+
+ARQUIVOS DO ZIP
+- index.html                      SUBSTITUIR
+- visibility-v17.css              NOVO
+- route-planner-v17.js            NOVO
+- LEIA-ME_V17.txt
+
+MANTER NO GITHUB
+Não apague:
+- app.js
+- styles.css
+- nilo-layout-v15.css
+- visibility-v16.css
+- route-view-v16.js
+- public-sync.js
+- manifest.webmanifest
+- sw.js
+- icons/
+
+COMO ATUALIZAR
+1. Abra a raiz do repositório controle-entregas.
+2. Faça upload dos 3 arquivos: index.html, visibility-v17.css e route-planner-v17.js.
+3. Confirme a substituição do index.html.
+4. Faça o commit.
+5. Aguarde o GitHub Pages atualizar.
+6. Feche a aba antiga e abra novamente.
+7. Pressione CTRL + F5 uma vez no PC.
+
+IMPORTANTE
+A atualização não substitui app.js e, portanto, mantém as regras e relatórios
+existentes. Ela trabalha como camada de interface/roteirização sobre o sistema atual.
