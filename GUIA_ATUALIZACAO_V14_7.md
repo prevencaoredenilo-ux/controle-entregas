@@ -1,10 +1,10 @@
-# Atualização V14.7.0 • roteirização e visual para celular
+# Atualização V14.7.1 • roteirização e visual para celular
 
 ## Publicação
 
 1. Faça um Backup JSON no sistema atual.
-2. Publique os arquivos da V14.7.0 na raiz do GitHub Pages.
-3. Abra o sistema com internet e confirme que o rodapé mostra **V14.7.0**.
+2. Publique os arquivos da V14.7.1 na raiz do GitHub Pages.
+3. Abra o sistema com internet e confirme que o rodapé mostra **V14.7.1**.
 4. No computador que já possui os dados, entre na conta e aguarde a mensagem **Sincronizado em tempo real**.
 5. Depois abra o sistema no celular.
 

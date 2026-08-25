@@ -1620,6 +1620,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .cycle-route-preview li strong{display:block;color:#FFFFFF;font-size:10px}
 .cycle-route-preview li small{display:block;color:#B9C9CF;font-size:8px;margin-top:3px;line-height:1.35}
 .cycle-route-preview li b{color:#FFE08A;font-size:8px}
+.cycle-route-preview .route-delivery-number,.route-stop-copy .route-delivery-number{color:#FFE08A!important;font-size:9px!important;white-space:nowrap}
 .cycle-route-more{display:block;color:#B9C9CF!important;text-align:center;margin-top:8px}
 
 .route-plan-hero{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px;align-items:center;padding:16px;border:1px solid #4F6C79;border-radius:16px;background:linear-gradient(135deg,#284652,#315345);margin-bottom:12px}

@@ -7,7 +7,7 @@
   }
   'use strict';
 
-  const APP_VERSION = '14.7.0';
+  const APP_VERSION = '14.7.1';
   const DB_NAME = 'controle_entregas_nx';
   const DB_VERSION = 1;
   const STORE_NAME = 'app_state';
@@ -689,7 +689,7 @@
 
   function initPWA() {
     if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-      navigator.serviceWorker.register('./sw.js?v=14.7.0').catch(console.warn);
+      navigator.serviceWorker.register('./sw.js?v=14.7.1').catch(console.warn);
     }
     window.addEventListener('beforeinstallprompt', (event) => {
       event.preventDefault();
@@ -3113,7 +3113,7 @@
     const neighborhoods = unique(ordered.map(d=>d.neighborhoodId).filter(Boolean)).length;
     return `<section class="cycle-route-preview">
       <div class="cycle-route-preview-head"><div><span>ROTEIRO SUGERIDO</span><strong>${ordered.length} entrega(s) • ${neighborhoods} bairro(s)</strong><small>${priorities ? `${priorities} prioridade(s) posicionada(s) primeiro` : 'Sem entrega prioritária nesta saída'} • ${precise}/${ordered.length} com endereço exato</small></div><span class="maps-brand">Google Maps</span></div>
-      <ol>${ordered.slice(0,8).map(d=>`<li class="${d.priority?'priority':''}"><span>${d.priority?'★':ordered.indexOf(d)+1}</span><div><strong>${d.priority?'<b>PRIORIDADE</b> ':''}NF ${esc(d.docNo||'—')} • ${esc(neighborhood(d.neighborhoodId)?.name||'Sem bairro')}</strong><small>${esc(deliveryAddressLine(d) || 'Parada aproximada pelo bairro')} • ${esc(d.customerName || `Cupom ${d.coupon||'—'}`)}</small></div></li>`).join('')}</ol>
+      <ol>${ordered.slice(0,8).map(d=>`<li class="${d.priority?'priority':''}"><span>${d.priority?'★':ordered.indexOf(d)+1}</span><div><strong>${d.priority?'<b>PRIORIDADE</b> ':''}NF ${esc(d.docNo||'—')} • ${esc(neighborhood(d.neighborhoodId)?.name||'Sem bairro')} • <b class="route-delivery-number">ENTREGA Nº ${esc(d.orderNo||'—')}</b></strong><small>${esc(deliveryAddressLine(d) || 'Parada aproximada pelo bairro')} • ${esc(d.customerName || `Cupom ${d.coupon||'—'}`)}</small></div></li>`).join('')}</ol>
       ${ordered.length>8?`<small class="cycle-route-more">+ ${ordered.length-8} entrega(s) na sequência do roteiro</small>`:''}
     </section>`;
   }
@@ -3344,7 +3344,7 @@
       <ol class="route-stop-list">
         ${ordered.map((d,index)=>`<li class="route-stop-item ${d.priority?'priority':''}">
           <span class="route-stop-number">${d.priority?'★':index+1}</span>
-          <div class="route-stop-copy"><div><strong>${d.priority?'<b>PRIORIDADE • ENTREGAR PRIMEIRO</b> ':''}NF ${esc(d.docNo||'—')} • Cupom ${esc(d.coupon||'—')}</strong>${d.priority?'<span class="badge red">Prioridade</span>':''}</div><small>${esc(d.customerName||'Cliente não informado')} • ${esc(d.customerPhone||'Sem telefone')}</small><p>${esc(deliveryAddressLine(d,true) || neighborhood(d.neighborhoodId)?.name || 'Endereço não informado')} • ${esc(neighborhood(d.neighborhoodId)?.name||'Sem bairro')}</p></div>
+          <div class="route-stop-copy"><div><strong>${d.priority?'<b>PRIORIDADE • ENTREGAR PRIMEIRO</b> ':''}NF ${esc(d.docNo||'—')} • Cupom ${esc(d.coupon||'—')} • <b class="route-delivery-number">ENTREGA Nº ${esc(d.orderNo||'—')}</b></strong>${d.priority?'<span class="badge red">Prioridade</span>':''}</div><small>${esc(d.customerName||'Cliente não informado')} • ${esc(d.customerPhone||'Sem telefone')}</small><p>${esc(deliveryAddressLine(d,true) || neighborhood(d.neighborhoodId)?.name || 'Endereço não informado')} • ${esc(neighborhood(d.neighborhoodId)?.name||'Sem bairro')}</p></div>
           <button type="button" class="route-stop-map" data-delivery-map="${d.id}" aria-label="Abrir parada ${index+1} no Google Maps">⌖</button>
         </li>`).join('')}
       </ol>

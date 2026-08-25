@@ -1,6 +1,12 @@
-# Controle de Entregas • Nilo Supermercado — V14.7.0
+# Controle de Entregas • Nilo Supermercado — V14.7.1
 
 Versão focada em **roteirização dos ciclos, prioridade operacional e uso mais simples no celular**, mantendo tempo real, continuidade offline, agendamentos e relatórios.
+
+## Ajuste da V14.7.1
+
+- O roteiro sugerido mostra **ENTREGA Nº X** logo após a NF e o bairro.
+- A tela completa da rota também apresenta o número da entrega.
+- O número exibido à esquerda do cartão continua sendo a posição da parada no roteiro.
 
 ## Novidades da V14.7.0
 
