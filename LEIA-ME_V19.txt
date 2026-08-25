@@ -1,0 +1,40 @@
+NILO ENTREGAS • V19 ESTÁVEL
+
+ESTA VERSÃO É UMA CONSOLIDAÇÃO, NÃO MAIS UMA CAMADA POR CIMA DAS OUTRAS.
+
+CORRIGE VISIBILIDADE EM TODO O SISTEMA
+- conteúdo principal usa cards claros e texto escuro forte;
+- labels, subtítulos, placeholders e textos auxiliares ficam legíveis;
+- Pesquisa, Relatórios, Cadastros e Pendências foram convertidos para superfícies claras;
+- Lixeira e hero de Rotas continuam escuros, mas com texto branco real;
+- Nova compra deixa de ter campos pretos;
+- tabelas e indicadores ganham contraste consistente;
+- sidebar verde-petróleo é mantida.
+
+CORRIGE ESTABILIDADE
+- remove o empilhamento de visibility-v16.css, visibility-v17.css e visibility-v18.css do index;
+- remove os scripts antigos route-view-v16.js e route-planner-v17.js do index;
+- usa versões estáveis dos scripts de rotas;
+- remove setInterval de 1,2 s e 2,2 s;
+- remove observador global do document.documentElement;
+- atualiza o Service Worker para V19 e limpa caches antigos.
+
+ARQUIVOS DO ZIP
+- index.html -> SUBSTITUIR
+- ui-stable-v19.css -> NOVO
+- route-view-stable-v19.js -> NOVO
+- route-planner-stable-v19.js -> NOVO
+- sw.js -> SUBSTITUIR
+- LEIA-ME_V19.txt
+
+DEPOIS DE PUBLICAR
+1. Aguarde o GitHub Pages concluir.
+2. Feche todas as abas antigas do sistema.
+3. Abra novamente o link.
+4. No PC pressione CTRL+F5 uma vez.
+5. Se o sistema estiver instalado como app/PWA, feche completamente e abra novamente.
+
+IMPORTANTE
+Os arquivos antigos visibility-v16.css, visibility-v17.css, visibility-v18.css,
+route-view-v16.js e route-planner-v17.js podem continuar no repositório, mas a V19
+NÃO os carrega mais. Portanto eles não interferem no sistema.
