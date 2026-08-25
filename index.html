@@ -260,6 +260,126 @@ html body #view .section-card small{
 }
 </style>
 
+
+<style id="nilo-visual-hotfix-v23">
+/* ================================================================
+   NILO V23 • HOTFIX DE CORES EXATAS
+   Pedido do usuário:
+   - 1º print: letras pretas nas áreas marcadas da tabela
+   - 2º e 3º print: mesmo padrão de cores do 4º print
+   ================================================================ */
+
+/* 1) HISTÓRICO DE ENTREGAS: áreas marcadas em PRETO */
+html body #view .table-wrap table tbody tr td:nth-child(1),
+html body #view .table-wrap table tbody tr td:nth-child(1) *,
+html body #view .table-wrap table tbody tr td:nth-child(2),
+html body #view .table-wrap table tbody tr td:nth-child(2) *,
+html body #view .table-wrap table tbody tr td:nth-child(3),
+html body #view .table-wrap table tbody tr td:nth-child(3) *,
+html body #view .table-wrap table tbody tr td:nth-child(4),
+html body #view .table-wrap table tbody tr td:nth-child(4) *,
+html body #view .table-wrap table tbody tr td:nth-child(6),
+html body #view .table-wrap table tbody tr td:nth-child(6) *,
+html body #view .table-wrap table tbody tr td:nth-child(7),
+html body #view .table-wrap table tbody tr td:nth-child(7) *,
+html body #view .table-wrap table tbody tr td:nth-child(8),
+html body #view .table-wrap table tbody tr td:nth-child(8) *,
+html body #view .table-wrap table tbody tr td:nth-child(9),
+html body #view .table-wrap table tbody tr td:nth-child(9) *,
+html body #view .table-wrap table tbody tr td:nth-child(10),
+html body #view .table-wrap table tbody tr td:nth-child(10) *,
+html body #view .table-wrap table tbody tr td:nth-child(11),
+html body #view .table-wrap table tbody tr td:nth-child(11) *{
+  color:#000000!important;
+  -webkit-text-fill-color:#000000!important;
+  opacity:1!important;
+  text-shadow:none!important;
+}
+
+/* Garante compra/cupom ainda mais forte */
+html body #view .table-wrap .history-identification-number,
+html body #view .table-wrap .history-identification-number *{
+  color:#000000!important;
+  -webkit-text-fill-color:#000000!important;
+  font-weight:950!important;
+  opacity:1!important;
+}
+
+/* Mantém badges e botões fora da regra preta */
+html body #view .table-wrap table tbody tr td:nth-child(5) .badge,
+html body #view .table-wrap table tbody tr td:nth-child(12) .badge,
+html body #view .table-wrap table tbody tr td:nth-child(13) .btn,
+html body #view .table-wrap table tbody tr td:nth-child(13) button{
+  -webkit-text-fill-color:initial!important;
+}
+
+/* 2) CICLOS E QUILOMETRAGEM: usar o mesmo PADRÃO do 4º print */
+html body #view .hero-strip,
+html body #view .cycle-hero,
+html body #view .mileage-hero{
+  background:linear-gradient(135deg,#0f4a4d 0%, #1f5b58 100%)!important;
+  color:#ffffff!important;
+}
+html body #view .hero-strip h1,
+html body #view .hero-strip h2,
+html body #view .hero-strip h3,
+html body #view .cycle-hero h1,
+html body #view .cycle-hero h2,
+html body #view .cycle-hero h3,
+html body #view .mileage-hero h1,
+html body #view .mileage-hero h2,
+html body #view .mileage-hero h3{
+  color:#ffffff!important;
+  -webkit-text-fill-color:#ffffff!important;
+  opacity:1!important;
+}
+html body #view .hero-strip p,
+html body #view .hero-strip small,
+html body #view .cycle-hero p,
+html body #view .cycle-hero small,
+html body #view .mileage-hero p,
+html body #view .mileage-hero small{
+  color:#e4f0ec!important;
+  -webkit-text-fill-color:#e4f0ec!important;
+  opacity:1!important;
+}
+html body #view .hero-strip .eyebrow,
+html body #view .cycle-hero .eyebrow,
+html body #view .mileage-hero .eyebrow{
+  color:#dff07b!important;
+  -webkit-text-fill-color:#dff07b!important;
+  opacity:1!important;
+}
+html body #view .hero-strip .hero-chip,
+html body #view .hero-strip .hero-chip *,
+html body #view .cycle-hero .hero-chip,
+html body #view .cycle-hero .hero-chip *,
+html body #view .mileage-hero .hero-chip,
+html body #view .mileage-hero .hero-chip *{
+  color:#ffffff!important;
+  -webkit-text-fill-color:#ffffff!important;
+  border-color:rgba(255,255,255,.28)!important;
+}
+
+/* 3) ROTAS (4º print) preservado e alinhado como referência */
+html body #view .route-history-hero,
+html body #view .route-history-hero h1,
+html body #view .route-history-hero h2,
+html body #view .route-history-hero h3{
+  color:#ffffff!important;
+  -webkit-text-fill-color:#ffffff!important;
+}
+html body #view .route-history-hero p,
+html body #view .route-history-hero small{
+  color:#e4f0ec!important;
+  -webkit-text-fill-color:#e4f0ec!important;
+}
+html body #view .route-history-hero > div:first-child > span{
+  color:#dff07b!important;
+  -webkit-text-fill-color:#dff07b!important;
+}
+</style>
+
 </head>
 <body>
   <div id="bootScreen" class="boot-screen">

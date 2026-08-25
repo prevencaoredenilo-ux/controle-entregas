@@ -1,4 +1,4 @@
-const CACHE_NAME = 'controle-entregas-v22-origem-nilo-bairros';
+const CACHE_NAME = 'controle-entregas-v23-cores-exatas';
 const APP_SHELL = [
   './',
   './index.html',

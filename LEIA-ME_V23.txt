@@ -1,0 +1,16 @@
+HOTFIX V23 — CORES EXATAS
+
+Substituir somente:
+- index.html
+- sw.js
+
+O que muda:
+1. Histórico de entregas: letras das áreas marcadas no 1º print ficam pretas.
+2. Ciclos de entrega: usa o mesmo padrão de cores do 4º print.
+3. Quilometragem real da frota: usa o mesmo padrão de cores do 4º print.
+4. Rotas dos entregadores: mantém o padrão do 4º print.
+
+Depois de publicar:
+- feche as abas antigas
+- abra o sistema novamente
+- pressione Ctrl+F5 uma vez
