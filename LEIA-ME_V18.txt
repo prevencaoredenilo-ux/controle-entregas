@@ -1,0 +1,43 @@
+NILO ENTREGAS • V18 • SOMENTE VISIBILIDADE
+
+ESTA VERSÃO FAZ SÓ UMA COISA:
+- corrige visibilidade / contraste / leitura.
+
+O QUE ELA MELHORA
+- labels dos campos;
+- subtítulos;
+- textos em fundos escuros;
+- cards escuros;
+- Lixeira de registros;
+- Cadastros mestres;
+- lista de relatórios;
+- Pesquisar entregas;
+- Histórico de rotas;
+- Críticas / Atenção / Informativas;
+- tabelas e textos auxiliares;
+- modal de nova compra.
+
+NÃO MUDA
+- funções;
+- cálculos;
+- relatórios;
+- roteirização da V17;
+- sincronização.
+
+ARQUIVOS DO ZIP
+- index.html -> SUBSTITUIR
+- visibility-v18.css -> NOVO
+- LEIA-ME_V18.txt
+
+MANTER NO GITHUB
+- app.js
+- styles.css
+- nilo-layout-v15.css
+- visibility-v16.css
+- visibility-v17.css
+- route-view-v16.js
+- route-planner-v17.js
+- public-sync.js
+- manifest.webmanifest
+- sw.js
+- icons/

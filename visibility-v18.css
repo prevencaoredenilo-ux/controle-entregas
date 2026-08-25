@@ -1,0 +1,232 @@
+/* ================================================================
+   NILO ENTREGAS • V18
+   SOMENTE VISIBILIDADE
+   Reforça contraste, leitura e hierarquia visual sem mexer nas funções.
+   ================================================================ */
+:root{
+  --v18-title:#12363d;
+  --v18-text:#2e4e55;
+  --v18-muted:#5f787e;
+  --v18-soft:#70888e;
+  --v18-dark-title:#ffffff;
+  --v18-dark-text:#dbe8e5;
+  --v18-dark-soft:#c7d7d4;
+  --v18-border:#cfdcd7;
+  --v18-field:#ffffff;
+}
+
+/* BASE GERAL */
+.main-content,.view,.card,.section-card,.modal,#view{color:var(--v18-text)!important}
+#view h2,#view h3,#view h4,
+.section-card h2,.section-card h3,.section-card h4,
+.card h2,.card h3,.card h4,
+.modal h2,.modal h3,.modal h4,
+.filter-panel strong,.topbar-title h1{
+  color:var(--v18-title)!important;
+}
+#view p,#view small,#view li,
+.card p,.card small,.section-card p,.section-card small,
+.modal p,.modal small,.filter-panel small,.topbar-title p{
+  color:var(--v18-muted)!important;
+  opacity:1!important;
+}
+
+/* CAMPOS E FILTROS */
+#view label,.modal label,.filter-panel label,.form-grid label,.quick-entry-grid label,.trace-search-grid label{
+  color:var(--v18-title)!important;
+  font-weight:900!important;
+  opacity:1!important;
+}
+#view label small,.modal label small,.form-grid label small,.quick-entry-grid label small,.trace-search-grid label small{
+  color:var(--v18-muted)!important;
+  font-weight:800!important;
+  opacity:1!important;
+}
+input,select,textarea{
+  background:var(--v18-field)!important;
+  color:#173940!important;
+  -webkit-text-fill-color:#173940!important;
+  border:1px solid #bccdc8!important;
+}
+input::placeholder,textarea::placeholder{
+  color:var(--v18-soft)!important;
+  opacity:1!important;
+  -webkit-text-fill-color:var(--v18-soft)!important;
+}
+input:focus,select:focus,textarea:focus{
+  border-color:#89a500!important;
+  box-shadow:0 0 0 3px rgba(137,165,0,.12)!important;
+}
+
+/* PESQUISAR ENTREGAS - CARD ESCURO */
+.trace-search-grid{
+  background:#2b4952!important;
+  border:1px solid #45616a!important;
+}
+.trace-search-grid label,
+.trace-search-grid label small,
+.trace-search-grid .field-help{
+  color:#f4fbf8!important;
+}
+.trace-search-grid label small{color:#d8e6e2!important}
+.trace-search-grid input,.trace-search-grid select,.trace-search-grid textarea{
+  background:#fff!important;
+  color:#183a40!important;
+}
+.trace-search-grid input::placeholder{color:#738b91!important}
+
+/* CABEÇALHOS ESCUROS / HERO */
+.trash-hero,.route-history-hero,.v11-operation-hero,.next-best-action,
+.operation-pulse-card,.executive-metric,.severity-summary,.issue-group-head,
+.management-panel,.management-row,.hero-strip,.route-map-panel .route-map-empty,
+.route-map-panel .route-map-box{
+  color:var(--v18-dark-text)!important;
+}
+.trash-hero h1,.trash-hero h2,.trash-hero h3,
+.route-history-hero h1,.route-history-hero h2,.route-history-hero h3,
+.v11-operation-hero h1,.v11-operation-hero h2,.v11-operation-hero h3,
+.next-best-action h1,.next-best-action h2,.next-best-action h3,
+.operation-pulse-card h1,.operation-pulse-card h2,.operation-pulse-card h3,
+.executive-metric h1,.executive-metric h2,.executive-metric h3,
+.issue-group-head h1,.issue-group-head h2,.issue-group-head h3,
+.management-panel h1,.management-panel h2,.management-panel h3,
+.route-map-panel h1,.route-map-panel h2,.route-map-panel h3{
+  color:var(--v18-dark-title)!important;
+}
+.trash-hero p,.trash-hero small,.route-history-hero p,.route-history-hero small,
+.v11-operation-hero p,.v11-operation-hero small,.next-best-action p,.next-best-action small,
+.operation-pulse-card p,.operation-pulse-card small,.executive-metric p,.executive-metric small,
+.issue-group-head p,.issue-group-head small,.management-panel p,.management-panel small,
+.management-row p,.management-row small,.route-map-panel p,.route-map-panel small{
+  color:var(--v18-dark-soft)!important;
+  opacity:1!important;
+}
+.trash-hero .eyebrow,.route-history-hero > div:first-child > span,
+.issue-group-head span,.v11-operation-hero .eyebrow{
+  color:#dced8a!important;
+}
+.trash-hero .hero-chip,.route-history-live,.hero-chip,.route-history-live-badge{
+  color:#fff!important;
+  border-color:rgba(255,255,255,.32)!important;
+}
+.route-history-live strong,.route-history-live-badge strong,.hero-chip strong{color:#fff!important}
+.route-history-live small,.route-history-live-badge small,.hero-chip small{color:#d7e5e1!important}
+
+/* CARDS DE PENDÊNCIAS */
+.severity-summary small{color:#dce7e3!important}
+.severity-summary strong{color:#fff!important}
+.severity-summary em{color:#d1dfdb!important;opacity:1!important;font-style:normal!important}
+.issue-group-head > strong{color:#fff!important}
+
+/* RELATÓRIOS */
+.stat-list .stat-row,
+.report-list .stat-row,
+.report-card .stat-row{
+  background:#355660!important;
+  border:1px solid #4a6972!important;
+}
+.stat-list .stat-row strong,
+.report-list .stat-row strong,
+.report-card .stat-row strong{
+  color:#fff4a8!important;
+}
+.stat-list .stat-row span,
+.stat-list .stat-row small,
+.report-list .stat-row span,
+.report-list .stat-row small,
+.report-card .stat-row span,
+.report-card .stat-row small{
+  color:#f3faf8!important;
+  opacity:1!important;
+}
+.stat-list .stat-row small,
+.report-list .stat-row small,
+.report-card .stat-row small{color:#cfe0dc!important}
+
+/* CADASTROS */
+.settings-side{
+  background:#f8fbf9!important;
+  border-color:#d7e2dd!important;
+}
+.settings-side h3{color:var(--v18-title)!important}
+.settings-side p{color:var(--v18-muted)!important}
+.settings-stat{
+  border-bottom:1px solid #dbe5e1!important;
+}
+.settings-stat span{
+  color:#567076!important;
+  font-weight:800!important;
+}
+.settings-stat strong{
+  color:#6c8500!important;
+  font-weight:950!important;
+}
+
+/* TABELAS / CÉLULAS */
+thead th{color:#36555c!important}
+tbody td{color:#29484f!important}
+.cell-title,.table-title,.list-title{color:#16373d!important}
+.cell-sub,.table-sub,.list-sub{color:var(--v18-muted)!important}
+
+/* MÉTRICAS / NÚMEROS */
+.metric-card strong,.kpi-card strong,.summary-card strong,.stat-strong,
+.summary-strong,.data-big,.big-number,.metric-number,.value-strong{
+  color:#183940!important;
+}
+.metric-card small,.kpi-card small,.summary-card small,.stat-note,
+.summary-note,.metric-card p,.kpi-card p,.summary-card p{
+  color:var(--v18-muted)!important;
+}
+
+/* FORMULÁRIO DE NOVA COMPRA */
+.modal,.modal-head,#modalBody,.quick-step-card,.quick-step-body{
+  color:var(--v18-text)!important;
+}
+.modal-head{
+  background:#f8fbf9!important;
+  border-bottom:1px solid #d9e3df!important;
+}
+.modal-kicker{color:#708900!important}
+.modal-head h2{color:var(--v18-title)!important}
+.modal-head p{color:var(--v18-muted)!important}
+.quick-step-card{
+  background:#fff!important;
+  border:1px solid #d6e1dd!important;
+}
+.quick-step-head strong{color:#16383f!important}
+.quick-step-head small{color:var(--v18-muted)!important}
+.purchase-number-input input,.coupon-number-input input,
+.quick-entry-grid input,.quick-entry-grid select,.quick-entry-grid textarea{
+  background:#fff!important;
+  color:#173940!important;
+  -webkit-text-fill-color:#173940!important;
+  border-color:#b8cac4!important;
+}
+.priority-delivery-toggle span strong{color:#173940!important}
+.priority-delivery-toggle span small{color:var(--v18-muted)!important}
+.form-actions{
+  background:rgba(255,255,255,.98)!important;
+  border-top:1px solid #d8e3df!important;
+}
+
+/* FILTROS SUPERIORES */
+.filter-panel{
+  border-color:#d6e1dc!important;
+}
+.filter-intro strong{color:var(--v18-title)!important}
+.filter-intro small{color:var(--v18-muted)!important}
+
+/* BOTÕES EM SUPERFÍCIES ESCURAS */
+.dark-panel .btn.secondary,.severity-summary .btn.secondary,.issue-group .btn.secondary,
+.route-history-hero .btn.secondary,.trash-hero .btn.secondary{
+  color:#fff!important;
+  border-color:rgba(255,255,255,.35)!important;
+}
+
+/* MOBILE */
+@media (max-width: 720px){
+  #view p,#view small,.card p,.card small,.section-card p,.section-card small{font-size:11px!important}
+  #view h2,.card h2,.section-card h2{font-size:18px!important}
+  #view h3,.card h3,.section-card h3{font-size:15px!important}
+  input,select,textarea{font-size:16px!important}
+}
