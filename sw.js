@@ -1,4 +1,4 @@
-const CACHE_NAME = 'controle-entregas-v25-correcoes-operacionais';
+const CACHE_NAME = 'controle-entregas-v28-tipo-entrega-visivel';
 const APP_SHELL = [
   './',
   './index.html',
@@ -8,11 +8,10 @@ const APP_SHELL = [
   './app.js?v=14.8.0',
   './public-sync.js?v=15.2.0',
   './route-view-stable-v19.js?v=19.0.0',
-  './route-planner-stable-v19.js?v=19.0.0',
   './manifest.webmanifest',
   './route-planner-stable-v24.js?v=24.0.0',
-  './nilo-contrast-v25.css?v=25.0.0',
-  './operational-fixes-v25.js?v=25.0.0',
+  './nilo-contrast-v28.css?v=28.0.0',
+  './operational-fixes-v28.js?v=28.0.0',
   './icons/icon-192.png',
   './icons/icon-512.png',
   'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.4'

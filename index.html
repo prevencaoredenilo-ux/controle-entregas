@@ -423,7 +423,17 @@ html body #view .v24-note strong{color:#17383f!important;-webkit-text-fill-color
 }
 </style>
 
-  <link rel="stylesheet" href="nilo-contrast-v25.css?v=25.0.0" />
+  <link rel="stylesheet" href="nilo-contrast-v28.css?v=28.0.0" />
+
+<style id="nilo-v28-critical-contrast">
+/* V28: contraste crítico embutido para funcionar mesmo antes do CSS externo carregar */
+html body{background:#f3f7f5!important;color:#17383f!important}
+html body #view table td{color:#102f36!important;-webkit-text-fill-color:#102f36!important}
+html body #view table th{color:#13343a!important;-webkit-text-fill-color:#13343a!important}
+html body input,html body select,html body textarea{background:#fff!important;color:#15363d!important;-webkit-text-fill-color:#15363d!important}
+html body .sidebar,html body #view .hero-strip,html body #view .cycle-hero,html body #view .mileage-hero,html body #view .route-history-hero,html body #view .trash-hero{background:linear-gradient(135deg,#154849,#285b54)!important;color:#fff!important}
+html body .sidebar :where(strong,small,span,a,button),html body #view :where(.hero-strip,.cycle-hero,.mileage-hero,.route-history-hero,.trash-hero) :where(h1,h2,h3,h4,strong,b,p,small,span){color:#fff!important;-webkit-text-fill-color:#fff!important}
+</style>
 </head>
 <body>
   <div id="bootScreen" class="boot-screen">
@@ -583,6 +593,6 @@ html body #view .v24-note strong{color:#17383f!important;-webkit-text-fill-color
   <script src="public-sync.js?v=15.2.0"></script>
   <script src="route-view-stable-v19.js?v=19.0.0"></script>
 <script src="route-planner-stable-v24.js?v=24.0.0"></script>
-  <script src="operational-fixes-v25.js?v=25.0.0"></script>
+  <script src="operational-fixes-v28.js?v=28.0.0"></script>
 </body>
 </html>

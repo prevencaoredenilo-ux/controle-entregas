@@ -1,0 +1,33 @@
+NILO ENTREGAS • V28 • TIPO DA ENTREGA VISÍVEL
+
+CORREÇÃO PRINCIPAL
+No lançamento "Registrar nova compra", o bloco "Tipo da entrega" agora faz parte dos passos do próprio formulário:
+1 Identificação da compra
+2 Tipo da entrega
+3 Taxa cobrada no PDV
+4 Quando será entregue?
+
+No passo 2 aparecem:
+- Entrega normal
+- Entrega grande
+
+Ao selecionar "Entrega grande":
+- aparece "Quantas viagens estão previstas?"
+- aparece o controle Viagem 1 de N, Viagem 2 de N...
+- as próximas viagens são liberadas conforme a anterior for concluída como carga parcial
+- cada viagem guarda saída, entrega parcial/final, retorno, duração, ciclo e observação
+
+A opção também continua disponível na edição da entrega.
+
+ARQUIVOS PARA ENVIAR/SUBSTITUIR NO GITHUB
+1. index.html
+2. sw.js
+3. operational-fixes-v28.js
+4. nilo-contrast-v28.css
+5. route-planner-stable-v24.js
+
+IMPORTANTE
+Envie TODOS os arquivos acima. O index.html precisa apontar para operational-fixes-v28.js e nilo-contrast-v28.css.
+Depois que o GitHub Pages publicar, feche a aba do sistema e abra novamente. Faça Ctrl+F5 uma vez.
+
+A rota planejada V24 foi mantida.
