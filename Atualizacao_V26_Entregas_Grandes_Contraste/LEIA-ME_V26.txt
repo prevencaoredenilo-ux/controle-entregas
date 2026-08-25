@@ -1,0 +1,41 @@
+NILO ENTREGAS • V26
+ENTREGAS GRANDES + CONTRASTE GLOBAL
+
+O QUE MUDOU
+1. Entrega grande / múltiplas viagens
+- Na edição da entrega existe a opção "Entrega grande • múltiplas viagens".
+- Informe quantas viagens estão previstas (2 a 20).
+- O sistema mostra o histórico de cada viagem: ciclo, saída, horário da entrega parcial/final, retorno e duração.
+- Mostra também total de viagens, tempo total e média por viagem.
+
+2. Quando voltar à loja com apenas parte da carga entregue
+- Feche o ciclo normalmente.
+- Na NF, marque "Entrega grande • carga parcial".
+- Informe o total previsto de viagens, horário da entrega parcial e uma observação opcional.
+- Ao confirmar o retorno, aquela viagem fica registrada e é criada a próxima viagem disponível para outro ciclo.
+- Carga parcial NÃO fica registrada como devolução/ocorrência.
+
+3. Retorno sem concluir a entrega
+- Continua gerando nova tentativa disponível para outro ciclo.
+- A tentativa anterior permanece no histórico.
+
+4. Cores e contraste
+- Foi adicionada uma folha global de contraste e também uma proteção embutida no index.html.
+- Há ainda auditoria automática no navegador: se a cor da letra ficar muito próxima do fundo, o sistema corrige para claro ou escuro automaticamente.
+
+5. Gráfico de um único dia
+- Marcadores continuam visíveis mesmo quando só existe um dia no filtro.
+
+ARQUIVOS DESTA ATUALIZAÇÃO
+- index.html
+- operational-fixes-v26.js
+- nilo-contrast-v26.css
+- route-planner-stable-v24.js
+- sw.js
+
+PUBLICAÇÃO
+Substitua/envie TODOS os arquivos acima no repositório.
+Depois, feche as abas antigas do sistema e use Ctrl+F5 uma vez.
+
+IMPORTANTE
+A rota planejada V24 foi mantida sem alteração.
