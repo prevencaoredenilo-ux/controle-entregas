@@ -1,0 +1,36 @@
+NILO ENTREGAS • V20 • LEITURA TOTAL + ESTABILIDADE
+
+OBJETIVO
+Corrigir definitivamente texto da mesma cor do fundo e melhorar a leitura global.
+
+CORREÇÕES EXATAS DESTA VERSÃO
+- Nº do cupom e Nº da compra no histórico agora ficam escuros sobre a tabela clara;
+- Ciclos de entrega: título e descrição ficam claros sobre o fundo verde;
+- Quilometragem: título e descrição ficam claros sobre o fundo verde;
+- Rotas dos entregadores: título e descrição ficam claros sobre fundo escuro;
+- legenda do gráfico agora tem barras coloridas visíveis:
+  VERDE = Entregues
+  LARANJA = Retornadas
+  ROXO = Tentativas
+- eixos do gráfico ficaram mais escuros;
+- números e textos do Resumo do período ganharam mais contraste;
+- campos/selects foram forçados para fundo branco + texto escuro;
+- opções dos selects não usam mais tema escuro antigo;
+- botões ganharam contraste explícito;
+- cards claros que herdavam letras brancas foram corrigidos.
+
+ESTABILIDADE
+Continua usando a base consolidada V19, sem carregar V16/V17/V18.
+O service worker recebe novo cache V20 para obrigar o navegador a usar os arquivos novos.
+
+ARQUIVOS PARA SUBIR
+- index.html (substituir)
+- sw.js (substituir)
+- ui-stable-v20.css (novo)
+- route-view-stable-v20.js (novo)
+- route-planner-stable-v20.js (novo)
+
+Depois de publicar:
+1. feche as abas antigas;
+2. abra o sistema novamente;
+3. pressione CTRL+F5 uma vez.
