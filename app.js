@@ -7,7 +7,7 @@
   }
   'use strict';
 
-  const APP_VERSION = '14.7.1';
+  const APP_VERSION = '14.8.0';
   const DB_NAME = 'controle_entregas_nx';
   const DB_VERSION = 1;
   const STORE_NAME = 'app_state';
@@ -19,7 +19,7 @@
   const SUPABASE_URL = 'https://vwwkzenvcxedxiuopsgv.supabase.co';
   const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_Vh9zdSxCUH0fMJOjf_G6Sw_UMU0t0to';
   const SUPABASE_LOGIN_DOMAIN = 'centraltemp.invalid';
-  const SYNC_COLLECTIONS = ['vehicles','neighborhoods','employees','costCategories','reasons','deliveries','cycles','odometerLogs','costs','audit','dayClosures','trash'];
+  const SYNC_COLLECTIONS = ['vehicles','neighborhoods','employees','costCategories','reasons','deliveries','cycles','routeTracks','odometerLogs','costs','audit','dayClosures','trash'];
   const YEAR_PAST_RANGE = 10;
   const YEAR_FUTURE_RANGE = 20;
 
@@ -49,6 +49,13 @@
   let syncFlushTimer = null;
   let syncRealtimeStatus = 'DISCONNECTED';
   let hadLocalStateBeforeSync = false;
+  let activeRouteWatchId = null;
+  let activeRouteCycleId = '';
+  let routeTrackPersistTimer = null;
+  let routeTrackPersisting = false;
+  let routeWakeLock = null;
+  let routeHistoryDriverId = '';
+  let routeHistorySelectedTrackId = '';
   const syncClientId = (() => {
     try {
       const existing = localStorage.getItem('delivery_sync_client_id');
@@ -68,6 +75,7 @@
     scheduled: ['Programadas e Reagendadas', 'Agenda automática pela data programada, sem perder o histórico da origem.'],
     pending: ['Central de Pendências', 'Tudo que exige ação antes de encerrar a operação.'],
     cycles: ['Ciclos e roteiros', 'Monte cada saída, priorize entregas e abra a sequência dos bairros no Google Maps.'],
+    'route-history': ['Histórico de rotas', 'Veja o trajeto real do entregador por dia, semana, mês ou período específico.'],
     odometer: ['Quilometragem da frota', 'KM inicial e final do dia por veículo, com médias por dia, semana, mês, entrega e ciclo.'],
     costs: ['Custos da frota', 'Combustível, manutenção e outros gastos registrados individualmente.'],
     neighborhoods: ['Análise por bairro', 'Entregas, faturamento, endereço errado, reagendamentos, devoluções e problemas por bairro.'],
@@ -226,6 +234,7 @@
       ],
       deliveries: [],
       cycles: [],
+      routeTracks: [],
       odometerLogs: [],
       costs: [],
       audit: [],
@@ -240,7 +249,7 @@
     merged.meta = Object.assign(base.meta, data?.meta || {});
     merged.meta.version = APP_VERSION;
     merged.settings = Object.assign(base.settings, data?.settings || {});
-    for (const key of ['vehicles','neighborhoods','employees','costCategories','reasons','deliveries','cycles','odometerLogs','costs','audit','dayClosures','trash']) {
+    for (const key of ['vehicles','neighborhoods','employees','costCategories','reasons','deliveries','cycles','routeTracks','odometerLogs','costs','audit','dayClosures','trash']) {
       if (!Array.isArray(merged[key])) merged[key] = base[key];
     }
     merged.settings.appMode = merged.settings.appMode === 'training' ? 'training' : 'production';
@@ -268,6 +277,24 @@
     merged.cycles.forEach(item => {
       if (!Array.isArray(item.routeDeliveryIds)) item.routeDeliveryIds = [];
       if (!item.routeGeneratedAt) item.routeGeneratedAt = '';
+    });
+    merged.routeTracks.forEach(item => {
+      if (!Array.isArray(item.points)) item.points = [];
+      item.points = item.points.filter(point => point?.lat !== null && point?.lat !== undefined && point?.lat !== '' && point?.lng !== null && point?.lng !== undefined && point?.lng !== '' && Number.isFinite(Number(point.lat)) && Number.isFinite(Number(point.lng))).map(point => ({
+        lat:Number(point.lat), lng:Number(point.lng), accuracy:Number(point.accuracy || 0), speed:Number.isFinite(Number(point.speed)) ? Number(point.speed) : null,
+        heading:Number.isFinite(Number(point.heading)) ? Number(point.heading) : null, at:point.at || nowISO()
+      }));
+      item.distanceKm = Number(item.distanceKm || 0);
+      item.status = item.status || (item.endedAt ? 'completed' : 'ready');
+      item.mode = item.mode || 'production';
+    });
+    merged.cycles.forEach(c => {
+      if (merged.routeTracks.some(track=>track.cycleId===c.id)) return;
+      merged.routeTracks.push({
+        id:`route_${c.id}`,cycleId:c.id,date:c.date,driverId:c.driverId||'',vehicleId:c.vehicleId||'',mode:c.mode||'production',
+        status:c.returnTime?'completed':'ready',startedAt:'',endedAt:c.returnTime&&c.date?`${c.date}T${c.returnTime}:00`:'',lastPointAt:'',
+        distanceKm:0,points:[],createdAt:c.createdAt||nowISO(),updatedAt:c.updatedAt||nowISO()
+      });
     });
     // Migração automática da V2: se existirem ciclos antigos com KM inicial/final,
     // cria um fechamento diário por veículo usando o menor KM inicial e o maior KM final do dia.
@@ -498,6 +525,11 @@
     syncApplyingRemote=true;
     applyEntityToState(row,state);
     state=migrateState(state);
+    if(activeRouteCycleId && cycle(activeRouteCycleId)?.returnTime){
+      const closedCycle=cycle(activeRouteCycleId),track=routeTrackForCycle(activeRouteCycleId);
+      clearLocalRouteWatcher();
+      if(track){track.status='completed';track.endedAt ||= `${closedCycle.date}T${closedCycle.returnTime}:00`;track.updatedAt=nowISO();}
+    }
     if(row.deleted_at||row.data===null)delete syncSnapshot[key];else syncSnapshot[key]=serializedSyncData(row.data);
     await Promise.all([idbSet(STATE_KEY,state),persistSyncControl()]);
     syncApplyingRemote=false;
@@ -672,6 +704,8 @@
       updateConnectionStatus();
       window.addEventListener('online', () => { updateConnectionStatus(); resumeCloudSync().catch(console.warn); });
       window.addEventListener('offline', updateConnectionStatus);
+      document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&activeRouteCycleId)requestRouteWakeLock();});
+      window.addEventListener('pagehide',()=>{if(activeRouteCycleId)scheduleRouteTrackPersist(true);});
       refreshYearOptions();
       refreshWeekOptions();
       render();
@@ -689,7 +723,7 @@
 
   function initPWA() {
     if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-      navigator.serviceWorker.register('./sw.js?v=14.7.1').catch(console.warn);
+      navigator.serviceWorker.register('./sw.js?v=14.8.0').catch(console.warn);
     }
     window.addEventListener('beforeinstallprompt', (event) => {
       event.preventDefault();
@@ -811,7 +845,7 @@
   function refreshYearOptions() {
     const currentYear = new Date().getFullYear();
     const years = new Set(Array.from({length:YEAR_PAST_RANGE+YEAR_FUTURE_RANGE+1},(_,index)=>currentYear-YEAR_PAST_RANGE+index));
-    [...scoped(state.deliveries), ...scoped(state.cycles), ...scoped(state.odometerLogs), ...scoped(state.costs)].forEach(item => {
+    [...scoped(state.deliveries), ...scoped(state.cycles), ...scoped(state.routeTracks), ...scoped(state.odometerLogs), ...scoped(state.costs)].forEach(item => {
       const year=Number(item.date?.slice(0,4)); if(Number.isInteger(year))years.add(year);
     });
     const select = $('#filterYear');
@@ -859,6 +893,10 @@
   }
   function filteredDeliveries() { const r = selectedRange(); return scoped(state.deliveries).filter(d => inRange(d.date, r)); }
   function filteredCycles() { const r = selectedRange(); return scoped(state.cycles).filter(d => inRange(d.date, r)); }
+  function filteredRouteTracks() {
+    const range = selectedRange();
+    return scoped(state.routeTracks).filter(track => inRange(track.date,range) && (!routeHistoryDriverId || track.driverId === routeHistoryDriverId));
+  }
   function filteredOdometers() { const r = selectedRange(); return scoped(state.odometerLogs).filter(d => inRange(d.date, r)); }
   function filteredCosts() { const r = selectedRange(); return scoped(state.costs).filter(d => inRange(d.date, r)); }
 
@@ -1058,6 +1096,195 @@
     document.body.appendChild(link);
     link.click();
     link.remove();
+  }
+
+  function routeTrackForCycle(cycleId) {
+    return state.routeTracks.find(track => track.cycleId === cycleId);
+  }
+  function ensureRouteTrack(c) {
+    let track = routeTrackForCycle(c.id);
+    if (track) return track;
+    const now = nowISO();
+    track = {
+      id:`route_${c.id}`, cycleId:c.id, date:c.date, driverId:c.driverId || '', vehicleId:c.vehicleId || '', mode:c.mode || currentMode(),
+      status:c.returnTime ? 'completed' : 'ready', startedAt:'', endedAt:c.returnTime ? `${c.date}T${c.returnTime}:00` : '', lastPointAt:'',
+      distanceKm:0, points:[], createdAt:now, updatedAt:now
+    };
+    state.routeTracks.push(track);
+    return track;
+  }
+  function haversineKm(a,b) {
+    const radius = 6371;
+    const lat1 = Number(a.lat) * Math.PI / 180, lat2 = Number(b.lat) * Math.PI / 180;
+    const deltaLat = (Number(b.lat) - Number(a.lat)) * Math.PI / 180;
+    const deltaLng = (Number(b.lng) - Number(a.lng)) * Math.PI / 180;
+    const value = Math.sin(deltaLat/2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(deltaLng/2) ** 2;
+    return radius * 2 * Math.atan2(Math.sqrt(value),Math.sqrt(1-value));
+  }
+  function routeTrackDurationMinutes(track) {
+    if (!track?.startedAt) return null;
+    const end = track.endedAt || nowISO();
+    const minutes = Math.round((new Date(end) - new Date(track.startedAt)) / 60000);
+    return Number.isFinite(minutes) && minutes >= 0 ? minutes : null;
+  }
+  function routeTrackStatusLabel(track) {
+    if (track.status === 'recording') return 'GPS ativo';
+    if (track.status === 'completed') return track.points.length ? 'Trajeto concluído' : 'Ciclo sem pontos GPS';
+    if (track.status === 'permission-denied') return 'Permissão de localização negada';
+    if (track.status === 'unavailable') return 'GPS indisponível';
+    if (track.status === 'paused') return 'GPS pausado';
+    return 'Aguardando ativação do GPS';
+  }
+  async function requestRouteWakeLock() {
+    if (!('wakeLock' in navigator) || document.visibilityState !== 'visible') return;
+    try { routeWakeLock = await navigator.wakeLock.request('screen'); }
+    catch { routeWakeLock = null; }
+  }
+  async function releaseRouteWakeLock() {
+    try { await routeWakeLock?.release(); } catch {}
+    routeWakeLock = null;
+  }
+  function clearLocalRouteWatcher() {
+    if (activeRouteWatchId !== null && navigator.geolocation) navigator.geolocation.clearWatch(activeRouteWatchId);
+    activeRouteWatchId = null;
+    activeRouteCycleId = '';
+    clearTimeout(routeTrackPersistTimer);
+    routeTrackPersistTimer = null;
+    releaseRouteWakeLock();
+  }
+  async function persistRouteTrack() {
+    if (routeTrackPersisting) return;
+    routeTrackPersisting = true;
+    try { await saveState(); }
+    finally { routeTrackPersisting = false; }
+  }
+  function scheduleRouteTrackPersist(immediate = false) {
+    clearTimeout(routeTrackPersistTimer);
+    if (immediate) { persistRouteTrack().catch(console.warn); return; }
+    routeTrackPersistTimer = setTimeout(() => persistRouteTrack().catch(console.warn),20000);
+  }
+  function appendRoutePosition(cycleId,position) {
+    const c = cycle(cycleId); if (!c || c.returnTime) return;
+    const track = ensureRouteTrack(c);
+    const coords = position.coords || {};
+    const point = {
+      lat:Number(coords.latitude), lng:Number(coords.longitude), accuracy:Number(coords.accuracy || 0),
+      speed:Number.isFinite(Number(coords.speed)) ? Number(coords.speed) : null,
+      heading:Number.isFinite(Number(coords.heading)) ? Number(coords.heading) : null,
+      at:new Date(position.timestamp || Date.now()).toISOString()
+    };
+    if (!Number.isFinite(point.lat) || !Number.isFinite(point.lng) || point.accuracy > 250) return;
+    const previous = track.points.at(-1);
+    if (previous) {
+      const distance = haversineKm(previous,point);
+      const elapsedSeconds = Math.max(1,(new Date(point.at) - new Date(previous.at)) / 1000);
+      if (distance < 0.012 && elapsedSeconds < 60) return;
+      if (distance > 3 && elapsedSeconds < 45) return;
+      track.distanceKm = Number(track.distanceKm || 0) + distance;
+    }
+    track.points.push(point);
+    if (track.points.length > 12000) track.points = track.points.filter((_,index) => index % 2 === 0 || index === track.points.length - 1);
+    track.startedAt ||= point.at;
+    track.lastPointAt = point.at;
+    track.status = 'recording';
+    track.updatedAt = nowISO();
+    scheduleRouteTrackPersist(track.points.length === 1 || track.points.length % 8 === 0);
+    if (currentView === 'route-history' && track.points.length % 5 === 0) render();
+  }
+  async function startRouteTracking(cycleId,{automatic=false}={}) {
+    const c = scoped(state.cycles).find(item => item.id === cycleId);
+    if (!c || c.returnTime) { if (!automatic) toast('Este ciclo já está encerrado.','warning'); return; }
+    if (!navigator.geolocation) {
+      const track = ensureRouteTrack(c); track.status = 'unavailable'; track.updatedAt = nowISO(); await saveState();
+      toast('Este aparelho não disponibilizou o GPS para o navegador.','error'); render(); return;
+    }
+    if (activeRouteCycleId === cycleId && activeRouteWatchId !== null) { if (!automatic) toast('O GPS já está registrando este ciclo.','success'); return; }
+    if (activeRouteWatchId !== null) await stopRouteTracking(activeRouteCycleId,{completed:false,silent:true});
+    const track = ensureRouteTrack(c);
+    track.status = 'recording'; track.startedAt ||= nowISO(); track.endedAt = ''; track.updatedAt = nowISO();
+    activeRouteCycleId = cycleId;
+    await saveState(automatic ? '' : `GPS ativado no ciclo ${c.code}`);
+    await requestRouteWakeLock();
+    activeRouteWatchId = navigator.geolocation.watchPosition(
+      position => appendRoutePosition(cycleId,position),
+      async error => {
+        const current = routeTrackForCycle(cycleId); if (!current) return;
+        current.status = error.code === 1 ? 'permission-denied' : 'unavailable'; current.updatedAt = nowISO();
+        clearLocalRouteWatcher(); await saveState(); render();
+        if (!automatic || error.code === 1) toast(error.code === 1 ? 'Permita o acesso à localização para registrar o trajeto.' : 'O GPS não conseguiu obter a localização. Tente novamente.','error');
+      },
+      {enableHighAccuracy:true,maximumAge:10000,timeout:25000}
+    );
+    if (!automatic) toast('GPS ativado. Mantenha o aplicativo aberto durante a rota.','success');
+    render();
+  }
+  async function stopRouteTracking(cycleId,{completed=false,silent=false}={}) {
+    const c = cycle(cycleId); const track = routeTrackForCycle(cycleId);
+    if (activeRouteCycleId === cycleId) clearLocalRouteWatcher();
+    if (track) {
+      track.status = completed ? 'completed' : 'paused';
+      if (completed) track.endedAt = nowISO();
+      track.updatedAt = nowISO();
+      await saveState(completed ? '' : `GPS pausado no ciclo ${c?.code || cycleId}`);
+    }
+    if (!silent) toast(completed ? 'Trajeto GPS encerrado e salvo.' : 'GPS pausado. Você pode retomá-lo no ciclo.','success');
+    render();
+  }
+  function shouldAutoStartRouteTracking() {
+    return matchMedia('(max-width: 820px)').matches || Number(navigator.maxTouchPoints || 0) > 0;
+  }
+  function sampleRoutePoints(points,maxPoints=10) {
+    if (points.length <= maxPoints) return points;
+    return Array.from({length:maxPoints},(_,index)=>points[Math.round(index * (points.length - 1) / (maxPoints - 1))]);
+  }
+  function recordedTrackGoogleMapsUrl(track) {
+    const points = sampleRoutePoints(track?.points || [],10);
+    if (points.length < 2) return '';
+    const coordinates = points.map(point=>`${Number(point.lat).toFixed(6)},${Number(point.lng).toFixed(6)}`);
+    return googleMapsDirectionsUrl(coordinates[0],coordinates.at(-1),coordinates.slice(1,-1));
+  }
+  function openRecordedTrackInMaps(trackId) {
+    const track = state.routeTracks.find(item=>item.id===trackId);
+    const url = recordedTrackGoogleMapsUrl(track);
+    if (!url) { toast('Este trajeto ainda não possui pontos GPS suficientes.','warning'); return; }
+    openExternalRoute(url);
+  }
+  function cycleTrackActionHTML(c) {
+    const track = routeTrackForCycle(c.id);
+    if (!c.returnTime) {
+      const active = activeRouteCycleId === c.id && activeRouteWatchId !== null;
+      return `<button class="btn ${active?'gps-live-btn':'secondary'} small" data-action="${active?'pause-route-gps':'start-route-gps'}" data-id="${c.id}">${active?'● GPS ativo':'⌖ Ativar GPS'}</button>`;
+    }
+    if (track?.points?.length) return `<button class="btn secondary small" data-action="view-route-track" data-id="${track.id}">⌁ Ver trajeto</button>`;
+    return '';
+  }
+  function routeDeliveryMarkers(track) {
+    if (!track?.points?.length) return [];
+    return scoped(state.deliveries).filter(d=>d.cycleId===track.cycleId && d.finalizationTime).map(d=>{
+      const at = new Date(`${d.date}T${d.finalizationTime}:00`).getTime();
+      const point = track.points.reduce((best,current)=>Math.abs(new Date(current.at).getTime()-at)<Math.abs(new Date(best.at).getTime()-at)?current:best,track.points[0]);
+      return {point,label:d.orderNo || d.docNo || d.coupon || '•',delivery:d};
+    });
+  }
+  function routeTracksMapHTML(tracks,selectedId='') {
+    const visible = tracks.filter(track=>track.points?.length);
+    if (!visible.length) return `<div class="route-map-empty"><span>⌁</span><strong>Nenhum ponto GPS neste período</strong><p>Ative o GPS em um ciclo aberto pelo celular. Os pontos ficam guardados offline e aparecem aqui após a sincronização.</p></div>`;
+    const allPoints = visible.flatMap(track=>track.points);
+    let minLat=Infinity,maxLat=-Infinity,minLng=Infinity,maxLng=-Infinity;
+    allPoints.forEach(point=>{minLat=Math.min(minLat,point.lat);maxLat=Math.max(maxLat,point.lat);minLng=Math.min(minLng,point.lng);maxLng=Math.max(maxLng,point.lng);});
+    if (maxLat-minLat < .0008) { minLat-=.0004; maxLat+=.0004; }
+    if (maxLng-minLng < .0008) { minLng-=.0004; maxLng+=.0004; }
+    const width=900,height=430,padding=34;
+    const project=point=>({x:padding+(point.lng-minLng)/(maxLng-minLng)*(width-padding*2),y:padding+(maxLat-point.lat)/(maxLat-minLat)*(height-padding*2)});
+    const colors=['#45D5A3','#F2B523','#62A8FF','#D87CEB','#FF7A73','#64D3EE'];
+    const paths=visible.map((track,index)=>{
+      const color=colors[index%colors.length],selected=track.id===selectedId;
+      const points=track.points.map(point=>{const p=project(point);return `${p.x.toFixed(1)},${p.y.toFixed(1)}`;}).join(' ');
+      const first=project(track.points[0]),last=project(track.points.at(-1));
+      const markers=routeDeliveryMarkers(track).map(marker=>{const p=project(marker.point);return `<g class="route-delivery-marker"><circle cx="${p.x}" cy="${p.y}" r="11" fill="#F2B523" stroke="#172F42" stroke-width="2"/><text x="${p.x}" y="${p.y+3}" text-anchor="middle">${esc(String(marker.label).slice(-3))}</text></g>`;}).join('');
+      return `<g class="route-map-line ${selected?'selected':''}"><polyline points="${points}" fill="none" stroke="${color}" stroke-width="${selected?7:4}" stroke-linecap="round" stroke-linejoin="round" opacity="${selected?1:.72}"/><circle cx="${first.x}" cy="${first.y}" r="7" fill="#45D5A3" stroke="#fff" stroke-width="2"/><circle cx="${last.x}" cy="${last.y}" r="7" fill="#FF7A73" stroke="#fff" stroke-width="2"/>${markers}</g>`;
+    }).join('');
+    return `<div class="route-map-canvas"><svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Mapa dos trajetos GPS do período"><defs><pattern id="routeGrid" width="50" height="50" patternUnits="userSpaceOnUse"><path d="M 50 0 L 0 0 0 50" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="1"/></pattern></defs><rect width="100%" height="100%" rx="18" fill="#193444"/><rect width="100%" height="100%" rx="18" fill="url(#routeGrid)"/>${paths}</svg><div class="route-map-legend"><span><i class="start"></i>Início</span><span><i class="end"></i>Fim</span><span><i class="delivery"></i>Entrega</span></div></div>`;
   }
 
 
@@ -1481,6 +1708,7 @@
     else if (currentView === 'scheduled') renderScheduled();
     else if (currentView === 'pending') renderPending();
     else if (currentView === 'cycles') renderCycles();
+    else if (currentView === 'route-history') renderRouteHistory();
     else if (currentView === 'odometer') renderOdometer();
     else if (currentView === 'costs') renderCosts();
     else if (currentView === 'neighborhoods') renderNeighborhoods();
@@ -1810,7 +2038,7 @@
         <div class="cycle-status-route"><div><small>Saída</small><strong>${c.departureTime||'—'}</strong></div><span>→</span><div><small>Retorno</small><strong>${c.returnTime||'—'}</strong></div></div>
         <div class="cycle-status-meta"><span><b>${x.deliveries}</b> levadas</span><span><b>${x.delivered}</b> entregues</span><span><b>${x.returned}</b> voltaram</span><span><b>${esc(vehicle(c.vehicleId)?.name||'—')}</b></span><span><b>${esc(employee(c.driverId)?.name||'—')}</b></span></div>
         <div class="cycle-coupons">Cupons: ${esc(names||'—')}</div>
-        <div class="cycle-status-actions">${!c.returnTime?`<button class="btn primary small" data-action="close-cycle" data-id="${c.id}">🏪 Registrar retorno</button>`:''}<button class="btn maps-route-btn small" data-action="open-cycle-route" data-id="${c.id}">⌖ Rota no Google Maps</button><button class="btn secondary small" data-action="manage-cycle-deliveries" data-id="${c.id}">▣ Gerenciar entregas</button><button class="btn secondary small" data-action="edit-cycle" data-id="${c.id}">Ajustar</button><button class="btn danger small" data-action="delete-record" data-type="cycle" data-id="${c.id}">Apagar</button></div>
+        <div class="cycle-status-actions">${!c.returnTime?`<button class="btn primary small" data-action="close-cycle" data-id="${c.id}">🏪 Registrar retorno</button>`:''}${cycleTrackActionHTML(c)}<button class="btn maps-route-btn small" data-action="open-cycle-route" data-id="${c.id}">⌖ Rota no Google Maps</button><button class="btn secondary small" data-action="manage-cycle-deliveries" data-id="${c.id}">▣ Gerenciar entregas</button><button class="btn secondary small" data-action="edit-cycle" data-id="${c.id}">Ajustar</button><button class="btn danger small" data-action="delete-record" data-type="cycle" data-id="${c.id}">Apagar</button></div>
       </article>`;
     }).join('')}</div>`;
   }
@@ -2076,10 +2304,73 @@
     `;
     bindViewActions();
   }
+  function setRouteHistoryRange(type) {
+    const today=todayISO(),year=today.slice(0,4),month=today.slice(5,7);
+    $('#filterYear').value=year;
+    $('#filterMonth').value=''; $('#filterWeek').value=''; $('#filterStart').value=''; $('#filterEnd').value='';
+    if(type==='today'){ $('#filterStart').value=today; $('#filterEnd').value=today; }
+    else if(type==='week'){ $('#filterStart').value=startOfWeek(today); $('#filterEnd').value=endOfWeek(today); }
+    else if(type==='month'){ $('#filterMonth').value=month; refreshWeekOptions(); }
+    else { $('#filterStart').focus(); return; }
+    render();
+  }
+  function routeHistoryTrackCard(track) {
+    const c=cycle(track.cycleId),linked=scoped(state.deliveries).filter(d=>d.cycleId===track.cycleId);
+    const completed=linked.filter(deliveredToCustomer).length,returned=linked.filter(d=>d.returnedUndelivered||d.status==='Devolvida').length;
+    const isSelected=track.id===routeHistorySelectedTrackId;
+    const localLive=activeRouteCycleId===track.cycleId&&activeRouteWatchId!==null;
+    return `<article class="route-history-card ${isSelected?'selected':''}" data-action="select-route-track" data-id="${track.id}" tabindex="0">
+      <div class="route-history-card-head"><div><span>${dateBR(track.date)} • ${esc(c?.code||'Ciclo removido')}</span><strong>${esc(employee(track.driverId)?.name||'Entregador não informado')}</strong><small>${esc(vehicle(track.vehicleId)?.name||'Veículo não informado')} • ${track.points.length} ponto(s) GPS</small></div><span class="route-track-status ${localLive?'live':track.status}">${localLive?'● GPS ativo':esc(routeTrackStatusLabel(track))}</span></div>
+      <div class="route-history-card-kpis"><span><b>${number(track.distanceKm,2)} km</b>GPS</span><span><b>${fmtMinutes(routeTrackDurationMinutes(track))}</b>duração</span><span><b>${linked.length}</b>levadas</span><span><b>${completed}</b>entregues</span><span><b>${returned}</b>voltaram</span></div>
+      <div class="route-history-card-time"><span>Início <b>${track.startedAt?dateTimeBR(track.startedAt):`${dateBR(track.date)} • ${c?.departureTime||'—'}`}</b></span><span>Fim <b>${track.endedAt?dateTimeBR(track.endedAt):c?.returnTime||'Em andamento'}</b></span></div>
+      <div class="route-history-card-actions">${track.points.length>1?`<button class="btn maps-route-btn small" data-action="open-recorded-route" data-id="${track.id}">Google Maps</button>`:''}${c?`<button class="btn secondary small" data-action="open-cycle-route" data-id="${c.id}">Roteiro planejado</button>`:''}${!c?.returnTime?cycleTrackActionHTML(c):''}</div>
+    </article>`;
+  }
+  function renderRouteHistory() {
+    const range=selectedRange();
+    const tracks=filteredRouteTracks().slice().sort((a,b)=>`${b.date}${b.startedAt||''}`.localeCompare(`${a.date}${a.startedAt||''}`));
+    if(!tracks.some(track=>track.id===routeHistorySelectedTrackId)) routeHistorySelectedTrackId=tracks.find(track=>track.points.length)?.id||tracks[0]?.id||'';
+    const withGps=tracks.filter(track=>track.points.length),distance=sum(withGps.map(track=>track.distanceKm));
+    const cycleIds=new Set(tracks.map(track=>track.cycleId));
+    const deliveries=scoped(state.deliveries).filter(d=>cycleIds.has(d.cycleId));
+    const delivered=deliveries.filter(deliveredToCustomer).length;
+    const active=tracks.filter(track=>track.status==='recording'&&!track.endedAt).length;
+    const driverIds=unique([...state.employees.filter(e=>e.active).map(e=>e.id),...scoped(state.routeTracks).map(track=>track.driverId).filter(Boolean)]);
+    $('#view').innerHTML=`
+      <section class="route-history-hero">
+        <div><span>HISTÓRICO DE ROTAS • GPS</span><h2>Trajeto real do entregador</h2><p>Consulte por dia, semana, mês ou período específico. Os pontos são salvos no celular mesmo sem internet e sincronizados quando a conexão volta.</p></div>
+        <div class="route-history-live"><i class="${active?'active':''}"></i><strong>${active?`${active} rota(s) em gravação`:'Nenhuma rota gravando agora'}</strong><small>${active?'Atualização conforme o GPS do celular':'Ative o GPS em um ciclo aberto'}</small></div>
+      </section>
+      <section class="route-history-toolbar card">
+        <div class="route-range-buttons"><button class="btn secondary small" data-route-range="today">Hoje</button><button class="btn secondary small" data-route-range="week">Esta semana</button><button class="btn secondary small" data-route-range="month">Este mês</button><button class="btn secondary small" data-route-range="custom">Período específico</button></div>
+        <label>Entregador<select id="routeHistoryDriver"><option value="">Todos os entregadores</option>${driverIds.map(id=>`<option value="${attr(id)}" ${id===routeHistoryDriverId?'selected':''}>${esc(employee(id)?.name||'Colaborador removido')}</option>`).join('')}</select></label>
+        <div class="route-history-range-label"><small>PERÍODO PESQUISADO</small><strong>${esc(range.label)}</strong></div>
+      </section>
+      <section class="route-history-metrics">
+        ${cardMetric('Rotas no período',tracks.length,`${withGps.length} com pontos GPS`,'⌁','blue')}
+        ${cardMetric('Distância GPS',`${number(distance,2)} km`,'Soma dos trajetos registrados','KM','green')}
+        ${cardMetric('Entregas levadas',deliveries.length,`${delivered} finalizadas no cliente`,'▣','yellow')}
+        ${cardMetric('Entregadores',unique(tracks.map(track=>track.driverId).filter(Boolean)).length,'Com ciclo no período','●','purple')}
+      </section>
+      <section class="route-history-layout">
+        <article class="card route-map-panel">
+          ${sectionHeader('⌁','Mapa de todas as rotas',`${withGps.length} trajeto(s) real(is) no período. Os marcadores amarelos representam entregas finalizadas próximas ao ponto GPS.`)}
+          ${routeTracksMapHTML(withGps,routeHistorySelectedTrackId)}
+          <div class="route-map-note"><strong>Como funciona:</strong> o desenho usa as coordenadas reais guardadas pelo celular. O botão Google Maps abre uma aproximação pelas ruas e precisa de internet.</div>
+        </article>
+        <aside class="route-history-list-panel">
+          <div class="route-history-list-head"><div><strong>Rotas encontradas</strong><small>Toque em uma rota para destacá-la no mapa.</small></div><span>${tracks.length}</span></div>
+          <div class="route-history-list">${tracks.length?tracks.map(routeHistoryTrackCard).join(''):emptyState('⌁','Nenhuma rota neste período','Altere os filtros ou inicie um ciclo com o GPS ativado.')}</div>
+        </aside>
+      </section>`;
+    bindViewActions();
+    $('#routeHistoryDriver')?.addEventListener('change',event=>{routeHistoryDriverId=event.target.value;routeHistorySelectedTrackId='';render();});
+    $$('[data-route-range]').forEach(button=>button.addEventListener('click',()=>setRouteHistoryRange(button.dataset.routeRange)));
+  }
   function cycleTable(list) {
     if (!list.length) return emptyState('↻','Nenhum ciclo registrado','Monte uma saída selecionando uma ou mais entregas.');
     return `<div class="table-wrap"><table><thead><tr><th>Data</th><th>Ciclo</th><th>Veículo</th><th>Entregador</th><th>Saída</th><th>Retorno</th><th>Levadas</th><th>Entregues</th><th>Voltaram</th><th>Média KM/ciclo do dia</th><th>Tempo</th><th>Ações</th></tr></thead><tbody>${list.map(c => { const x=cycleCalc(c); return `<tr>
-      <td>${dateBR(c.date)}</td><td><div class="cell-title">${esc(c.code)}</div><div class="cell-sub">${c.autoGenerated?'<span class="badge blue">Automático</span> ':''}${c.returnTime?'Fechado':'Em rota'}</div></td><td>${esc(vehicle(c.vehicleId)?.name || '—')}</td><td>${esc(employee(c.driverId)?.name || '—')}</td><td>${c.departureTime || '—'}</td><td>${c.returnTime || '—'}</td><td><strong>${x.deliveries}</strong></td><td><strong>${x.delivered}</strong></td><td><strong>${x.returned}</strong></td><td>${number(x.km,2)} km</td><td>${fmtMinutes(x.minutes)}</td><td><div class="actions">${!c.returnTime?`<button class="btn primary small" data-action="close-cycle" data-id="${c.id}">Registrar retorno</button>`:''}<button class="btn maps-route-btn small" data-action="open-cycle-route" data-id="${c.id}">Rota</button><button class="btn secondary small" data-action="manage-cycle-deliveries" data-id="${c.id}">Gerenciar entregas</button><button class="btn secondary small" data-action="edit-cycle" data-id="${c.id}">Ajustar</button><button class="btn danger small" data-action="delete-record" data-type="cycle" data-id="${c.id}">Apagar</button></div></td>
+      <td>${dateBR(c.date)}</td><td><div class="cell-title">${esc(c.code)}</div><div class="cell-sub">${c.autoGenerated?'<span class="badge blue">Automático</span> ':''}${c.returnTime?'Fechado':'Em rota'}</div></td><td>${esc(vehicle(c.vehicleId)?.name || '—')}</td><td>${esc(employee(c.driverId)?.name || '—')}</td><td>${c.departureTime || '—'}</td><td>${c.returnTime || '—'}</td><td><strong>${x.deliveries}</strong></td><td><strong>${x.delivered}</strong></td><td><strong>${x.returned}</strong></td><td>${number(x.km,2)} km</td><td>${fmtMinutes(x.minutes)}</td><td><div class="actions">${!c.returnTime?`<button class="btn primary small" data-action="close-cycle" data-id="${c.id}">Registrar retorno</button>`:''}${cycleTrackActionHTML(c)}<button class="btn maps-route-btn small" data-action="open-cycle-route" data-id="${c.id}">Rota</button><button class="btn secondary small" data-action="manage-cycle-deliveries" data-id="${c.id}">Gerenciar entregas</button><button class="btn secondary small" data-action="edit-cycle" data-id="${c.id}">Ajustar</button><button class="btn danger small" data-action="delete-record" data-type="cycle" data-id="${c.id}">Apagar</button></div></td>
     </tr>`; }).join('')}</tbody></table></div>`;
   }
   function cycleMiniTable(list) {
@@ -2434,10 +2725,13 @@
     } else if(type==='cycle') {
       const item=scoped(state.cycles).find(x=>x.id===id); if(!item)return;
       const linked=scoped(state.deliveries).filter(d=>d.cycleId===id);
+      const linkedRouteTracks=scoped(state.routeTracks).filter(track=>track.cycleId===id);
       if(!confirm(`Apagar o ciclo ${item.code} e devolver ${linked.length} entrega(s) para fora do ciclo?`)) return;
-      await moveToTrash('cycle',item,`Ciclo • ${item.code}`,{linkedDeliveries:linked});
+      if(activeRouteCycleId===id) clearLocalRouteWatcher();
+      await moveToTrash('cycle',item,`Ciclo • ${item.code}`,{linkedDeliveries:linked,routeTracks:linkedRouteTracks});
       linked.forEach(d=>{ d.cycleId=''; if(d.departureTime===item.departureTime)d.departureTime=''; if(d.returnTime===item.returnTime)d.returnTime=''; if(d.vehicleId===item.vehicleId)d.vehicleId=''; if(d.driverId===item.driverId)d.driverId=''; if(d.status==='Em rota')d.status='Na loja'; d.updatedAt=nowISO(); });
       state.cycles=state.cycles.filter(x=>x.id!==id);
+      state.routeTracks=state.routeTracks.filter(track=>track.cycleId!==id);
     }
     await saveState(`${type} apagado e enviado para lixeira`); toast('Registro apagado. Você pode restaurá-lo na Lixeira.','success'); render();
   }
@@ -2446,7 +2740,7 @@
     if(item.recordType==='cost' && !state.costs.some(x=>x.id===item.payload.id)) state.costs.push(item.payload);
     if(item.recordType==='odometer' && !state.odometerLogs.some(x=>x.id===item.payload.id)) state.odometerLogs.push(item.payload);
     if(item.recordType==='delivery_bundle') for(const d of item.payload){ if(!state.deliveries.some(x=>x.id===d.id)) state.deliveries.push(d); }
-    if(item.recordType==='cycle') { if(!state.cycles.some(x=>x.id===item.payload.id)) state.cycles.push(item.payload); for(const saved of (item.context?.linkedDeliveries||[])){ const d=state.deliveries.find(x=>x.id===saved.id); if(d) Object.assign(d,saved); } }
+    if(item.recordType==='cycle') { if(!state.cycles.some(x=>x.id===item.payload.id)) state.cycles.push(item.payload); for(const track of (item.context?.routeTracks||[])){if(!state.routeTracks.some(x=>x.id===track.id))state.routeTracks.push(track);} for(const saved of (item.context?.linkedDeliveries||[])){ const d=state.deliveries.find(x=>x.id===saved.id); if(d) Object.assign(d,saved); } }
     state.trash=state.trash.filter(x=>x.id!==trashId); await saveState(`${item.label} restaurado da lixeira`); toast('Registro restaurado.','success'); render();
   }
   async function permanentDeleteTrashItem(trashId) { const item=state.trash.find(x=>x.id===trashId); if(!item)return; if(!confirm(`Excluir definitivamente “${item.label}”? Esta ação não pode ser desfeita.`))return; state.trash=state.trash.filter(x=>x.id!==trashId); await saveState(`${item.label} excluído definitivamente`); render(); }
@@ -2459,12 +2753,12 @@
     if(!veh || !emp || !nbs.length){toast('Cadastre ao menos 1 veículo, 1 colaborador e 1 bairro.','warning');return;}
     const dates=[0,1,2,3].map(back=>{const d=new Date();d.setDate(d.getDate()-back);return localDateISO(d)}), created=[];
     for(let i=0;i<10;i++){ const date=dates[i%dates.length], fee=i%3===0?9.99:6.99, nb=nbs[i%nbs.length]; const d={id:uid('del'),rootId:'',parentId:'',attemptNo:1,date,orderNo:String(i+1),coupon:`TREINO-${String(i+1).padStart(3,'0')}`,docNo:`DOC-${String(1001+i)}`,cashierNo:String((i%3)+1),customerName:i%2===0?`CLIENTE EXEMPLO ${i+1}`:'',customerPhone:i%2===0?`( 66 ) 9 9999-${String(1000+i)}`:'',purchaseTime:`${String(9+(i%7)).padStart(2,'0')}:${i%2?'20':'05'}`,neighborhoodId:nb.id,address:`Rua Exemplo ${i+1}`,addressNumber:String(100+i),addressComplement:'',addressReference:i%2?'Próximo à praça':'',priority:i===0,fee,driverId:'',vehicleId:'',cycleId:'',departureTime:'',finalizationTime:'',returnTime:'',status:'Na loja',scheduledDate:'',scheduledTime:'',scheduleNotes:'',scheduleKind:'',reasonId:'',reasonText:'',nextAction:'',notes:'Registro criado automaticamente para treinamento.',returnedUndelivered:false,returnReasonId:'',returnReasonText:'',refundAmount:0,refundDate:'',withdrawalDate:'',withdrawalTime:'',createdAt:nowISO(),updatedAt:nowISO(),mode:'training',history:[]}; d.rootId=d.id; if(i===7){d.status='Programada';d.scheduledDate=dates[0];d.scheduledTime='15:30';d.scheduleNotes='Ligar antes da entrega.';d.scheduleKind='Programada';d.history.push({id:uid('evt'),type:'scheduled',from:d.date,to:d.scheduledDate,scheduledTime:d.scheduledTime,scheduleNotes:d.scheduleNotes,at:nowISO()});} if(i===8){d.status='Devolvida';d.reasonId='ENDERECO_ERRADO';d.returnedUndelivered=true;d.returnReasonId='ENDERECO_ERRADO';} state.deliveries.push(d);created.push(d); }
-    const cycleDeliveries=created.slice(0,3), c={id:uid('cyc'),code:'CIC-TREINO-001',date:dates[0],vehicleId:veh.id,driverId:emp.id,departureTime:'09:30',returnTime:'10:40',notes:'Ciclo de treinamento.',routeDeliveryIds:routeSortDeliveries(created.slice(0,3)).map(d=>d.id),routeGeneratedAt:nowISO(),routeStrategy:'priority_neighborhood_google_maps',createdAt:nowISO(),updatedAt:nowISO(),mode:'training'}; state.cycles.push(c); cycleDeliveries.forEach((d,idx)=>{d.cycleId=c.id;d.vehicleId=veh.id;d.driverId=emp.id;d.departureTime='09:30';d.finalizationTime=`10:${String(5+idx*8).padStart(2,'0')}`;d.returnTime='10:40';d.status='Finalizada';});
+    const cycleDeliveries=created.slice(0,3), c={id:uid('cyc'),code:'CIC-TREINO-001',date:dates[0],vehicleId:veh.id,driverId:emp.id,departureTime:'09:30',returnTime:'10:40',notes:'Ciclo de treinamento.',routeDeliveryIds:routeSortDeliveries(created.slice(0,3)).map(d=>d.id),routeGeneratedAt:nowISO(),routeStrategy:'priority_neighborhood_google_maps',createdAt:nowISO(),updatedAt:nowISO(),mode:'training'}; state.cycles.push(c); const trainingTrack=ensureRouteTrack(c);trainingTrack.status='completed';trainingTrack.startedAt=`${dates[0]}T09:30:00`;trainingTrack.endedAt=`${dates[0]}T10:40:00`;trainingTrack.points=[{lat:-14.6752,lng:-52.3521,accuracy:8,speed:null,heading:null,at:`${dates[0]}T09:30:00`},{lat:-14.6708,lng:-52.3462,accuracy:10,speed:null,heading:null,at:`${dates[0]}T09:47:00`},{lat:-14.6669,lng:-52.3514,accuracy:9,speed:null,heading:null,at:`${dates[0]}T10:06:00`},{lat:-14.6735,lng:-52.3581,accuracy:11,speed:null,heading:null,at:`${dates[0]}T10:24:00`},{lat:-14.6752,lng:-52.3521,accuracy:8,speed:null,heading:null,at:`${dates[0]}T10:40:00`}];trainingTrack.distanceKm=2.65;trainingTrack.lastPointAt=trainingTrack.points.at(-1).at; cycleDeliveries.forEach((d,idx)=>{d.cycleId=c.id;d.vehicleId=veh.id;d.driverId=emp.id;d.departureTime='09:30';d.finalizationTime=`10:${String(5+idx*8).padStart(2,'0')}`;d.returnTime='10:40';d.status='Finalizada';});
     state.odometerLogs.push({id:uid('odo'),date:dates[0],vehicleId:veh.id,kmStart:10000,kmEnd:10038,notes:'Treinamento',createdAt:nowISO(),updatedAt:nowISO(),mode:'training'});
     const fuel=state.costCategories.find(x=>x.name==='Combustível'); state.costs.push({id:uid('cost'),date:dates[0],time:'11:00',vehicleId:veh.id,categoryId:fuel?.id||'',description:'Abastecimento de treinamento',value:80,km:10038,supplier:'Posto Exemplo',receiptNo:'TREINO',responsibleId:emp.id,notes:'Dado de treinamento.',createdAt:nowISO(),updatedAt:nowISO(),mode:'training'});
     await saveState('Dados de treinamento de exemplo criados'); toast('Dados de treinamento criados.','success'); render();
   }
-  async function clearTrainingData() { if(currentMode()!=='training')return; if(!confirm('Apagar TODOS os dados de treinamento? A operação real não será afetada.'))return; for(const key of ['deliveries','cycles','odometerLogs','costs']) state[key]=state[key].filter(x=>(x.mode||'production')!=='training'); state.trash=state.trash.filter(x=>(x.mode||'production')!=='training'); await saveState('Dados de treinamento limpos'); toast('Treinamento limpo.','success'); render(); }
+  async function clearTrainingData() { if(currentMode()!=='training')return; if(!confirm('Apagar TODOS os dados de treinamento? A operação real não será afetada.'))return; if(activeRouteCycleId)clearLocalRouteWatcher(); for(const key of ['deliveries','cycles','routeTracks','odometerLogs','costs']) state[key]=state[key].filter(x=>(x.mode||'production')!=='training'); state.trash=state.trash.filter(x=>(x.mode||'production')!=='training'); await saveState('Dados de treinamento limpos'); toast('Treinamento limpo.','success'); render(); }
 
   function renderSettings() {
     const tabs = [
@@ -2598,6 +2892,11 @@
     $$('[data-action="auto-detect-cycles"]').forEach(b=>b.addEventListener('click',()=>runAutoCycleDetection()));
     $$('[data-action="close-cycle"]').forEach(b=>b.addEventListener('click',()=>openCloseCycleModal(b.dataset.id)));
     $$('[data-action="open-cycle-route"]').forEach(b=>b.addEventListener('click',()=>openCycleRouteModal(b.dataset.id)));
+    $$('[data-action="start-route-gps"]').forEach(b=>b.addEventListener('click',event=>{event.stopPropagation();startRouteTracking(b.dataset.id);}));
+    $$('[data-action="pause-route-gps"]').forEach(b=>b.addEventListener('click',event=>{event.stopPropagation();stopRouteTracking(b.dataset.id);}));
+    $$('[data-action="view-route-track"]').forEach(b=>b.addEventListener('click',event=>{event.stopPropagation();routeHistorySelectedTrackId=b.dataset.id;navigate('route-history');}));
+    $$('[data-action="open-recorded-route"]').forEach(b=>b.addEventListener('click',event=>{event.stopPropagation();openRecordedTrackInMaps(b.dataset.id);}));
+    $$('[data-action="select-route-track"]').forEach(b=>b.addEventListener('click',()=>{routeHistorySelectedTrackId=b.dataset.id;render();}));
     $$('[data-action="new-cycle"]').forEach(b=>b.addEventListener('click',()=>openCycleDepartureModal()));
     $$('[data-action="edit-cycle"]').forEach(b=>b.addEventListener('click',()=>openCycleModal(b.dataset.id)));
     $$('[data-action="manage-cycle-deliveries"]').forEach(b=>b.addEventListener('click',()=>openManageCycleDeliveriesModal(b.dataset.id)));
@@ -3073,7 +3372,7 @@
           routeDeliveryIds:[],routeGeneratedAt:nowISO(),routeStrategy:'priority_neighborhood_google_maps',
           createdAt:nowISO(),updatedAt:nowISO(),mode:recordMode,autoGenerated:true,creationMethod:'automatic_departure_group'
         };
-        state.cycles.push(c); cyclesCreated++; changed=true;
+        state.cycles.push(c); ensureRouteTrack(c); cyclesCreated++; changed=true;
       }
       deliveries.forEach(d=>{
         d.cycleId=c.id; d.updatedAt=nowISO(); d.history||=[];
@@ -3165,6 +3464,7 @@
       const routeDeliveryIds=routeSortDeliveries(selectedDeliveries).map(d=>d.id);
       const c={id:uid('cyc'),code:fd.get('code')||nextCycleCode(date),date,vehicleId,driverId,departureTime,returnTime:'',notes:`Ciclo automático criado a partir da saída conjunta de ${ids.length} entrega(s).`,routeDeliveryIds,routeGeneratedAt:nowISO(),routeStrategy:'priority_neighborhood_google_maps',createdAt:nowISO(),updatedAt:nowISO(),mode:currentMode(),autoGenerated:true,creationMethod:'automatic_departure_group'};
       state.cycles.push(c);
+      ensureRouteTrack(c);
       ids.forEach(id=>{
         const d=state.deliveries.find(x=>x.id===id); if(!d)return;
         d.departureTime=departureTime; d.vehicleId=vehicleId; d.driverId=driverId; d.cycleId=c.id; d.status='Em rota'; d.updatedAt=nowISO();
@@ -3174,7 +3474,8 @@
       closeModal();
       const odo=scoped(state.odometerLogs).find(o=>o.date===date && o.vehicleId===vehicleId && Number(o.kmStart||0)>0);
       toast(odo?`Ciclo ${c.code} iniciado com ${ids.length} entrega(s).`:`Ciclo iniciado. Atenção: registre o KM inicial do veículo ${vehicle(vehicleId)?.name||''}.`,odo?'success':'warning');
-      render();
+      if(shouldAutoStartRouteTracking()) startRouteTracking(c.id,{automatic:true});
+      else { toast('No celular do entregador, abra este ciclo e toque em “Ativar GPS” para registrar o trajeto real.','warning'); render(); }
     });
   }
 
@@ -3418,6 +3719,9 @@
       }
       const returnTime=String(formData.get('returnTime')||'');
       c.returnTime=returnTime;c.returnedDeliveryCount=previouslyReturned+returnedIds.size;c.updatedAt=nowISO();
+      const track=ensureRouteTrack(c);
+      if(activeRouteCycleId===c.id)clearLocalRouteWatcher();
+      track.status='completed';track.endedAt=`${c.date}T${returnTime}:00`;track.updatedAt=nowISO();
       linked.forEach(d=>{
         d.returnTime=returnTime;d.updatedAt=nowISO();d.history||=[];
         if(returnedIds.has(d.id)){
@@ -4274,7 +4578,7 @@
     toast('Backup anterior à atualização gerado.','success');
   }
 
-  const BACKUP_ARRAY_KEYS = ['vehicles','neighborhoods','employees','costCategories','reasons','deliveries','cycles','odometerLogs','costs','audit','dayClosures','trash'];
+  const BACKUP_ARRAY_KEYS = ['vehicles','neighborhoods','employees','costCategories','reasons','deliveries','cycles','routeTracks','odometerLogs','costs','audit','dayClosures','trash'];
   const BACKUP_ROOT_KEYS = new Set(['meta','settings',...BACKUP_ARRAY_KEYS]);
   const BACKUP_ID_KEYS = new Set(['id','rootId','parentId','vehicleId','neighborhoodId','employeeId','driverId','cycleId','categoryId','responsibleId','reasonId','trashId']);
 
@@ -4312,6 +4616,7 @@
     return {
       deliveries:data.deliveries?.length || 0,
       cycles:data.cycles?.length || 0,
+      routes:data.routeTracks?.length || 0,
       odometers:data.odometerLogs?.length || 0,
       costs:data.costs?.length || 0,
       trash:data.trash?.length || 0,
@@ -4346,6 +4651,7 @@
     return `<article class="restore-preview-card"><strong>${esc(title)}</strong><dl>
       <div><dt>Entregas</dt><dd>${summary.deliveries}</dd></div>
       <div><dt>Ciclos</dt><dd>${summary.cycles}</dd></div>
+      <div><dt>Rotas GPS</dt><dd>${summary.routes}</dd></div>
       <div><dt>KM diário</dt><dd>${summary.odometers}</dd></div>
       <div><dt>Custos</dt><dd>${summary.costs}</dd></div>
       <div><dt>Lixeira</dt><dd>${summary.trash}</dd></div>
@@ -4355,8 +4661,8 @@
 
   function restoreBackup(file) {
     if (!file) return;
-    if (file.size > 15 * 1024 * 1024) {
-      toast('O backup excede o limite de 15 MB.','error');
+    if (file.size > 50 * 1024 * 1024) {
+      toast('O backup excede o limite de 50 MB.','error');
       return;
     }
     const reader=new FileReader();

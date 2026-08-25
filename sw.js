@@ -1,9 +1,9 @@
-const CACHE_NAME = 'controle-entregas-v14-7-1-numero-no-roteiro';
+const CACHE_NAME = 'controle-entregas-v14-8-0-historico-rotas';
 const APP_SHELL = [
   './',
   './index.html',
-  './styles.css?v=14.7.1',
-  './app.js?v=14.7.1',
+  './styles.css?v=14.8.0',
+  './app.js?v=14.8.0',
   './manifest.webmanifest',
   './icons/icon-192.png',
   './icons/icon-512.png',

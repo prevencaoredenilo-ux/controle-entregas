@@ -1,7 +1,7 @@
 {
   "name": "Controle de Entregas • Nilo Supermercado",
   "short_name": "Nilo Entregas",
-  "description": "Sistema anual de entregas, frota e custos com operação offline, restauração segura, modo treinamento, ciclos automáticos, relatórios e exportação.",
+  "description": "Sistema de entregas, rotas GPS, frota e custos com operação offline, restauração segura, ciclos automáticos, relatórios e exportação.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

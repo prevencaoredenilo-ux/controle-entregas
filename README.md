@@ -1,6 +1,20 @@
-# Controle de Entregas • Nilo Supermercado — V14.7.1
+# Controle de Entregas • Nilo Supermercado — V14.8.0
 
-Versão focada em **roteirização dos ciclos, prioridade operacional e uso mais simples no celular**, mantendo tempo real, continuidade offline, agendamentos e relatórios.
+Versão focada em **histórico real das rotas, uso mais simples no celular e segurança dos dados**, mantendo todas as funções, buscas, relatórios, roteirização, tempo real, continuidade offline e agendamentos.
+
+## Novidades da V14.8.0
+
+- Nova função separada **Histórico de rotas**, sem substituir ou alterar os relatórios existentes.
+- Consulta de trajetos por hoje, semana, mês, ano ou período específico, com filtro por entregador.
+- Mapa consolidado das rotas pesquisadas, distância GPS, duração, entregas levadas, finalizadas e devolvidas.
+- Cada ciclo aberto possui a ação **Ativar GPS**; no celular, o sistema tenta iniciar a gravação ao confirmar a saída.
+- Pontos de localização são armazenados no aparelho mesmo sem internet e entram na sincronização automática já usada pelo sistema.
+- Ao fechar o ciclo, o trajeto GPS é encerrado e preservado no histórico.
+- O backup JSON e a restauração segura passaram a incluir também os trajetos GPS.
+- O Google Maps pode abrir uma aproximação do trajeto real pelas ruas, além do roteiro planejado por prioridade e bairro.
+- Navegação lateral mais compacta, hierarquia visual mais clara e telas de rota adaptadas para uso com uma mão no celular.
+
+> Para registrar o trajeto, o entregador precisa permitir a localização e manter o aplicativo aberto durante a rota. O GPS funciona sem internet, mas o navegador do celular pode pausar a coleta se o aplicativo for fechado ou o sistema operacional interromper a página.
 
 ## Ajuste da V14.7.1
 

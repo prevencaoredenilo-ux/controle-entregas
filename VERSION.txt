@@ -1,2 +1,2 @@
-V14.7.1 — Número da entrega visível no roteiro
-O roteiro sugerido e a tela completa da rota agora mostram ENTREGA Nº X ao lado da NF e do bairro. O número à esquerda continua indicando a posição de atendimento no trajeto.
+V14.8.0 — Histórico de rotas GPS e layout refinado
+Todas as funções, buscas, relatórios e backups anteriores foram preservados. A nova tela Histórico de rotas mostra o trajeto real por dia, semana, mês ou período específico, com filtro por entregador, mapa consolidado e abertura no Google Maps. Os pontos ficam salvos offline e sincronizam depois.

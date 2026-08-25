@@ -1,4 +1,4 @@
--- Controle de Entregas V14.6.0
+-- Controle de Entregas V14.8.0
 -- Sincronização por entidade, com fila offline no cliente e Realtime no retorno da internet.
 
 create table if not exists public.delivery_workspaces (
@@ -42,13 +42,27 @@ create table if not exists public.delivery_sync_entities (
   constraint delivery_sync_entities_type check (
     entity_type in (
       'meta', 'settings', 'vehicles', 'neighborhoods', 'employees',
-      'costCategories', 'reasons', 'deliveries', 'cycles', 'odometerLogs',
+      'costCategories', 'reasons', 'deliveries', 'cycles', 'routeTracks', 'odometerLogs',
       'costs', 'audit', 'dayClosures', 'trash'
     )
   ),
   constraint delivery_sync_entities_id_present check (length(btrim(entity_id)) between 1 and 160),
   constraint delivery_sync_entities_payload check (deleted_at is not null or data is not null)
 );
+
+-- Atualização segura de instalações anteriores: libera somente o novo tipo de
+-- entidade usado pelo histórico de trajetos GPS.
+alter table public.delivery_sync_entities
+  drop constraint if exists delivery_sync_entities_type;
+
+alter table public.delivery_sync_entities
+  add constraint delivery_sync_entities_type check (
+    entity_type in (
+      'meta', 'settings', 'vehicles', 'neighborhoods', 'employees',
+      'costCategories', 'reasons', 'deliveries', 'cycles', 'routeTracks', 'odometerLogs',
+      'costs', 'audit', 'dayClosures', 'trash'
+    )
+  );
 
 alter table public.delivery_sync_entities
   add column if not exists source_client_id text;
