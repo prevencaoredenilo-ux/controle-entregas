@@ -1,7 +1,7 @@
 /* ================================================================
-   NILO ENTREGAS • V15.1
-   Sincronização pública em tempo real, sem usuário e sem senha.
-   Mantém o app V14.8 intacto e sincroniza o estado salvo no IndexedDB.
+   NILO ENTREGAS • V15.2
+   Correção de travamento + sincronização pública em tempo real.
+   Sem usuário e sem senha.
    ================================================================ */
 (() => {
   'use strict';
@@ -34,13 +34,14 @@
   let channel = null;
   let lastLocalFingerprint = '';
   let applyingRemote = false;
-  let pushTimer = null;
   let initialized = false;
   let realtimeStatus = 'CONNECTING';
+  let syncBusy = false;
+  let lastRemoteFingerprint = '';
 
   function fingerprint(value) {
     try { return JSON.stringify(value || null); }
-    catch { return String(Date.now()); }
+    catch { return ''; }
   }
 
   function operationalCount(s) {
@@ -55,13 +56,42 @@
     ));
   }
 
+  function keepDirectAccess() {
+    // O CSS V15.1 já esconde a tela de login.
+    // Aqui só garantimos que o aplicativo permaneça utilizável,
+    // sem observar/mutar o mesmo elemento em loop.
+    const shell = document.getElementById('appShell');
+    if (shell && shell.getAttribute('aria-hidden') === 'true') {
+      shell.removeAttribute('aria-hidden');
+    }
+    const account = document.getElementById('syncAccountBtn');
+    if (account && !account.hidden) account.hidden = true;
+  }
+
+  function setConnectionUI(ok, text = '') {
+    const dot = document.getElementById('connectionDot');
+    const title = document.getElementById('connectionTitle');
+    const subtitle = document.getElementById('connectionSubtitle');
+
+    if (dot) {
+      dot.classList.toggle('online', Boolean(ok));
+      dot.classList.toggle('offline', !ok);
+    }
+    if (title) title.textContent = ok ? 'Sincronizado em tempo real' : 'Trabalhando offline';
+    if (subtitle) subtitle.textContent = ok
+      ? (text || 'Dados disponíveis no celular e computador')
+      : 'Os dados deste aparelho serão enviados quando a internet voltar';
+  }
+
   function openDB() {
     if (db) return Promise.resolve(db);
     return new Promise((resolve, reject) => {
       const req = indexedDB.open(DB_NAME, DB_VERSION);
       req.onupgradeneeded = () => {
         const result = req.result;
-        if (!result.objectStoreNames.contains(STORE_NAME)) result.createObjectStore(STORE_NAME);
+        if (!result.objectStoreNames.contains(STORE_NAME)) {
+          result.createObjectStore(STORE_NAME);
+        }
       };
       req.onsuccess = () => {
         db = req.result;
@@ -91,33 +121,6 @@
     });
   }
 
-  function suppressPasswordScreen() {
-    const screen = document.getElementById('cloudAuthScreen');
-    if (screen) {
-      screen.classList.add('hidden');
-      screen.setAttribute('aria-hidden', 'true');
-    }
-    const shell = document.getElementById('appShell');
-    if (shell) shell.removeAttribute('aria-hidden');
-    const account = document.getElementById('syncAccountBtn');
-    if (account) account.hidden = true;
-  }
-
-  function setConnectionUI(ok, text = '') {
-    const dot = document.getElementById('connectionDot');
-    const title = document.getElementById('connectionTitle');
-    const subtitle = document.getElementById('connectionSubtitle');
-
-    if (dot) {
-      dot.classList.toggle('online', Boolean(ok));
-      dot.classList.toggle('offline', !ok);
-    }
-    if (title) title.textContent = ok ? 'Sincronizado em tempo real' : 'Trabalhando offline';
-    if (subtitle) subtitle.textContent = ok
-      ? (text || 'Dados disponíveis no celular e computador')
-      : 'Os dados deste aparelho serão enviados quando a internet voltar';
-  }
-
   async function fetchRemote() {
     if (!client || !navigator.onLine) return null;
     const { data, error } = await client
@@ -130,45 +133,57 @@
   }
 
   async function pushLocal(local) {
-    if (!client || !navigator.onLine || applyingRemote || !isUsableState(local)) return;
-    const body = {
-      workspace_code: WORKSPACE_CODE,
-      payload: local,
-      updated_at: new Date().toISOString(),
-      updated_by: CLIENT_ID
-    };
-    const { error } = await client
-      .from(TABLE)
-      .upsert(body, { onConflict: 'workspace_code' });
-    if (error) throw error;
-    lastLocalFingerprint = fingerprint(local);
-    setConnectionUI(true, 'Última alteração enviada agora');
+    if (!client || !navigator.onLine || applyingRemote || !isUsableState(local) || syncBusy) return;
+    syncBusy = true;
+    try {
+      const body = {
+        workspace_code: WORKSPACE_CODE,
+        payload: local,
+        updated_at: new Date().toISOString(),
+        updated_by: CLIENT_ID
+      };
+      const { error } = await client
+        .from(TABLE)
+        .upsert(body, { onConflict: 'workspace_code' });
+      if (error) throw error;
+      lastLocalFingerprint = fingerprint(local);
+      setConnectionUI(true, 'Última alteração enviada agora');
+    } finally {
+      syncBusy = false;
+    }
   }
 
   async function applyRemote(remoteState) {
     if (!isUsableState(remoteState)) return false;
 
+    const remoteFp = fingerprint(remoteState);
+    if (!remoteFp || remoteFp === lastRemoteFingerprint) return false;
+
     const current = await readLocal();
-    if (fingerprint(current) === fingerprint(remoteState)) {
-      lastLocalFingerprint = fingerprint(current);
+    const currentFp = fingerprint(current);
+
+    if (currentFp === remoteFp) {
+      lastLocalFingerprint = currentFp;
+      lastRemoteFingerprint = remoteFp;
       return false;
     }
 
     applyingRemote = true;
     try {
       await writeLocal(remoteState);
-      lastLocalFingerprint = fingerprint(remoteState);
-      try {
-        sessionStorage.setItem('nilo_public_sync_remote_reload', String(Date.now()));
-      } catch {}
+      lastLocalFingerprint = remoteFp;
+      lastRemoteFingerprint = remoteFp;
       setConnectionUI(true, 'Atualização recebida de outro dispositivo');
     } finally {
       applyingRemote = false;
     }
 
-    // O app V14.8 mantém o estado também em memória. O reload curto faz
-    // a nova versão do IndexedDB aparecer em todas as telas sem alterar app.js.
-    setTimeout(() => location.reload(), 180);
+    // O app principal mantém uma cópia do estado em memória.
+    // Um único recarregamento aplica os dados recebidos às telas.
+    try {
+      sessionStorage.setItem('nilo_v152_remote_fp', remoteFp.slice(0, 180));
+    } catch {}
+    setTimeout(() => location.reload(), 300);
     return true;
   }
 
@@ -191,15 +206,18 @@
     }
     if (!remoteHasData && !localHasData) return;
 
-    const same = fingerprint(local) === fingerprint(remoteState);
-    if (same) {
+    const localFp = fingerprint(local);
+    const remoteFp = fingerprint(remoteState);
+    if (localFp === remoteFp) {
+      lastRemoteFingerprint = remoteFp;
       setConnectionUI(true, 'Dados atualizados neste dispositivo');
       return;
     }
 
-    // Um aparelho novo normalmente só possui o estado padrão.
     const localOps = operationalCount(local);
     const remoteOps = operationalCount(remoteState);
+
+    // Em aparelho novo, o estado padrão não deve apagar o banco compartilhado.
     if (localOps === 0 && remoteOps > 0) {
       await applyRemote(remoteState);
       return;
@@ -219,33 +237,31 @@
     }
   }
 
-  function scheduleLocalWatch() {
+  function startLocalWatch() {
+    // Intervalo mais leve que a V15.1 para evitar custo desnecessário.
     setInterval(async () => {
       try {
-        suppressPasswordScreen();
+        keepDirectAccess();
 
         if (!navigator.onLine) {
           setConnectionUI(false);
           return;
         }
+        if (applyingRemote || syncBusy) return;
 
         const local = await readLocal();
+        if (!isUsableState(local)) return;
+
         const fp = fingerprint(local);
-        if (!applyingRemote && isUsableState(local) && fp !== lastLocalFingerprint) {
-          clearTimeout(pushTimer);
-          pushTimer = setTimeout(() => {
-            pushLocal(local).catch(err => {
-              console.warn('[NILO public sync] envio pendente', err);
-              setConnectionUI(false);
-            });
-          }, 350);
+        if (fp && fp !== lastLocalFingerprint) {
+          await pushLocal(local);
         } else if (realtimeStatus === 'SUBSCRIBED') {
           setConnectionUI(true);
         }
       } catch (err) {
-        console.warn('[NILO public sync] leitura local', err);
+        console.warn('[NILO V15.2] sincronização local pendente', err);
       }
-    }, 1200);
+    }, 2500);
   }
 
   function startRealtime() {
@@ -269,28 +285,31 @@
             if (!isUsableState(row.payload)) return;
             await applyRemote(row.payload);
           } catch (err) {
-            console.warn('[NILO public sync] atualização remota', err);
+            console.warn('[NILO V15.2] atualização remota pendente', err);
           }
         }
       )
       .subscribe(status => {
         realtimeStatus = status;
-        if (status === 'SUBSCRIBED') setConnectionUI(true, 'Conectado ao banco em tempo real');
-        else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') setConnectionUI(false);
+        if (status === 'SUBSCRIBED') {
+          setConnectionUI(true, 'Conectado ao banco em tempo real');
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          setConnectionUI(false);
+        }
       });
   }
 
   async function reconnect() {
+    if (!navigator.onLine || !client) {
+      setConnectionUI(false);
+      return;
+    }
+
     try {
-      if (!navigator.onLine) {
-        setConnectionUI(false);
-        return;
-      }
-      if (!client) return;
       await initialReconcile();
       startRealtime();
     } catch (err) {
-      console.warn('[NILO public sync] reconexão', err);
+      console.warn('[NILO V15.2] reconexão pendente', err);
       setConnectionUI(false);
     }
   }
@@ -299,16 +318,7 @@
     if (initialized) return;
     initialized = true;
 
-    suppressPasswordScreen();
-    const screen = document.getElementById('cloudAuthScreen');
-    if (screen) {
-      new MutationObserver(suppressPasswordScreen).observe(screen, {
-        attributes: true,
-        attributeFilter: ['class', 'aria-hidden']
-      });
-    }
-
-    setInterval(suppressPasswordScreen, 800);
+    keepDirectAccess();
 
     if (!window.supabase?.createClient) {
       setConnectionUI(false);
@@ -329,17 +339,18 @@
 
     await openDB();
     await reconnect();
-    scheduleLocalWatch();
+    startLocalWatch();
 
     window.addEventListener('online', reconnect);
     window.addEventListener('offline', () => setConnectionUI(false));
+
+    // Sem MutationObserver: esta é a correção principal do travamento V15.1.
+    setInterval(keepDirectAccess, 3000);
   }
 
-  // app.js inicializa o IndexedDB antes de abrir a tela. Um pequeno atraso
-  // evita competir com o boot original e mantém todas as funções atuais.
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => setTimeout(init, 700));
+    document.addEventListener('DOMContentLoaded', () => setTimeout(init, 900), { once: true });
   } else {
-    setTimeout(init, 700);
+    setTimeout(init, 900);
   }
 })();

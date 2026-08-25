@@ -1,0 +1,36 @@
+CORREÇÃO NILO • V15.2 • TRAVAMENTO DA PÁGINA
+
+MOTIVO DA CORREÇÃO
+A V15.1 possuía uma rotina que observava a tela de acesso e, ao mesmo tempo,
+alterava essa mesma tela. Em alguns navegadores isso podia gerar chamadas
+repetidas e o Chrome exibia "Página sem resposta".
+
+A V15.2 remove essa rotina e deixa a sincronização mais leve.
+
+O QUE VOCÊ PRECISA SUBSTITUIR
+1. index.html
+2. public-sync.js
+
+NÃO APAGUE NENHUM OUTRO ARQUIVO.
+Não mexa no app.js, styles.css, nilo-layout-v15.css, manifest, sw.js ou icons.
+
+DEPOIS DE PUBLICAR
+1. Aguarde o GitHub Pages atualizar.
+2. Feche a aba antiga que travou.
+3. Abra novamente:
+   https://prevencaoredenilo-ux.github.io/controle-entregas/
+4. No PC pressione CTRL + F5 uma vez.
+5. No celular feche o navegador/app e abra novamente.
+
+A versão do public-sync foi alterada para 15.2 no index.html para impedir
+que o navegador reutilize o JavaScript 15.1 que ficou em cache.
+
+CONTINUA MANTENDO
+- sem usuário e sem senha;
+- dados compartilhados em tempo real;
+- funcionamento local/offline;
+- layout V15;
+- funções e relatórios existentes do app.js;
+- Desempenho diário;
+- Entregas do dia;
+- sem Ranking de entregadores.
