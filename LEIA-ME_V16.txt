@@ -1,0 +1,60 @@
+ATUALIZAÇÃO NILO • V16 • VISIBILIDADE + ROTAS DOS ENTREGADORES
+
+ESTA VERSÃO CORRIGE EXATAMENTE OS DOIS PONTOS ALINHADOS:
+
+1) SISTEMA INTEIRO — SOMENTE VISIBILIDADE
+- aumenta contraste de textos;
+- deixa inputs/selects/textarea claros e fáceis de enxergar;
+- corrige placeholders apagados;
+- melhora labels, textos auxiliares, tabelas e botões secundários;
+- mantém a estrutura e o funcionamento das telas atuais.
+
+2) ROTAS DOS ENTREGADORES — CORRIGE A DIFERENÇA DA PRÉVIA APROVADA
+A tela passa a mostrar:
+- Distância total;
+- Tempo em rota;
+- Entregas concluídas;
+- Entregas retornadas;
+- Entregadores ativos;
+- Mapa das rotas;
+- Entregas do dia;
+- Desempenho diário;
+- Resumo do período;
+- Taxa de sucesso;
+- Taxa de retorno;
+- Total de tentativas;
+- Tempo médio compra → cliente;
+- Melhor dia da semana;
+- Semana com mais entregas;
+- Dia com mais entregas;
+- Faixa horária com mais entregas.
+
+O GPS CONTINUA EXISTINDO, MAS NÃO É MAIS O CENTRO DA ANÁLISE.
+Mesmo sem pontos GPS, as informações operacionais aparecem usando os registros das entregas e ciclos.
+
+ARQUIVOS DO ZIP
+- index.html                     SUBSTITUIR
+- public-sync.js                 SUBSTITUIR (correção V15.2 contra travamento)
+- visibility-v16.css             NOVO
+- route-view-v16.js              NOVO
+- LEIA-ME_V16.txt                instruções
+
+NÃO APAGUE
+- app.js
+- styles.css
+- nilo-layout-v15.css
+- manifest.webmanifest
+- sw.js
+- pasta icons
+
+COMO ATUALIZAR
+1. Abra a raiz do repositório controle-entregas no GitHub.
+2. Faça upload dos 4 arquivos: index.html, public-sync.js, visibility-v16.css e route-view-v16.js.
+3. Confirme a substituição de index.html e public-sync.js.
+4. Faça o commit.
+5. Aguarde o GitHub Pages atualizar.
+6. Feche a aba antiga e abra novamente o sistema.
+7. No PC use CTRL + F5 uma vez.
+
+IMPORTANTE
+Esta atualização não substitui app.js. As regras, registros, relatórios e cálculos existentes continuam no código original.
