@@ -11,8 +11,7 @@
   <link rel="stylesheet" href="styles.css?v=14.8.0" />
   <link rel="stylesheet" href="nilo-layout-v15.css?v=15.0.0" />
   <link rel="stylesheet" href="ui-stable-v19.css?v=19.0.0" />
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIINfQ3yn5EZqjMZg5xyl6/PknaHyHMxFys=" crossorigin="" />
-  <title>Controle de Entregas • Nilo Supermercado</title>
+<title>Controle de Entregas • Nilo Supermercado</title>
 
 <style id="nilo-visibility-hotfix-v21">
 /* ================================================================
@@ -380,6 +379,50 @@ html body #view .route-history-hero > div:first-child > span{
 }
 </style>
 
+
+<style id="nilo-route-v24-styles">
+/* NILO V24 • ROTA PLANEJADA */
+html body #view .v24-route-planner{display:grid;gap:12px}
+html body #view .v24-route-head{display:flex;justify-content:space-between;gap:14px;align-items:flex-start}
+html body #view .v24-route-head h3{margin:4px 0;color:#12363d!important;-webkit-text-fill-color:#12363d!important}
+html body #view .v24-route-head p{margin:0;color:#536f75!important;-webkit-text-fill-color:#536f75!important;max-width:680px}
+html body #view .v24-kicker{display:block;color:#637d00!important;-webkit-text-fill-color:#637d00!important;font-weight:950;letter-spacing:.08em;font-size:9px}
+html body #view .v24-cycle-select{min-width:250px}
+html body #view .v24-cycle-select label{display:grid;gap:5px;color:#17383f!important;-webkit-text-fill-color:#17383f!important;font-weight:900}
+html body #view .v24-route-origin{display:flex;align-items:center;gap:8px;padding:10px 12px;background:#f1f6f2;border:1px solid #d3dfda;border-radius:11px;color:#24464d!important;-webkit-text-fill-color:#24464d!important;font-size:10px}
+html body #view .v24-route-origin strong{color:#12363d!important;-webkit-text-fill-color:#12363d!important}
+html body #view .v24-map-frame{width:100%;height:390px;border:1px solid #cddbd5;border-radius:16px;background:#edf3ef}
+html body #view .v24-map-fallback{min-height:340px;display:grid;place-items:center;text-align:center;padding:28px;background:#f1f6f2;border:1px dashed #c8d6d0;border-radius:16px}
+html body #view .v24-map-fallback strong{color:#12363d!important;-webkit-text-fill-color:#12363d!important}
+html body #view .v24-map-fallback p{color:#5a747a!important;-webkit-text-fill-color:#5a747a!important;max-width:560px}
+html body #view .v24-route-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+html body #view .v24-route-summary>div{padding:10px 12px;background:#fff;border:1px solid #d6e1dc;border-radius:11px}
+html body #view .v24-route-summary small{display:block;color:#5d777d!important;-webkit-text-fill-color:#5d777d!important;font-weight:800}
+html body #view .v24-route-summary strong{display:block;margin-top:4px;color:#000!important;-webkit-text-fill-color:#000!important;font-size:16px}
+html body #view .v24-route-actions{display:flex;gap:8px;flex-wrap:wrap}
+html body #view .v24-stop-list{display:grid;gap:6px}
+html body #view .v24-stop{display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:9px;align-items:center;padding:9px 10px;background:#fff;border:1px solid #d9e3df;border-radius:11px}
+html body #view .v24-stop>span{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:#153f45;color:#fff!important;-webkit-text-fill-color:#fff!important;font-weight:950}
+html body #view .v24-stop.priority>span{background:#b9d531;color:#17343b!important;-webkit-text-fill-color:#17343b!important}
+html body #view .v24-stop strong{display:block;color:#000!important;-webkit-text-fill-color:#000!important}
+html body #view .v24-stop small{display:block;color:#526c72!important;-webkit-text-fill-color:#526c72!important;margin-top:3px}
+html body #view .v24-stop b{color:#607900!important;-webkit-text-fill-color:#607900!important;font-size:9px}
+html body #view .v24-note{padding:9px 11px;background:#f7faf8;border:1px solid #d6e1dd;border-radius:10px;color:#526d73!important;-webkit-text-fill-color:#526d73!important;font-size:9px;line-height:1.5}
+html body #view .v24-note strong{color:#17383f!important;-webkit-text-fill-color:#17383f!important}
+@media(max-width:800px){
+  html body #view .v24-route-head{display:grid}
+  html body #view .v24-cycle-select{min-width:0;width:100%}
+  html body #view .v24-route-summary{grid-template-columns:1fr 1fr}
+  html body #view .v24-map-frame{height:300px}
+}
+@media(max-width:520px){
+  html body #view .v24-route-actions{display:grid}
+  html body #view .v24-route-actions .btn{width:100%}
+  html body #view .v24-stop{grid-template-columns:32px minmax(0,1fr)}
+  html body #view .v24-stop b{grid-column:2}
+}
+</style>
+
 </head>
 <body>
   <div id="bootScreen" class="boot-screen">
@@ -538,7 +581,6 @@ html body #view .route-history-hero > div:first-child > span{
   <script src="app.js?v=14.8.0"></script>
   <script src="public-sync.js?v=15.2.0"></script>
   <script src="route-view-stable-v19.js?v=19.0.0"></script>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-  <script src="route-planner-stable-v22.js?v=22.0.0"></script>
+<script src="route-planner-stable-v24.js?v=24.0.0"></script>
 </body>
 </html>

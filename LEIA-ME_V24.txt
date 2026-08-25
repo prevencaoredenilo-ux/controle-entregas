@@ -1,0 +1,30 @@
+NILO ENTREGAS • V24 — ROTA PLANEJADA
+
+OBJETIVO
+Mostrar a possível rota que o entregador deveria fazer, sem rastrear o GPS real.
+
+O QUE MUDOU
+- remove o erro "não foi possível localizar o NILO";
+- não usa mais geocodificação automática para desenhar a rota;
+- saída e retorno são sempre o NILO Supermercado em Nova Xavantina;
+- o ciclo é organizado em uma sequência operacional sugerida;
+- Centro I e Centro II continuam tratados separadamente;
+- mostra uma prévia de direção;
+- botão "Abrir rota no Google Maps";
+- o Google Maps calcula o caminho pelas ruas entre as paradas;
+- não precisa instalar nada no celular do entregador.
+
+IMPORTANTE
+A ordem das paradas é uma sugestão do sistema baseada nos bairros/regiões e na
+ordem operacional cadastrada. Para otimização matemática oficial da ordem pelo
+Google seria necessária uma chave da Google Maps Platform / Routes API.
+
+ARQUIVOS PARA PUBLICAR
+1. index.html -> SUBSTITUIR
+2. route-planner-stable-v24.js -> NOVO
+3. sw.js -> SUBSTITUIR
+
+MANTER OS DEMAIS ARQUIVOS DO SISTEMA.
+
+DEPOIS DE PUBLICAR
+Feche as abas antigas, abra novamente e pressione Ctrl+F5 uma vez.
