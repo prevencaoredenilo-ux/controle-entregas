@@ -1,0 +1,29 @@
+NILO ENTREGAS • HOTFIX V21 • VISIBILIDADE DIRETA
+
+POR QUE ESTA VERSÃO É DIFERENTE
+O CSS de correção está EMBUTIDO dentro do index.html.
+Isso evita o problema de esquecer de subir um arquivo CSS novo.
+
+SUBSTITUA APENAS:
+1. index.html
+2. sw.js
+
+NÃO PRECISA ADICIONAR NENHUM CSS NOVO.
+
+CORRIGE DIRETAMENTE:
+- Financeiro / Operação / Frota e eficiência;
+- Nº do cupom / Compra no Histórico de entregas;
+- Ciclos de entrega;
+- Quilometragem real da frota;
+- Rotas dos entregadores;
+- legenda com cores do gráfico;
+- Resumo do período;
+- cards inferiores;
+- campos, labels e placeholders;
+- relatórios e cadastros.
+
+DEPOIS DO UPLOAD:
+- faça o commit;
+- feche todas as abas do sistema;
+- abra novamente;
+- pressione Ctrl+F5 uma vez.
