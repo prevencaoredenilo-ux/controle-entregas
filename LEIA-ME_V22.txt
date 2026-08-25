@@ -1,0 +1,30 @@
+NILO ENTREGAS • V22 — ORIGEM FIXA NILO + BAIRROS
+
+ARQUIVOS PARA PUBLICAR
+1. index.html -> substituir
+2. route-planner-stable-v22.js -> novo
+3. sw.js -> substituir
+4. BAIRROS_ANALISADOS_V22.txt -> opcional, apenas documentação
+
+NÃO APAGAR
+- app.js
+- public-sync.js
+- styles.css
+- nilo-layout-v15.css
+- ui-stable-v19.css
+- route-view-stable-v19.js
+- manifest.webmanifest
+- icons/
+
+PRINCIPAIS CORREÇÕES
+- O ponto de saída/retorno não é mais lido de uma configuração genérica: é sempre o NILO Supermercado de Nova Xavantina.
+- Google Maps usa a unidade específica do NILO via Place ID.
+- Centro I e Centro II são tratados como áreas diferentes em margens diferentes do Rio das Mortes.
+- 35 bairros atuais receberam aliases de mapa.
+- Nomes novos/alternativos foram incluídos na camada de roteirização.
+- Endereço exato (rua + número) sempre tem prioridade sobre o bairro.
+- Histórico sem endereço completo usa bairro como aproximação.
+- Cache atualizado para V22.
+
+DEPOIS DE PUBLICAR
+Feche as abas antigas, abra o sistema novamente e pressione Ctrl+F5 uma vez.

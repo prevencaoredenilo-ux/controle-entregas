@@ -1,0 +1,76 @@
+NILO ENTREGAS • V22 — AUDITORIA DE BAIRROS E ROTEIRIZAÇÃO
+Data da análise: 25/08/2026
+
+PONTO DE PARTIDA
+- Fixo: NILO Supermercado — Nova Xavantina/MT
+- Endereço principal usado: Rua Teresina, 729, Novo Horizonte, Nova Xavantina - MT, 78690-000.
+- O Google Maps é aberto com o Place ID específico da unidade NILO de Nova Xavantina.
+- O roteirizador tenta também Avenida Araés, 729 e Rua Terezina, 681 como variantes cadastrais caso o geocodificador aberto não reconheça a grafia principal.
+
+35 BAIRROS ATIVOS ENCONTRADOS NO SISTEMA
+1 BARRO VERMELHO
+2 BOA VISTA
+3 CENTRO I
+4 CENTRO II
+5 CENTRO OESTE
+6 CHACARAS
+7 CONAGRO
+8 DEUS E AMOR
+9 ESTILAC
+10 FLOR DE LIZ/LYZ
+11 HENRRY I
+12 HENRRY II
+13 JARDIM ALVORADA
+14 JARDIM OLIVEIRA
+15 JARDIM TROPICAL
+16 JARDIM TROPICAL II
+17 JARDIM TROPICAL III
+18 MONTES CLAROS
+19 MORADA DO SOL
+20 NOVO HORIZONTE
+21 OLARIA
+22 PARQUE DOS BURITIS
+23 SANTA ANA / SANTANA
+24 SANTA MÔNICA
+25 SETOR INDUSTRIAL
+26 SOLAR DOS IPÊS
+27 TONETTO
+28 UNIÃO
+29 VERDES CAMPOS
+30 VILA DO ESTUDANTE
+31 ZONA RURAL
+32 BEIRA RIO
+33 SETOR NOVA XAVANTINA
+34 PRIMITIVO
+35 PARQUE AQUARIO
+
+TRATAMENTOS DE MAPA IMPORTANTES
+- CENTRO I: Setor Xavantina / Xavantina Velha; usa Av. Brasil Central como referência de fallback.
+- CENTRO II: Setor Nova Brasília / Centro Comercial; usa Av. Rio Grande do Sul como referência de fallback.
+  Eles NÃO são misturados, pois ficam em lados diferentes do Rio das Mortes.
+- BARRO VERMELHO -> procura também como BAIRRO VERMELHO.
+- ESTILAC -> procura também como ESTILAC LEAL.
+- FLOR DE LIZ/LYZ -> tenta FLOR DE LIZ, FLOR DE LYZ e FLOR DE LIS.
+- HENRRY I / II -> corrige a consulta do mapa para HENRY I / HENRY II / Mario Duílio Henry.
+- SANTA ANA / SANTANA -> tenta SANTANA e SANTA ANA.
+- TONETTO -> tenta TONETTO, TONETO, TONETTO I e TONETTO II.
+- VERDES CAMPOS -> tenta VERDES CAMPOS e CAMPOS VERDES.
+- ZONA RURAL: exige endereço/referência mais precisa; bairro sozinho não é suficiente.
+
+ÁREAS NOVAS/OFICIAIS JÁ RECONHECIDAS PELO V22, MESMO QUE AINDA NÃO ESTEJAM NO CADASTRO-MESTRE
+- Loteamento Nossa Senhora Aparecida
+- Loteamento Colina Verde
+- Loteamento Águas da Mata
+- Lisnner
+- Henry III
+- Mario Duílio Henry
+- Xavantina Velha / Central
+- Tonetto I
+- Tonetto II
+
+ALERTA DE QUALIDADE DOS DADOS
+O histórico atual possui centenas de entregas com bairro, mas pouquíssimas têm Rua + Número completos.
+Para registros antigos, a rota será aproximada pelo bairro/área.
+Para novas entregas, Rua/Avenida + Número devem ser preenchidos para o traçado chegar ao ponto real do cliente.
+
+A V22 NÃO renomeia nem apaga seus bairros. Ela cria uma camada de compatibilidade de mapa.

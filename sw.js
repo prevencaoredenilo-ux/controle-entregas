@@ -1,4 +1,4 @@
-const CACHE_NAME = 'controle-entregas-v19-estavel-1';
+const CACHE_NAME = 'controle-entregas-v22-origem-nilo-bairros';
 const APP_SHELL = [
   './',
   './index.html',
@@ -10,6 +10,7 @@ const APP_SHELL = [
   './route-view-stable-v19.js?v=19.0.0',
   './route-planner-stable-v19.js?v=19.0.0',
   './manifest.webmanifest',
+  './route-planner-stable-v22.js?v=22.0.0',
   './icons/icon-192.png',
   './icons/icon-512.png',
   'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.4'

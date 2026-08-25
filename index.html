@@ -13,6 +13,253 @@
   <link rel="stylesheet" href="ui-stable-v19.css?v=19.0.0" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIINfQ3yn5EZqjMZg5xyl6/PknaHyHMxFys=" crossorigin="" />
   <title>Controle de Entregas • Nilo Supermercado</title>
+
+<style id="nilo-visibility-hotfix-v21">
+/* ================================================================
+   NILO V21 • HOTFIX DIRETO DE VISIBILIDADE
+   Embutido no index.html para não depender de arquivo CSS extra.
+   ================================================================ */
+
+/* 1) Dashboard: Financeiro / Operação / Frota e eficiência */
+html body #view .management-panel{
+  background:#fff!important;
+  color:#1c3a40!important;
+}
+html body #view .management-panel .management-panel-head strong{
+  color:#12343b!important;
+  -webkit-text-fill-color:#12343b!important;
+  opacity:1!important;
+}
+html body #view .management-panel .management-panel-head small{
+  color:#526d73!important;
+  -webkit-text-fill-color:#526d73!important;
+  opacity:1!important;
+}
+html body #view .management-panel .management-row span{
+  color:#35555c!important;
+  -webkit-text-fill-color:#35555c!important;
+  font-weight:850!important;
+  opacity:1!important;
+}
+html body #view .management-panel .management-row small{
+  color:#657d83!important;
+  -webkit-text-fill-color:#657d83!important;
+  font-weight:700!important;
+  opacity:1!important;
+}
+html body #view .management-panel .management-row > strong{
+  color:#102f36!important;
+  -webkit-text-fill-color:#102f36!important;
+  font-weight:950!important;
+  opacity:1!important;
+}
+
+/* 2) Histórico de entregas: Cupom / Compra */
+html body #view .table-wrap table tbody tr td .history-identification-number,
+html body #view .table-wrap .history-identification-number,
+html body #view table .history-identification-number{
+  color:#12363d!important;
+  -webkit-text-fill-color:#12363d!important;
+  text-shadow:none!important;
+  opacity:1!important;
+  font-weight:950!important;
+}
+html body #view .table-wrap td .cell-title,
+html body #view .table-wrap td strong:not(.badge):not(.btn),
+html body #view .table-wrap td b:not(.badge){
+  color:#17383f!important;
+  -webkit-text-fill-color:#17383f!important;
+  opacity:1!important;
+}
+html body #view .table-wrap td .cell-sub{
+  color:#556f75!important;
+  -webkit-text-fill-color:#556f75!important;
+  opacity:1!important;
+}
+
+/* 3) Heros escuros: ciclos, quilometragem, rotas, lixeira */
+html body #view .hero-strip,
+html body #view .cycle-hero,
+html body #view .mileage-hero,
+html body #view .route-history-hero,
+html body #view .trash-hero{
+  background:linear-gradient(135deg,#15484a,#315f56)!important;
+  color:#fff!important;
+}
+html body #view .hero-strip h1,
+html body #view .hero-strip h2,
+html body #view .hero-strip h3,
+html body #view .cycle-hero h1,
+html body #view .cycle-hero h2,
+html body #view .mileage-hero h1,
+html body #view .mileage-hero h2,
+html body #view .route-history-hero h1,
+html body #view .route-history-hero h2,
+html body #view .trash-hero h1,
+html body #view .trash-hero h2{
+  color:#fff!important;
+  -webkit-text-fill-color:#fff!important;
+  opacity:1!important;
+}
+html body #view .hero-strip p,
+html body #view .hero-strip small,
+html body #view .cycle-hero p,
+html body #view .mileage-hero p,
+html body #view .route-history-hero p,
+html body #view .route-history-hero small,
+html body #view .trash-hero p,
+html body #view .trash-hero small{
+  color:#e0ece9!important;
+  -webkit-text-fill-color:#e0ece9!important;
+  opacity:1!important;
+}
+html body #view .hero-strip .eyebrow,
+html body #view .cycle-hero .eyebrow,
+html body #view .route-history-hero > div:first-child > span,
+html body #view .trash-hero .eyebrow{
+  color:#f1f8a9!important;
+  -webkit-text-fill-color:#f1f8a9!important;
+  opacity:1!important;
+}
+html body #view .hero-strip .hero-chip,
+html body #view .hero-strip .hero-chip *,
+html body #view .route-history-live,
+html body #view .route-history-live *{
+  color:#fff!important;
+  -webkit-text-fill-color:#fff!important;
+  opacity:1!important;
+}
+
+/* 4) Gráfico: legenda realmente identificável */
+html body #view .v16-chart-legend{
+  display:flex!important;
+  flex-wrap:wrap!important;
+  align-items:center!important;
+  gap:9px 18px!important;
+  margin:6px 0 12px 38px!important;
+}
+html body #view .v16-chart-legend span{
+  display:inline-flex!important;
+  align-items:center!important;
+  gap:7px!important;
+  font-size:11px!important;
+  font-weight:950!important;
+  color:#24464d!important;
+  -webkit-text-fill-color:#24464d!important;
+  opacity:1!important;
+}
+html body #view .v16-chart-legend span::before{
+  content:""!important;
+  display:inline-block!important;
+  width:26px!important;
+  height:6px!important;
+  border-radius:999px!important;
+  flex:0 0 26px!important;
+}
+html body #view .v16-chart-legend .green::before{background:#26a779!important}
+html body #view .v16-chart-legend .orange::before{background:#ef8d37!important}
+html body #view .v16-chart-legend .purple::before{background:#7c6dd0!important}
+html body #view .v16-chart-legend .green{color:#176c50!important;-webkit-text-fill-color:#176c50!important}
+html body #view .v16-chart-legend .orange{color:#a95718!important;-webkit-text-fill-color:#a95718!important}
+html body #view .v16-chart-legend .purple{color:#5949a8!important;-webkit-text-fill-color:#5949a8!important}
+html body #view .v16-axis{
+  fill:#3f5d64!important;
+  font-size:10.5px!important;
+  font-weight:850!important;
+}
+
+/* 5) Resumo do período e insights inferiores */
+html body #view .v16-card-title span,
+html body #view .v16-insight-card small,
+html body #view .v16-summary-grid small{
+  color:#36575e!important;
+  -webkit-text-fill-color:#36575e!important;
+  opacity:1!important;
+  font-weight:900!important;
+}
+html body #view .v16-card-title strong,
+html body #view .v16-insight-card strong,
+html body #view .v16-summary-grid strong{
+  color:#12363d!important;
+  -webkit-text-fill-color:#12363d!important;
+  opacity:1!important;
+  font-weight:950!important;
+}
+html body #view .v16-insight-card p,
+html body #view .v16-summary-grid span{
+  color:#5b747a!important;
+  -webkit-text-fill-color:#5b747a!important;
+  opacity:1!important;
+}
+
+/* 6) Campos e formulários: sempre claro */
+html body input,
+html body select,
+html body textarea,
+html body .modal input,
+html body .modal select,
+html body .modal textarea{
+  background:#fff!important;
+  color:#17383f!important;
+  -webkit-text-fill-color:#17383f!important;
+  border-color:#b8c9c3!important;
+  opacity:1!important;
+}
+html body input::placeholder,
+html body textarea::placeholder{
+  color:#657f85!important;
+  -webkit-text-fill-color:#657f85!important;
+  opacity:1!important;
+}
+html body label,
+html body #view label,
+html body .modal label{
+  color:#284950!important;
+  -webkit-text-fill-color:#284950!important;
+  opacity:1!important;
+}
+html body label small,
+html body #view label small,
+html body .modal label small{
+  color:#5f787e!important;
+  -webkit-text-fill-color:#5f787e!important;
+  opacity:1!important;
+}
+html body select option,
+html body select optgroup{
+  background:#fff!important;
+  color:#17383f!important;
+  -webkit-text-fill-color:#17383f!important;
+}
+
+/* 7) Relatórios e cadastros */
+html body #view .stat-row,
+html body #view .settings-stat{
+  color:#294950!important;
+}
+html body #view .stat-row span,
+html body #view .stat-row strong,
+html body #view .settings-stat span{
+  color:#294950!important;
+  -webkit-text-fill-color:#294950!important;
+  opacity:1!important;
+}
+html body #view .stat-row small,
+html body #view .settings-stat small{
+  color:#5b747a!important;
+  -webkit-text-fill-color:#5b747a!important;
+  opacity:1!important;
+}
+
+/* 8) Regra final para textos auxiliares em superfície clara */
+html body #view .card:not(.hero-strip):not(.trash-hero):not(.route-history-hero) p,
+html body #view .card:not(.hero-strip):not(.trash-hero):not(.route-history-hero) small,
+html body #view .section-card p,
+html body #view .section-card small{
+  opacity:1!important;
+}
+</style>
+
 </head>
 <body>
   <div id="bootScreen" class="boot-screen">
@@ -172,6 +419,6 @@
   <script src="public-sync.js?v=15.2.0"></script>
   <script src="route-view-stable-v19.js?v=19.0.0"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-  <script src="route-planner-stable-v19.js?v=19.0.0"></script>
+  <script src="route-planner-stable-v22.js?v=22.0.0"></script>
 </body>
 </html>
