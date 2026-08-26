@@ -1,0 +1,15 @@
+NILO ENTREGAS • V29 — RETORNO DISPONÍVEL PARA NOVA SAÍDA
+
+Correção principal:
+- Uma entrega que voltou sem ser entregue mantém a tentativa anterior como DEVOLVIDA.
+- O sistema cria uma NOVA TENTATIVA vinculada à mesma compra, com status NA LOJA.
+- Essa nova tentativa fica disponível para entrar em outro ciclo/saída.
+- A tentativa anterior continua no histórico com ciclo, saída, retorno e motivo.
+- Se a devolução for de hoje e já tiver sido registrada antes desta correção, a V29 faz o reparo automaticamente.
+- A nova tentativa usa a data operacional atual, permitindo nova saída inclusive quando a tentativa anterior foi em outro momento.
+
+Também preserva tudo da V28: entrega normal/grande, múltiplas viagens, contraste e rota planejada V24.
+
+PUBLICAÇÃO:
+Envie/substitua os arquivos deste ZIP na RAIZ do repositório GitHub.
+Depois aguarde o GitHub Pages atualizar e faça Ctrl+F5 uma vez.
