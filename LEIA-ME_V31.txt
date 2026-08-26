@@ -1,0 +1,11 @@
+NILO ENTREGAS • V31 — RELANÇAMENTO DE DEVOLVIDAS
+
+- Mantém a tentativa devolvida no histórico.
+- Ao clicar em “Montar nova saída”, cria ou reativa uma tentativa “Na loja”.
+- Funciona mesmo se a devolução foi em outro dia.
+- Tentativa aberta com data antiga é movida para o dia operacional atual.
+- Não reabre compra já finalizada.
+- Não executa reparo automático ao iniciar, evitando loop de recarregamento.
+
+Envie os arquivos diretamente para a RAIZ do GitHub e substitua os existentes.
+Depois faça Ctrl + F5 uma vez.
