@@ -1,7 +1,11 @@
 /* ================================================================
-   NILO ENTREGAS • V15.2
-   Correção de travamento + sincronização pública em tempo real.
-   Sem usuário e sem senha.
+   NILO ENTREGAS • V32
+   Sincronização + backup automático reforçado
+   - Cada gravação local do estado entra na fila de sincronização.
+   - O Supabase mantém histórico por trigger a cada INSERT/UPDATE/DELETE.
+   - Bloqueia recebimento remoto que reduziria os dados de forma perigosa.
+   - Mantém fila offline e envia quando a internet voltar.
+   - Sem usuário e sem senha.
    ================================================================ */
 (() => {
   'use strict';
@@ -38,6 +42,10 @@
   let realtimeStatus = 'CONNECTING';
   let syncBusy = false;
   let lastRemoteFingerprint = '';
+  let saveHookInstalled = false;
+  let flushRunning = false;
+  const snapshotQueue = [];
+  const queuedFingerprints = new Set();
 
   function fingerprint(value) {
     try { return JSON.stringify(value || null); }
@@ -50,20 +58,40 @@
       .reduce((n, k) => n + (Array.isArray(s[k]) ? s[k].length : 0), 0);
   }
 
+  function collectionCount(s, key) {
+    return Array.isArray(s?.[key]) ? s[key].length : 0;
+  }
+
   function isUsableState(s) {
     return Boolean(s && typeof s === 'object' && (
       s.meta || s.settings || Array.isArray(s.deliveries)
     ));
   }
 
+  function isDangerousRegression(incoming, current) {
+    if (!isUsableState(incoming) || !isUsableState(current)) return false;
+
+    const curDeliveries = collectionCount(current, 'deliveries');
+    const inDeliveries = collectionCount(incoming, 'deliveries');
+    const curCycles = collectionCount(current, 'cycles');
+    const inCycles = collectionCount(incoming, 'cycles');
+    const curOps = operationalCount(current);
+    const inOps = operationalCount(incoming);
+
+    // Regra crítica: nunca trocar uma base real por uma base vazia.
+    if (curDeliveries >= 5 && inDeliveries === 0) return true;
+    if (curCycles >= 3 && inCycles === 0 && curDeliveries > 0) return true;
+
+    // Proteção contra redução muito brusca por sincronização corrompida/default.
+    if (curOps >= 30 && inOps < curOps * 0.55 && (curOps - inOps) >= 20) return true;
+    if (curDeliveries >= 20 && inDeliveries < curDeliveries * 0.55 && (curDeliveries - inDeliveries) >= 10) return true;
+
+    return false;
+  }
+
   function keepDirectAccess() {
-    // O CSS V15.1 já esconde a tela de login.
-    // Aqui só garantimos que o aplicativo permaneça utilizável,
-    // sem observar/mutar o mesmo elemento em loop.
     const shell = document.getElementById('appShell');
-    if (shell && shell.getAttribute('aria-hidden') === 'true') {
-      shell.removeAttribute('aria-hidden');
-    }
+    if (shell && shell.getAttribute('aria-hidden') === 'true') shell.removeAttribute('aria-hidden');
     const account = document.getElementById('syncAccountBtn');
     if (account && !account.hidden) account.hidden = true;
   }
@@ -77,10 +105,10 @@
       dot.classList.toggle('online', Boolean(ok));
       dot.classList.toggle('offline', !ok);
     }
-    if (title) title.textContent = ok ? 'Sincronizado em tempo real' : 'Trabalhando offline';
+    if (title) title.textContent = ok ? 'Backup automático ativo' : 'Trabalhando offline';
     if (subtitle) subtitle.textContent = ok
-      ? (text || 'Dados disponíveis no celular e computador')
-      : 'Os dados deste aparelho serão enviados quando a internet voltar';
+      ? (text || 'Dados sincronizados e protegidos no servidor')
+      : 'As alterações ficam neste aparelho e serão enviadas quando a internet voltar';
   }
 
   function openDB() {
@@ -89,14 +117,9 @@
       const req = indexedDB.open(DB_NAME, DB_VERSION);
       req.onupgradeneeded = () => {
         const result = req.result;
-        if (!result.objectStoreNames.contains(STORE_NAME)) {
-          result.createObjectStore(STORE_NAME);
-        }
+        if (!result.objectStoreNames.contains(STORE_NAME)) result.createObjectStore(STORE_NAME);
       };
-      req.onsuccess = () => {
-        db = req.result;
-        resolve(db);
-      };
+      req.onsuccess = () => { db = req.result; resolve(db); };
       req.onerror = () => reject(req.error);
     });
   }
@@ -132,10 +155,20 @@
     return data || null;
   }
 
-  async function pushLocal(local) {
-    if (!client || !navigator.onLine || applyingRemote || !isUsableState(local) || syncBusy) return;
+  async function pushSnapshot(local) {
+    if (!client || !navigator.onLine || applyingRemote || !isUsableState(local)) return false;
+    while (syncBusy) await new Promise(r => setTimeout(r, 35));
     syncBusy = true;
     try {
+      // Uma leitura remota antes do envio evita que um aparelho com estado vazio
+      // substitua uma base real mesmo antes da proteção do banco agir.
+      const remote = await fetchRemote().catch(() => null);
+      if (remote?.payload && isDangerousRegression(local, remote.payload)) {
+        console.warn('[NILO V32] envio bloqueado: estado local aparenta perda brusca de dados');
+        setConnectionUI(true, 'Proteção contra perda de dados acionada');
+        return false;
+      }
+
       const body = {
         workspace_code: WORKSPACE_CODE,
         payload: local,
@@ -147,10 +180,86 @@
         .upsert(body, { onConflict: 'workspace_code' });
       if (error) throw error;
       lastLocalFingerprint = fingerprint(local);
-      setConnectionUI(true, 'Última alteração enviada agora');
+      setConnectionUI(true, 'Alteração salva + ponto de recuperação criado');
+      return true;
     } finally {
       syncBusy = false;
     }
+  }
+
+  function enqueueSnapshot(value) {
+    if (applyingRemote || !isUsableState(value)) return;
+    const fp = fingerprint(value);
+    if (!fp || fp === lastLocalFingerprint || queuedFingerprints.has(fp)) return;
+    snapshotQueue.push({ value, fp });
+    queuedFingerprints.add(fp);
+    flushQueue();
+  }
+
+  async function flushQueue() {
+    if (flushRunning || !navigator.onLine || !client) return;
+    flushRunning = true;
+    try {
+      while (snapshotQueue.length && navigator.onLine) {
+        const item = snapshotQueue[0];
+        try {
+          const sent = await pushSnapshot(item.value);
+          if (!sent) {
+            // Se foi bloqueado por proteção, não fica repetindo indefinidamente.
+            snapshotQueue.shift();
+            queuedFingerprints.delete(item.fp);
+            continue;
+          }
+          snapshotQueue.shift();
+          queuedFingerprints.delete(item.fp);
+        } catch (err) {
+          console.warn('[NILO V32] backup automático pendente', err);
+          setConnectionUI(false);
+          break;
+        }
+      }
+    } finally {
+      flushRunning = false;
+    }
+  }
+
+  function installIndexedDBSaveHook() {
+    if (saveHookInstalled || !window.IDBObjectStore?.prototype?.put) return;
+    saveHookInstalled = true;
+
+    const proto = IDBObjectStore.prototype;
+    if (proto.__niloV32OriginalPut) return;
+    const originalPut = proto.put;
+
+    try {
+      Object.defineProperty(proto, '__niloV32OriginalPut', {
+        value: originalPut,
+        configurable: false,
+        enumerable: false,
+        writable: false
+      });
+    } catch {}
+
+    proto.put = function(value, key) {
+      const request = originalPut.apply(this, arguments);
+      try {
+        const targetStore = this.name === STORE_NAME;
+        const targetKey = key === STATE_KEY;
+        if (targetStore && targetKey) {
+          request.addEventListener('success', () => {
+            if (!applyingRemote) {
+              // Guardamos uma cópia do snapshot naquele exato salvamento.
+              // O envio é independente da próxima alteração do app.
+              try { enqueueSnapshot(typeof structuredClone === 'function' ? structuredClone(value) : JSON.parse(JSON.stringify(value))); }
+              catch { enqueueSnapshot(value); }
+            }
+          }, { once: true });
+        }
+      } catch (err) {
+        console.warn('[NILO V32] hook de backup local pendente', err);
+      }
+      return request;
+    };
   }
 
   async function applyRemote(remoteState) {
@@ -168,22 +277,26 @@
       return false;
     }
 
+    if (isDangerousRegression(remoteState, current)) {
+      console.warn('[NILO V32] atualização remota rejeitada: reduziria dados de forma perigosa');
+      setConnectionUI(true, 'Proteção contra perda de dados acionada');
+      // O estado local é mantido e volta para a fila de envio.
+      if (isUsableState(current)) enqueueSnapshot(current);
+      return false;
+    }
+
     applyingRemote = true;
     try {
       await writeLocal(remoteState);
       lastLocalFingerprint = remoteFp;
       lastRemoteFingerprint = remoteFp;
-      setConnectionUI(true, 'Atualização recebida de outro dispositivo');
+      setConnectionUI(true, 'Atualização segura recebida de outro dispositivo');
     } finally {
       applyingRemote = false;
     }
 
-    // O app principal mantém uma cópia do estado em memória.
-    // Um único recarregamento aplica os dados recebidos às telas.
-    try {
-      sessionStorage.setItem('nilo_v152_remote_fp', remoteFp.slice(0, 180));
-    } catch {}
-    setTimeout(() => location.reload(), 300);
+    try { sessionStorage.setItem('nilo_v32_remote_fp', remoteFp.slice(0, 180)); } catch {}
+    setTimeout(() => location.reload(), 450);
     return true;
   }
 
@@ -197,7 +310,7 @@
     const localHasData = isUsableState(local);
 
     if (!remoteHasData && localHasData) {
-      await pushLocal(local);
+      enqueueSnapshot(local);
       return;
     }
     if (remoteHasData && !localHasData) {
@@ -210,65 +323,66 @@
     const remoteFp = fingerprint(remoteState);
     if (localFp === remoteFp) {
       lastRemoteFingerprint = remoteFp;
-      setConnectionUI(true, 'Dados atualizados neste dispositivo');
+      setConnectionUI(true, 'Dados atualizados e protegidos');
+      return;
+    }
+
+    if (isDangerousRegression(local, remoteState)) {
+      await applyRemote(remoteState);
+      return;
+    }
+    if (isDangerousRegression(remoteState, local)) {
+      enqueueSnapshot(local);
       return;
     }
 
     const localOps = operationalCount(local);
     const remoteOps = operationalCount(remoteState);
 
-    // Em aparelho novo, o estado padrão não deve apagar o banco compartilhado.
     if (localOps === 0 && remoteOps > 0) {
       await applyRemote(remoteState);
       return;
     }
     if (remoteOps === 0 && localOps > 0) {
-      await pushLocal(local);
+      enqueueSnapshot(local);
       return;
     }
 
     const localTime = Date.parse(local?.meta?.updatedAt || local?.meta?.createdAt || 0) || 0;
     const remoteTime = Date.parse(remote?.updated_at || 0) || 0;
 
-    if (remoteTime > localTime + 1500) {
-      await applyRemote(remoteState);
-    } else {
-      await pushLocal(local);
-    }
+    if (remoteTime > localTime + 1500) await applyRemote(remoteState);
+    else enqueueSnapshot(local);
   }
 
   function startLocalWatch() {
-    // Intervalo mais leve que a V15.1 para evitar custo desnecessário.
+    // Fallback: mesmo que algum código grave fora do hook, o watcher captura.
     setInterval(async () => {
       try {
         keepDirectAccess();
-
         if (!navigator.onLine) {
           setConnectionUI(false);
           return;
         }
-        if (applyingRemote || syncBusy) return;
+        if (applyingRemote) return;
 
         const local = await readLocal();
         if (!isUsableState(local)) return;
-
         const fp = fingerprint(local);
-        if (fp && fp !== lastLocalFingerprint) {
-          await pushLocal(local);
-        } else if (realtimeStatus === 'SUBSCRIBED') {
-          setConnectionUI(true);
-        }
+        if (fp && fp !== lastLocalFingerprint && !queuedFingerprints.has(fp)) enqueueSnapshot(local);
+        else if (realtimeStatus === 'SUBSCRIBED') setConnectionUI(true);
+
+        flushQueue();
       } catch (err) {
-        console.warn('[NILO V15.2] sincronização local pendente', err);
+        console.warn('[NILO V32] sincronização local pendente', err);
       }
-    }, 2500);
+    }, 1500);
   }
 
   function startRealtime() {
     if (!client || channel) return;
-
     channel = client
-      .channel(`nilo-public-${CLIENT_ID}`)
+      .channel(`nilo-public-v32-${CLIENT_ID}`)
       .on(
         'postgres_changes',
         {
@@ -285,14 +399,15 @@
             if (!isUsableState(row.payload)) return;
             await applyRemote(row.payload);
           } catch (err) {
-            console.warn('[NILO V15.2] atualização remota pendente', err);
+            console.warn('[NILO V32] atualização remota pendente', err);
           }
         }
       )
       .subscribe(status => {
         realtimeStatus = status;
         if (status === 'SUBSCRIBED') {
-          setConnectionUI(true, 'Conectado ao banco em tempo real');
+          setConnectionUI(true, 'Conectado • backup automático ativo');
+          flushQueue();
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
           setConnectionUI(false);
         }
@@ -304,12 +419,12 @@
       setConnectionUI(false);
       return;
     }
-
     try {
       await initialReconcile();
       startRealtime();
+      flushQueue();
     } catch (err) {
-      console.warn('[NILO V15.2] reconexão pendente', err);
+      console.warn('[NILO V32] reconexão pendente', err);
       setConnectionUI(false);
     }
   }
@@ -319,6 +434,7 @@
     initialized = true;
 
     keepDirectAccess();
+    installIndexedDBSaveHook();
 
     if (!window.supabase?.createClient) {
       setConnectionUI(false);
@@ -341,16 +457,19 @@
     await reconnect();
     startLocalWatch();
 
-    window.addEventListener('online', reconnect);
+    window.addEventListener('online', () => { reconnect(); flushQueue(); });
     window.addEventListener('offline', () => setConnectionUI(false));
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') flushQueue();
+    });
+    window.addEventListener('pagehide', () => flushQueue());
 
-    // Sem MutationObserver: esta é a correção principal do travamento V15.1.
     setInterval(keepDirectAccess, 3000);
   }
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => setTimeout(init, 900), { once: true });
+    document.addEventListener('DOMContentLoaded', () => setTimeout(init, 700), { once: true });
   } else {
-    setTimeout(init, 900);
+    setTimeout(init, 700);
   }
 })();

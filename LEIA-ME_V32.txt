@@ -1,0 +1,15 @@
+NILO ENTREGAS • V32 — BACKUP AUTOMÁTICO
+
+O que muda:
+- Cada gravação do estado do aplicativo é detectada no IndexedDB e colocada na fila de sincronização.
+- Cada envio para o Supabase gera histórico automático no banco por triggers já instalados.
+- Se estiver sem internet, as alterações permanecem no aparelho e entram na fila para envio quando a conexão voltar.
+- A sincronização rejeita estados remotos que reduzam a base de forma perigosa (ex.: centenas de entregas -> zero).
+- O banco também possui uma proteção BEFORE UPDATE contra sobrescrita vazia.
+- A tela de conexão passa a indicar "Backup automático ativo".
+
+Arquivos para a raiz do GitHub:
+- public-sync.js
+- sw.js
+
+Depois da publicação: Ctrl + F5 uma vez.
