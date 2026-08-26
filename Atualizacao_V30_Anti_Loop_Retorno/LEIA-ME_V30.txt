@@ -1,0 +1,13 @@
+NILO ENTREGAS • V30 — HOTFIX ANTI-REINICIALIZAÇÃO
+
+Correção urgente da V29:
+- remove o reparo automático que escrevia no banco durante cada inicialização;
+- elimina o ciclo de recarregamento contínuo;
+- entrega devolvida continua sendo liberada para nova tentativa;
+- ao clicar em “Montar nova saída”, se houver devolvida presa, o sistema cria a nova tentativa, recarrega UMA VEZ e reabre a montagem do ciclo;
+- mantém histórico da tentativa anterior;
+- mantém entregas grandes, gráfico de 1 dia, contraste e rota planejada V24.
+
+PUBLICAÇÃO
+Envie os arquivos deste pacote para a RAIZ do repositório, substituindo os existentes.
+Depois abra o sistema e faça Ctrl+F5 uma vez.
