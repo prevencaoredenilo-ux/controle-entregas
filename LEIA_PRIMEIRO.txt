@@ -1,0 +1,43 @@
+ATUALIZAÇÃO V32 PRONTA — SISTEMA DE ENTREGAS
+============================================
+
+ESTA É A ATUALIZAÇÃO DO LAYOUT APROVADO.
+
+ARQUIVOS PRINCIPAIS
+1. nilo-approved-v32.js
+2. ATUALIZADOR_V32.html
+
+FORMA MAIS FÁCIL
+1) Abra ATUALIZADOR_V32.html no seu computador.
+2) Selecione o index.html ATUAL do repositório controle-entregas.
+3) Clique em "Gerar index.html atualizado".
+4) O navegador vai gerar um novo index.html.
+5) No GitHub, envie/substitua:
+   - index.html
+   - nilo-approved-v32.js
+6) Faça Commit.
+7) Aguarde o GitHub Pages atualizar e teste.
+
+IMPORTANTE
+- NÃO substitua app.js.
+- NÃO apague public-sync.js.
+- NÃO apague operational-fixes-v31.js.
+- NÃO mexa no Supabase/banco.
+- NÃO limpe dados do navegador.
+- NÃO apague arquivos existentes do repositório.
+
+O V32 foi feito como uma camada visual.
+Ele mantém os botões originais e os mesmos data-view/IDs do sistema.
+
+VISUAL APROVADO
+- NILO + TRIELA
+- mascote NILO
+- azul-marinho, azul, branco e amarelo
+- "Olá, Prevenção! 👋"
+- menu recolhido
+- grupos: Operação, Análises, Treinamento e Administração
+- sem retirada de funcionalidades
+
+ROLLBACK
+Para voltar ao layout anterior, remova SOMENTE esta linha do index.html:
+<script src="nilo-approved-v32.js?v=32.0.0"></script>

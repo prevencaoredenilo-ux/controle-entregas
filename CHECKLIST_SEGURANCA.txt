@@ -1,0 +1,11 @@
+CHECKLIST DE SEGURANÇA
+======================
+[ ] Fazer backup antes de publicar.
+[ ] Não apagar app.js.
+[ ] Não apagar arquivos de sincronização.
+[ ] Não limpar localStorage/dados.
+[ ] Não alterar Supabase.
+[ ] Publicar somente index.html atualizado + nilo-approved-v32.js.
+[ ] Testar no PC.
+[ ] Testar no celular.
+[ ] Confirmar entregas, rotas, relatórios, cadastros, backup e treinamento.

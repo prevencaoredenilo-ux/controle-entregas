@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Atualizador V32 • Sistema de Entregas</title>
+<style>
+:root{--navy:#062c63;--blue:#1968c9;--yellow:#ffd900;--bg:#f3f6fb;--text:#102748;--muted:#6f7d91;--green:#10b981}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);font-family:Inter,Segoe UI,Arial,sans-serif;color:var(--text)}
+header{background:linear-gradient(100deg,#062c63,#0a3f83);color:#fff;padding:22px}
+.wrap{max-width:860px;margin:0 auto;padding:28px}
+.card{background:#fff;border-radius:18px;padding:24px;box-shadow:0 12px 36px rgba(6,44,99,.10);margin-bottom:18px}
+h1{margin:0;font-size:26px}h2{margin:0 0 10px;font-size:20px}
+.badge{display:inline-flex;margin-top:10px;background:#e9fff7;color:#087a56;padding:7px 11px;border-radius:999px;font-weight:800}
+.drop{border:2px dashed #b8c8dd;border-radius:14px;padding:28px;text-align:center;background:#f9fbff}
+input[type=file]{margin-top:12px}
+button{border:0;border-radius:11px;padding:13px 18px;font-weight:800;cursor:pointer}
+.primary{background:var(--blue);color:#fff}.secondary{background:#eef3fa;color:var(--navy)}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+.ok{color:#087a56;font-weight:800}.warn{color:#a45b00;font-weight:800}.err{color:#b42318;font-weight:800}
+pre{white-space:pre-wrap;background:#071f43;color:#dce9ff;padding:14px;border-radius:12px;overflow:auto}
+small{color:var(--muted);line-height:1.55}.note{border-left:5px solid var(--yellow);padding-left:12px}
+</style>
+</head>
+<body>
+<header><div class="wrap" style="padding-top:0;padding-bottom:0"><h1>Atualizador V32 — Sistema de Entregas</h1><div class="badge">✓ Só visual • não apaga dados</div></div></header>
+<div class="wrap">
+  <div class="card">
+    <h2>1. Selecione o seu index.html atual</h2>
+    <p>Este atualizador NÃO substitui seu sistema. Ele pega o seu <b>index.html atual</b> e adiciona somente a chamada da atualização visual aprovada.</p>
+    <div class="drop">
+      <b>Escolha o arquivo index.html do repositório</b><br>
+      <input id="file" type="file" accept=".html,text/html">
+    </div>
+    <div class="actions">
+      <button id="patch" class="primary" disabled>Gerar index.html atualizado</button>
+      <button id="show" class="secondary" disabled>Ver alteração</button>
+    </div>
+    <p id="status"></p>
+  </div>
+
+  <div class="card note">
+    <h2>2. O que será alterado?</h2>
+    <small>Será adicionada apenas esta linha antes de <b>&lt;/body&gt;</b>:</small>
+    <pre>&lt;script src="nilo-approved-v32.js?v=32.0.0"&gt;&lt;/script&gt;</pre>
+    <small>O arquivo app.js, Supabase, localStorage, entregas, relatórios, rotas, usuários, backups e cadastros não são alterados por este atualizador.</small>
+  </div>
+
+  <div class="card">
+    <h2>3. Depois</h2>
+    <p>Envie para a raiz do GitHub somente:</p>
+    <pre>index.html
+nilo-approved-v32.js</pre>
+    <small>Se quiser voltar ao layout anterior, remova apenas a linha do V32 do index.html.</small>
+  </div>
+</div>
+<script>
+let original='', patched='';
+const file=document.getElementById('file'), patch=document.getElementById('patch'), show=document.getElementById('show'), status=document.getElementById('status');
+file.addEventListener('change', async ()=>{
+  status.textContent='';
+  const f=file.files[0];
+  if(!f){patch.disabled=true;show.disabled=true;return}
+  original=await f.text();
+  if(!/<\/body\s*>/i.test(original)){status.className='err';status.textContent='Não encontrei </body> nesse arquivo. Confira se é o index.html correto.';patch.disabled=true;return}
+  patch.disabled=false;
+  status.className='ok';
+  status.textContent='index.html carregado. Pronto para gerar a atualização.';
+});
+function makePatched(){
+  const tag='<script src="nilo-approved-v32.js?v=32.0.0"><\\/script>';
+  if(original.includes('nilo-approved-v32.js')){
+    patched=original;
+    status.className='warn';
+    status.textContent='O V32 já está presente nesse index.html. Nenhuma duplicação foi feita.';
+    return;
+  }
+  patched=original.replace(/<\/body\s*>/i, '  '+tag+'\n</body>');
+  status.className='ok';
+  status.textContent='Atualização aplicada ao index.html sem remover nenhuma linha existente.';
+}
+patch.addEventListener('click',()=>{
+  makePatched();
+  const blob=new Blob([patched],{type:'text/html;charset=utf-8'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='index.html';
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+  show.disabled=false;
+});
+show.addEventListener('click',()=>{
+  if(!patched) makePatched();
+  const before=original.includes('nilo-approved-v32.js')?'Já existia no arquivo.':'Nenhuma linha anterior foi removida.';
+  alert('ALTERAÇÃO V32\n\n'+before+'\n\nFoi adicionada somente a chamada:\n<script src="nilo-approved-v32.js?v=32.0.0"></script>');
+});
+</script>
+</body>
+</html>
