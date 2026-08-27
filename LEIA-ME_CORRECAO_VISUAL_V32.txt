@@ -1,0 +1,18 @@
+CORREÇÃO VISUAL V32 APROVADA
+
+Arquivos para enviar à raiz do GitHub:
+1. public-sync.js
+2. sw.js
+3. nilo-approved-v32.js
+
+Substitua os arquivos existentes com esses nomes.
+O index.html NÃO precisa ser alterado nesta correção.
+
+O que esta correção faz:
+- ativa a camada visual aprovada V32;
+- mantém V31 operacional;
+- mantém backup automático V32;
+- mantém Supabase, dados, rotas, relatórios e cadastros;
+- força novo cache do aplicativo para evitar continuar vendo o visual antigo.
+
+Após publicar, aguarde o GitHub Pages atualizar e faça Ctrl+F5 uma vez.

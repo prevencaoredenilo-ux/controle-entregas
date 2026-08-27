@@ -1,4 +1,4 @@
-const CACHE_NAME = 'controle-entregas-v32-backup-automatico';
+const CACHE_NAME = 'controle-entregas-v32-visual-aprovado';
 const APP_SHELL = [
   './',
   './index.html',
@@ -12,6 +12,7 @@ const APP_SHELL = [
   './route-planner-stable-v24.js?v=24.0.0',
   './nilo-contrast-v28.css?v=28.0.0',
   './operational-fixes-v31.js?v=31.0.0',
+  './nilo-approved-v32.js?v=32.0.1',
   './icons/icon-192.png',
   './icons/icon-512.png',
   'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.4'

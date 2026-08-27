@@ -473,3 +473,25 @@
     setTimeout(init, 700);
   }
 })();
+
+/* ================================================================
+   NILO V32 VISUAL • CARREGADOR DA IDENTIDADE APROVADA
+   Mantém a lógica de sincronização acima intacta e apenas carrega
+   a camada visual aprovada depois que o documento estiver pronto.
+   ================================================================ */
+(() => {
+  'use strict';
+  function loadApprovedVisual(){
+    if (document.querySelector('script[src*="nilo-approved-v32.js"],script[data-nilo-approved-v32-loader]')) return;
+    const script = document.createElement('script');
+    script.src = 'nilo-approved-v32.js?v=32.0.1';
+    script.async = false;
+    script.dataset.niloApprovedV32Loader = '1';
+    document.head.appendChild(script);
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', loadApprovedVisual, { once:true });
+  } else {
+    loadApprovedVisual();
+  }
+})();
