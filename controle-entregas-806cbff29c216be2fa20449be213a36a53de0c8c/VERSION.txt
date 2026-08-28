@@ -1,0 +1,2 @@
+V14.7.0 — Roteirização por prioridade e bairro + visual mobile
+Ao montar o ciclo, entregas prioritárias aparecem primeiro e as demais são agrupadas pela ordem dos bairros. Rua, número, complemento e referência permitem abrir o roteiro no Google Maps. O celular recebeu navegação inferior, formulários em uma coluna, modais em formato de painel e ações maiores.
