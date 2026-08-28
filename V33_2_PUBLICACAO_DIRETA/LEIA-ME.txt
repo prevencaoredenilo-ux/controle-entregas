@@ -1,0 +1,8 @@
+V33.2 FINAL APROVADA
+
+Arquivos desta correção:
+- nilo-approved-v32.js: desativa a camada visual V32 antiga e mantém somente compatibilidade com o carregador legado.
+- nilo-v33-2-final.css: padroniza o mascote exatamente na sequência aprovada: Triela acima, mascote de corpo inteiro abaixo, cartão de status no rodapé.
+- sw.js: cache novo V33.2.
+
+Nenhuma função operacional ou dado é alterado.
