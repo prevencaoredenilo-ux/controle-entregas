@@ -1,0 +1,33 @@
+NILO ENTREGAS — V34 BASE VISUAL DEFINITIVA
+
+Esta versão NÃO usa a camada visual V32/V33 como base.
+Ela cria uma camada V34 limpa para eliminar os conflitos de largura e menu.
+
+CORREÇÕES PRINCIPAIS
+- aplicativo ocupa 100% da página;
+- sem faixa branca lateral;
+- topo acompanha imediatamente o menu;
+- menu aberto 252 px; recolhido 76 px;
+- mascote somente dentro do menu;
+- logo Triela substituída pela imagem correta enviada;
+- favicon/ícone do app usa o mascote de corpo inteiro;
+- paleta navy + azul + amarelo + branco aprovada;
+- mantém todos os botões/IDs/data-view e as funções existentes;
+- não altera app.js, Supabase, backup ou V31 operacional.
+
+SUBSTITUA/ADICIONE NA RAIZ DO GITHUB:
+index.html
+sw.js
+manifest.webmanifest
+nilo-approved-v34.js
+nilo-v34.png
+triela-v34.png
+mascote-v34.png
+favicon-v34.png
+
+E substitua dentro da pasta icons:
+icons/icon-192.png
+icons/icon-512.png
+
+NÃO PRECISA APAGAR nilo-approved-v33.js; o index V34 simplesmente deixa de carregá-lo.
+Depois aguarde o Pages e faça Ctrl+F5 uma vez.
