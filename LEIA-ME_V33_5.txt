@@ -1,0 +1,35 @@
+NILO ENTREGAS — V33.5 FINAL APROVADA
+
+ESTA É A ATUALIZAÇÃO DO SISTEMA REAL, BASEADA NA SIMULAÇÃO APROVADA.
+
+Inclui:
+- layout visual V33 aprovado em todas as abas;
+- Central de Operação;
+- Entregas & Programadas;
+- Registrar nova compra;
+- Ciclos & Rotas;
+- Quilometragem & Frota;
+- Análises & Relatórios;
+- Administração & Cadastros;
+- mobile;
+- identificação da compra sem duplicidade:
+  Nº da compra, cupom, DOC, caixa, data e hora;
+- endereço/cliente em bloco separado;
+- prioridade mantida na etapa de entrega;
+- ilustrações realistas aprovadas na frota;
+- botões de frota alinhados no rodapé dos cards.
+
+NÃO ALTERA:
+- app.js;
+- public-sync.js;
+- Supabase;
+- dados existentes;
+- backup automático;
+- operational-fixes-v31.js;
+- route-planner-stable-v24.js.
+
+COMO ATUALIZAR:
+Extraia o ZIP e envie TODO o conteúdo para a raiz do repositório,
+mantendo a pasta icons e substituindo os arquivos quando solicitado.
+
+Depois aguarde o GitHub Pages atualizar e faça Ctrl+F5 uma vez.

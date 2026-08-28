@@ -1,0 +1,15 @@
+CHECKLIST V33.5
+[ ] Central visual aprovado
+[ ] Entregas & Programadas
+[ ] Registro: compra sem duplicidade
+[ ] Tipo normal/grande
+[ ] Taxa
+[ ] Entrega/agendamento
+[ ] Endereço e cliente
+[ ] Ciclos & Rotas
+[ ] Frota com imagens aprovadas
+[ ] Botões de frota alinhados
+[ ] Análises & Relatórios
+[ ] Administração & Cadastros
+[ ] Mobile
+[ ] Backup e sincronização preservados

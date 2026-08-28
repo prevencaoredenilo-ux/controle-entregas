@@ -1,0 +1,23 @@
+NILO ENTREGAS — V33.4 TELAS APROVADAS EXATAS
+
+Esta atualização implementa a composição visual aprovada EM CADA TELA:
+- Central de Operação
+- Entregas & Programadas
+- Registrar nova compra
+- Ciclos & Rotas
+- Quilometragem & Frota
+- Análises & Relatórios
+- Administração & Cadastros
+- Mobile Central
+- Mobile Registrar compra
+
+IMPORTANTE:
+- os números mostrados são lidos dos dados reais do sistema;
+- a camada nova é somente de apresentação e NÃO grava no banco;
+- app.js permanece V14.8;
+- public-sync permanece V32.1;
+- operacional V31 permanece;
+- rotas V24 permanecem;
+- Triela, mascote, favicon, tela cheia e menu recolhido permanecem conforme os ajustes aprovados depois.
+
+Envie TODO o conteúdo para a raiz do GitHub, mantendo a pasta icons.

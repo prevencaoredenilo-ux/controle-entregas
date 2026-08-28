@@ -1,18 +1,18 @@
 /**
- * NILO ENTREGAS • V33.3.0 • VISUAL APROVADO EXATO
+ * NILO ENTREGAS • V33.5.0 • FINAL APROVADA
  * ------------------------------------------------------------
  * Implementa o pacote visual aprovado (desktop + mobile) sem
  * gravar dados, sem alterar IndexedDB/Supabase e sem remover ações.
  */
 (() => {
   'use strict';
-  const VERSION = '33.3.0';
+  const VERSION = '33.5.0';
   const q = (s,r=document) => r.querySelector(s);
   const qa = (s,r=document) => [...r.querySelectorAll(s)];
   const A = {
-    nilo:'logo-nilo-aprovada.png?v=33.3.0',
-    triela:'logo-triela-aprovada.png?v=33.3.0',
-    mascot:'mascote-nilo-aprovado.png?v=33.3.0'
+    nilo:'logo-nilo-aprovada.png?v=33.5.0',
+    triela:'logo-triela-aprovada.png?v=33.5.0',
+    mascot:'mascote-nilo-aprovado.png?v=33.5.0'
   };
 
   const icons = {
@@ -182,6 +182,88 @@
     fab.addEventListener('click',()=> (q('#mobileNewDeliveryBtn')||q('#quickNewDeliveryBtn'))?.click()); document.body.appendChild(fab);
   }
 
+  function registerCardByField(form,name){
+    const el=q(`[name="${name}"]`,form);
+    return el?.closest('.quick-step-card') || null;
+  }
+
+  function setRegisterStep(card,n,title,subtitle=''){
+    if(!card) return;
+    let head=q('.quick-step-head',card);
+    if(!head){
+      head=document.createElement('div');
+      head.className='quick-step-head';
+      head.innerHTML=`<span>${n}</span><div><strong>${title}</strong>${subtitle?`<small>${subtitle}</small>`:''}</div>`;
+      card.prepend(head);
+      return;
+    }
+    const badge=q(':scope > span',head);
+    const strong=q('strong',head);
+    if(badge) badge.textContent=String(n);
+    if(strong) strong.textContent=title;
+  }
+
+  function organizeRegisterFields(){
+    const form=q('#quickDeliveryForm');
+    if(!form) return;
+
+    const identity=registerCardByField(form,'orderNo') || registerCardByField(form,'coupon');
+    const fee=q('#feeChoices',form)?.closest('.quick-step-card') || registerCardByField(form,'fee');
+    const delivery=q('#deliveryModeChoices',form)?.closest('.quick-step-card') || registerCardByField(form,'deliveryMode');
+    const type=q(':scope > .v28-quick-type-step',form) ||
+      qa(':scope > *',form).find(el=>q('[data-v26-new-large-toggle]',el)||q('[data-v26-new-planned]',el));
+
+    if(identity){
+      identity.classList.add('ap-step-identification');
+      setRegisterStep(identity,1,'Identificação da compra','Dados originais da compra no PDV.');
+    }
+    if(type){
+      type.classList.add('ap-step-type');
+      setRegisterStep(type,2,'Tipo da entrega','Escolha normal ou entrega grande.');
+    }
+    if(fee){
+      fee.classList.add('ap-step-fee');
+      setRegisterStep(fee,3,'Taxa cobrada no PDV','O faturamento entra no registro da compra.');
+    }
+    if(delivery){
+      delivery.classList.add('ap-step-delivery');
+      setRegisterStep(delivery,4,'Quando será entregue?','Escolha entrega imediata ou agendamento.');
+    }
+
+    if(identity){
+      const grid=q('.quick-entry-grid',identity);
+      if(grid){
+        const addressNames=['neighborhoodId','address','addressNumber','addressComplement','addressReference','customerName','customerPhone'];
+        let addressCard=q(':scope > .ap-step-address',form);
+
+        if(!addressCard){
+          addressCard=document.createElement('section');
+          addressCard.className='quick-step-card ap-step-address';
+          addressCard.innerHTML='<div class="quick-step-head"><span>5</span><div><strong>Endereço e cliente</strong><small>Dados para localizar a entrega e identificar o cliente.</small></div></div><div class="quick-entry-grid ap-address-grid"></div>';
+          const actions=q(':scope > .form-actions',form);
+          form.insertBefore(addressCard,actions||null);
+        }
+
+        const addrGrid=q('.ap-address-grid',addressCard);
+        addressNames.forEach(name=>{
+          const input=q(`[name="${name}"]`,form);
+          const label=input?.closest('label');
+          if(label && label.closest('.ap-step-address')!==addressCard){
+            label.classList.add(`ap-field-${name}`);
+            addrGrid.appendChild(label);
+          }
+        });
+
+        const priority=q('[name="priority"]',form)?.closest('label');
+        if(priority && delivery && priority.closest('.ap-step-delivery')!==delivery){
+          priority.classList.add('ap-register-priority');
+          const target=q('.quick-entry-grid',delivery) || delivery;
+          target.appendChild(priority);
+        }
+      }
+    }
+  }
+
   function decorateRegister(){
     const wrap=q('#modalWrap'), modal=q('#modal'); if(!wrap||!modal) return;
     const title=q('#modalTitle')?.textContent||''; const active=/Registrar nova compra|Nova compra|Registrar compra/i.test(title) || Boolean(q('#quickDeliveryForm'));
@@ -190,6 +272,7 @@
     const head=q('.modal-head',modal); if(head && !q('.ap-register-stepper',head)){
       const st=document.createElement('div'); st.className='ap-register-stepper'; ['Identificação','Tipo','Taxa','Entrega','Endereço'].forEach((x,i)=>{const s=document.createElement('span');s.innerHTML=`<b>${i+1}</b>${x}`;st.appendChild(s)}); const copy=q(':scope > div',head); (copy||head).appendChild(st);
     }
+    organizeRegisterFields();
   }
 
   function applyIcons(){

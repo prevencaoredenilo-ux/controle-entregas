@@ -1,4 +1,4 @@
-const CACHE_NAME = 'controle-entregas-v33-3-visual-exato-aprovado';
+const CACHE_NAME = 'controle-entregas-v33-5-final-aprovada';
 const APP_SHELL = [
   './',
   './index.html',
@@ -9,15 +9,20 @@ const APP_SHELL = [
   './public-sync.js?v=32.1.0',
   './route-view-stable-v19.js?v=19.0.0',
   './manifest.webmanifest',
-  './favicon-v33.png?v=33.3.0',
+  './favicon-v33.png?v=33.5.0',
   './route-planner-stable-v24.js?v=24.0.0',
   './nilo-contrast-v28.css?v=28.0.0',
   './operational-fixes-v31.js?v=31.0.0',
-  './nilo-approved-v33-exact.css?v=33.3.0',
-  './nilo-approved-v33.js?v=33.3.0',
-  './logo-nilo-aprovada.png?v=33.3.0',
-  './logo-triela-aprovada.png?v=33.3.0',
-  './mascote-nilo-aprovado.png?v=33.3.0',
+  './nilo-approved-v33-exact.css?v=33.5.0',
+  './nilo-approved-v33-screens.css?v=33.5.0',
+  './nilo-approved-v33.js?v=33.5.0',
+  './nilo-approved-v33-screens.js?v=33.5.0',
+  './logo-nilo-aprovada.png?v=33.5.0',
+  './logo-triela-aprovada.png?v=33.5.0',
+  './mascote-nilo-aprovado.png?v=33.5.0',
+  './vehicle-fiorino-v33.png?v=33.5.0',
+  './vehicle-moto-v33.png?v=33.5.0',
+  './vehicle-utilitario-v33.png?v=33.5.0',
   './icons/icon-192.png',
   './icons/icon-512.png',
   'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.4'
