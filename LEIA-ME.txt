@@ -1,0 +1,21 @@
+NILO ENTREGAS — V33.3 CORREÇÃO DEFINITIVA
+
+SUBSTITUA ESTES 4 ARQUIVOS NA RAIZ DO REPOSITÓRIO:
+1. index.html
+2. public-sync.js
+3. nilo-approved-v33.js
+4. sw.js
+
+O que esta correção resolve:
+- remove o carregamento visual antigo V32;
+- ativa diretamente o visual aprovado V33.2;
+- mantém V31 operacional;
+- mantém backup automático no Supabase;
+- mantém rotas V24;
+- mantém relatórios, cadastros, ciclos e dados;
+- padroniza Triela + mascote + status no menu;
+- mantém menu e mobile da versão aprovada;
+- usa cache novo para evitar versão antiga presa no navegador.
+
+Depois do upload:
+aguarde o GitHub Pages atualizar e faça Ctrl+F5 UMA VEZ.

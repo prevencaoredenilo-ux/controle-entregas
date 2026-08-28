@@ -1,4 +1,4 @@
-const CACHE_NAME = 'controle-entregas-v33-1-anti-travamento';
+const CACHE_NAME = 'controle-entregas-v33-2-final-aprovada';
 const APP_SHELL = [
   './',
   './index.html',
@@ -6,13 +6,13 @@ const APP_SHELL = [
   './nilo-layout-v15.css?v=15.0.0',
   './ui-stable-v19.css?v=19.0.0',
   './app.js?v=14.8.0',
-  './public-sync.js?v=32.0.0',
+  './public-sync.js?v=32.1.0',
   './route-view-stable-v19.js?v=19.0.0',
   './manifest.webmanifest',
   './route-planner-stable-v24.js?v=24.0.0',
   './nilo-contrast-v28.css?v=28.0.0',
   './operational-fixes-v31.js?v=31.0.0',
-  './nilo-approved-v33.js?v=33.1.0',
+  './nilo-approved-v33.js?v=33.2.0',
   './icons/icon-192.png',
   './icons/icon-512.png',
   'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.4'
