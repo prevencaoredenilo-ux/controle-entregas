@@ -1,0 +1,16 @@
+CHECKLIST V33.3
+[ ] sem faixa branca lateral
+[ ] topo acompanha menu
+[ ] menu aberto = Nilo no topo, Triela + mascote + status embaixo
+[ ] menu recolhido = trilho estreito + Nilo/Triela no topo da barra principal
+[ ] amarelo apenas em destaques/CTA/menu ativo
+[ ] cards brancos com ícones coloridos
+[ ] Registrar compra em 5 etapas
+[ ] Entrega normal e entrega grande preservadas
+[ ] Ciclos/rotas preservados
+[ ] Quilometragem preservada
+[ ] Relatórios preservados
+[ ] Administração/cadastros preservados
+[ ] Treinamento preservado
+[ ] Mobile com dock inferior e Registrar compra amarelo
+[ ] favicon mascote corpo inteiro

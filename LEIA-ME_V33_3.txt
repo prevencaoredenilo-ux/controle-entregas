@@ -1,0 +1,43 @@
+NILO ENTREGAS — V33.3.0 • VISUAL APROVADO EXATO
+
+ESTA VERSÃO USA COMO FONTE DE VERDADE O PACOTE VISUAL APROVADO:
+- Central de Operação
+- Entregas & Programadas
+- Registrar nova compra
+- Ciclos & Rotas
+- Quilometragem & Frota
+- Análises & Relatórios
+- Administração & Cadastros
+- Mobile Central
+- Mobile Registrar compra
+
+MELHORIAS POSTERIORES TAMBÉM INCORPORADAS:
+- app ocupa 100% da largura útil;
+- menu recolhido não deixa faixa branca;
+- barra superior acompanha o menu aberto/recolhido;
+- menu aberto: Triela correta > mascote corpo inteiro > status;
+- menu recolhido: NILO + Triela aparecem no topo;
+- favicon/ícone usa mascote de corpo inteiro;
+- mobile segue o padrão aprovado;
+- nenhuma funcionalidade operacional é removida.
+
+NÃO ALTERA:
+- app.js;
+- public-sync.js / Supabase / backup automático;
+- operational-fixes-v31.js;
+- route-planner-stable-v24.js;
+- dados já cadastrados.
+
+ARQUIVOS A SUBSTITUIR/ADICIONAR NA RAIZ DO GITHUB:
+1. index.html
+2. sw.js
+3. manifest.webmanifest
+4. nilo-approved-v33.js
+5. nilo-approved-v33-exact.css
+6. logo-nilo-aprovada.png
+7. logo-triela-aprovada.png
+8. mascote-nilo-aprovado.png
+9. favicon-v33.png
+10. pasta icons/ (icon-192.png e icon-512.png)
+
+Depois do GitHub Pages atualizar, faça Ctrl + F5 uma única vez.

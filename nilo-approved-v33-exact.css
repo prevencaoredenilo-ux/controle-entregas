@@ -1,0 +1,306 @@
+/* ======================================================================
+   NILO ENTREGAS • V33.3.0 • VISUAL APROVADO EXATO
+   Fonte visual: pacote de 9 telas aprovado pelo usuário em 27/08/2026.
+   Camada exclusivamente visual. Mantém IDs, data-view, formulários e ações.
+   ====================================================================== */
+:root{
+  --ap-navy:#031b43;
+  --ap-navy-2:#062b63;
+  --ap-navy-3:#074783;
+  --ap-blue:#0869f7;
+  --ap-blue-2:#0066ff;
+  --ap-yellow:#ffd500;
+  --ap-yellow-2:#ffdf20;
+  --ap-green:#10b981;
+  --ap-orange:#ff7a00;
+  --ap-purple:#7048ff;
+  --ap-red:#ef4444;
+  --ap-cyan:#09a7b5;
+  --ap-bg:#f4f7fb;
+  --ap-card:#ffffff;
+  --ap-line:#dfe7f1;
+  --ap-line-2:#e9eef5;
+  --ap-text:#061f4b;
+  --ap-muted:#66768d;
+  --ap-shadow:0 9px 26px rgba(6,43,99,.075);
+  --ap-sidebar:232px;
+  --ap-sidebar-collapsed:74px;
+  --ap-topbar:96px;
+}
+
+*{box-sizing:border-box}
+html,body{width:100%!important;max-width:none!important;margin:0!important;background:var(--ap-bg)!important;overflow-x:hidden!important}
+body.nilo-v33-exact{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif!important;color:var(--ap-text)!important;background:var(--ap-bg)!important}
+body.nilo-v33-exact .app-shell{display:grid!important;grid-template-columns:var(--ap-sidebar) minmax(0,1fr)!important;width:100%!important;max-width:none!important;min-height:100vh!important;margin:0!important;background:var(--ap-bg)!important;transition:grid-template-columns .18s ease!important}
+body.nilo-v33-exact.ap-menu-collapsed .app-shell{grid-template-columns:var(--ap-sidebar-collapsed) minmax(0,1fr)!important}
+body.nilo-v33-exact .main-content{min-width:0!important;width:100%!important;max-width:none!important;margin:0!important;background:var(--ap-bg)!important}
+body.nilo-v33-exact #view{width:100%!important;max-width:none!important;margin:0!important;padding:16px 16px 90px!important;background:var(--ap-bg)!important}
+
+/* ===================== SIDEBAR APROVADA ===================== */
+body.nilo-v33-exact .sidebar{
+  position:sticky!important;top:0!important;height:100vh!important;min-height:100vh!important;
+  width:var(--ap-sidebar)!important;min-width:var(--ap-sidebar)!important;max-width:var(--ap-sidebar)!important;
+  padding:12px 10px 10px!important;margin:0!important;border:0!important;border-radius:0!important;
+  background:linear-gradient(180deg,#031b43 0%,#05295d 48%,#063a79 100%)!important;
+  color:#fff!important;box-shadow:none!important;overflow:hidden!important;z-index:150!important;
+  display:flex!important;flex-direction:column!important;transition:width .18s ease,min-width .18s ease,max-width .18s ease!important;
+}
+body.nilo-v33-exact.ap-menu-collapsed .sidebar{width:var(--ap-sidebar-collapsed)!important;min-width:var(--ap-sidebar-collapsed)!important;max-width:var(--ap-sidebar-collapsed)!important;padding-left:7px!important;padding-right:7px!important}
+body.nilo-v33-exact .sidebar-top{padding:0!important;margin:0!important;flex:0 0 auto!important}
+body.nilo-v33-exact .sidebar .brand-block,
+body.nilo-v33-exact .sidebar .connection-card{display:none!important}
+.ap-side-logo{height:70px;display:grid;place-items:center;padding:2px 8px 10px;overflow:hidden;flex:0 0 auto}
+.ap-side-logo img{display:block;width:154px;height:auto;max-height:58px;object-fit:contain;filter:drop-shadow(0 4px 3px rgba(0,0,0,.22))}
+body.nilo-v33-exact.ap-menu-collapsed .ap-side-logo{height:62px;padding:3px 0 8px}
+body.nilo-v33-exact.ap-menu-collapsed .ap-side-logo img{width:58px;max-width:58px;object-fit:contain;object-position:left center;clip-path:inset(0 0 0 0)}
+
+body.nilo-v33-exact #mainNav{display:block!important;min-height:0!important;flex:1 1 auto!important;overflow-y:auto!important;overflow-x:hidden!important;padding:0 1px!important;margin:0!important;scrollbar-width:thin!important;scrollbar-color:rgba(255,255,255,.28) transparent!important}
+body.nilo-v33-exact #mainNav>.nav-caption{display:none!important}
+.ap-nav-group{margin:4px 0 11px!important;padding:0!important}
+.ap-nav-title{display:block!important;padding:5px 10px 5px!important;color:var(--ap-yellow)!important;-webkit-text-fill-color:var(--ap-yellow)!important;font-size:10px!important;font-weight:950!important;letter-spacing:.025em!important;text-transform:uppercase!important;white-space:nowrap!important}
+body.nilo-v33-exact.ap-menu-collapsed .ap-nav-title{display:none!important}
+.ap-nav-combo{margin:3px 0 5px!important;padding:0!important;border:0!important;background:transparent!important}
+.ap-nav-combo-title{display:none!important}
+body.nilo-v33-exact:not(.ap-menu-collapsed) .ap-nav-combo.compact-box{padding:3px!important;border:1px solid rgba(255,255,255,.07)!important;border-radius:12px!important;background:rgba(0,0,0,.07)!important}
+body.nilo-v33-exact:not(.ap-menu-collapsed) .ap-nav-combo.compact-box .ap-nav-combo-title{display:flex!important;align-items:center!important;gap:6px!important;padding:4px 7px 3px!important;color:#bad0ed!important;-webkit-text-fill-color:#bad0ed!important;font-size:9px!important;font-weight:900!important;text-transform:uppercase!important;letter-spacing:.03em!important}
+body.nilo-v33-exact:not(.ap-menu-collapsed) .ap-nav-combo.compact-box .ap-nav-combo-title:before{content:"";width:5px;height:5px;border-radius:50%;background:var(--ap-yellow);flex:0 0 5px}
+
+body.nilo-v33-exact #mainNav .nav-item{
+  width:100%!important;min-height:43px!important;margin:2px 0!important;padding:5px 7px!important;border:1px solid transparent!important;border-radius:10px!important;
+  display:grid!important;grid-template-columns:34px minmax(0,1fr) auto!important;align-items:center!important;gap:8px!important;
+  background:transparent!important;color:#f6f9ff!important;-webkit-text-fill-color:#f6f9ff!important;font-size:12px!important;font-weight:820!important;text-align:left!important;box-shadow:none!important;transform:none!important;
+}
+body.nilo-v33-exact #mainNav .nav-item:hover{background:rgba(255,255,255,.075)!important;color:#fff!important;-webkit-text-fill-color:#fff!important}
+body.nilo-v33-exact #mainNav .nav-item.active{background:linear-gradient(90deg,var(--ap-yellow),#ffdf33)!important;color:var(--ap-navy)!important;-webkit-text-fill-color:var(--ap-navy)!important;border-color:#ffe968!important;box-shadow:0 7px 18px rgba(255,213,0,.16)!important}
+body.nilo-v33-exact #mainNav .nav-ico{width:34px!important;height:34px!important;min-width:34px!important;border-radius:9px!important;background:rgba(255,255,255,.07)!important;color:inherit!important;display:grid!important;place-items:center!important;padding:7px!important;font-size:0!important;border:1px solid rgba(255,255,255,.035)!important}
+body.nilo-v33-exact #mainNav .nav-item.active .nav-ico{background:rgba(6,43,99,.1)!important;border-color:transparent!important}
+body.nilo-v33-exact #mainNav .nav-ico svg{display:block;width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+body.nilo-v33-exact #mainNav .nav-badge{min-width:20px;height:20px;border-radius:999px;padding:0 6px;display:grid;place-items:center;font-size:9px!important;font-weight:950!important;background:rgba(255,255,255,.12)!important;color:#fff!important;-webkit-text-fill-color:#fff!important}
+body.nilo-v33-exact #mainNav .nav-item.active .nav-badge{background:rgba(6,43,99,.13)!important;color:var(--ap-navy)!important;-webkit-text-fill-color:var(--ap-navy)!important}
+body.nilo-v33-exact.ap-menu-collapsed #mainNav .nav-item{display:flex!important;align-items:center!important;justify-content:center!important;padding:4px!important;position:relative!important}
+body.nilo-v33-exact.ap-menu-collapsed #mainNav .nav-item>span:not(.nav-ico):not(.nav-badge){display:none!important}
+body.nilo-v33-exact.ap-menu-collapsed #mainNav .nav-badge{position:absolute!important;right:0!important;top:0!important;transform:scale(.76)!important}
+body.nilo-v33-exact.ap-menu-collapsed .ap-nav-combo{margin:2px 0!important}
+
+.ap-training-wrap{margin:4px 0 8px!important;padding:0!important}
+.ap-training-wrap .mode-card{display:block!important;margin:0 3px!important;padding:8px!important;background:rgba(255,255,255,.06)!important;border:1px solid rgba(255,255,255,.09)!important;border-radius:11px!important;box-shadow:none!important}
+.ap-training-wrap .mode-card *{color:#fff!important;-webkit-text-fill-color:#fff!important}
+.ap-training-wrap .mode-card-head{display:none!important}
+.ap-training-wrap .mode-switch{display:grid!important;grid-template-columns:1fr 1fr!important;gap:5px!important}
+.ap-training-wrap .mode-choice{min-height:31px!important;padding:5px!important;border-radius:8px!important;background:rgba(255,255,255,.05)!important;border:1px solid rgba(255,255,255,.08)!important;font-size:9px!important}
+.ap-training-wrap .mode-choice.active{background:rgba(255,213,0,.14)!important;border-color:rgba(255,213,0,.36)!important}
+.ap-training-wrap #modeHint{display:block!important;margin-top:5px!important;font-size:8px!important;color:#b9cae3!important;-webkit-text-fill-color:#b9cae3!important}
+body.nilo-v33-exact.ap-menu-collapsed .ap-training-wrap{display:none!important}
+
+.ap-side-branding{display:flex!important;flex-direction:column!important;align-items:center!important;flex:0 0 auto!important;margin:6px 3px 5px!important;overflow:hidden!important}
+.ap-triela-box{width:100%;height:58px;border:1px solid rgba(255,213,0,.82);border-radius:10px;background:#fff;display:grid;place-items:center;padding:7px 9px;overflow:hidden;box-shadow:0 6px 16px rgba(0,0,0,.12)}
+.ap-triela-box img{display:block;width:166px;max-width:100%;height:42px;object-fit:contain}
+.ap-mascot{display:block;width:142px;height:178px;object-fit:contain;object-position:center bottom;margin:3px auto 0;filter:drop-shadow(0 8px 10px rgba(0,0,0,.19));pointer-events:none}
+.ap-status-card{width:100%;min-height:56px;margin-top:4px;padding:8px 10px;border-radius:11px;border:1px solid rgba(255,255,255,.1);background:rgba(0,0,0,.18);display:flex;align-items:center;justify-content:space-between;gap:8px;color:#fff}
+.ap-status-copy{min-width:0}.ap-status-title{display:flex;align-items:center;gap:5px;font-size:10px;font-weight:900;color:#fff}.ap-status-title i{width:6px;height:6px;border-radius:50%;background:#38d984;box-shadow:0 0 0 3px rgba(56,217,132,.11)}.ap-status-copy small{display:block;margin-top:3px;color:#b7c8e2;font-size:8px;line-height:1.25}.ap-status-icon{width:31px;height:31px;border-radius:9px;border:1px solid rgba(255,255,255,.12);display:grid;place-items:center;font-size:14px;color:#d7e5fa}
+body.nilo-v33-exact .sidebar-footer{display:none!important}
+body.nilo-v33-exact.ap-menu-collapsed .ap-side-branding{margin:5px 0 4px!important}
+body.nilo-v33-exact.ap-menu-collapsed .ap-triela-box{display:none!important}
+body.nilo-v33-exact.ap-menu-collapsed .ap-mascot{display:none!important}
+body.nilo-v33-exact.ap-menu-collapsed .ap-status-card{height:46px;min-height:46px;padding:5px;justify-content:center}
+body.nilo-v33-exact.ap-menu-collapsed .ap-status-copy{display:none!important}
+
+/* ===================== TOPBAR APROVADA ===================== */
+body.nilo-v33-exact .topbar{
+  position:sticky!important;top:0!important;z-index:130!important;width:100%!important;max-width:none!important;min-height:var(--ap-topbar)!important;height:auto!important;margin:0!important;
+  padding:15px 22px!important;border:0!important;border-radius:0!important;background:linear-gradient(105deg,var(--ap-navy) 0%,#063269 55%,#074783 100%)!important;color:#fff!important;box-shadow:none!important;display:flex!important;align-items:center!important;gap:14px!important;
+}
+.ap-desktop-toggle{width:44px;height:44px;min-width:44px;border-radius:10px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.04);display:grid;place-items:center;color:#fff;font-size:20px;line-height:1;cursor:pointer;box-shadow:none}
+.ap-desktop-toggle:hover{background:rgba(255,255,255,.08)}
+body.nilo-v33-exact .topbar-title{display:flex!important;align-items:center!important;gap:12px!important;min-width:0!important;flex:1 1 auto!important}
+body.nilo-v33-exact .topbar-title>.menu-btn{display:none!important}
+body.nilo-v33-exact .topbar-title>div{min-width:0!important}
+.ap-greeting{display:block!important;margin:0 0 1px!important;color:#fff!important;-webkit-text-fill-color:#fff!important;font-size:17px!important;line-height:1.08!important;font-weight:900!important;letter-spacing:-.015em!important}
+body.nilo-v33-exact .topbar h1{margin:0!important;color:#fff!important;-webkit-text-fill-color:#fff!important;font-size:23px!important;line-height:1.08!important;font-weight:950!important;letter-spacing:-.025em!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
+body.nilo-v33-exact .topbar p{margin:3px 0 0!important;color:#dbe8fa!important;-webkit-text-fill-color:#dbe8fa!important;font-size:10px!important;line-height:1.25!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
+body.nilo-v33-exact .topbar-actions{display:flex!important;align-items:center!important;justify-content:flex-end!important;gap:9px!important;flex-wrap:nowrap!important;flex:0 0 auto!important}
+body.nilo-v33-exact .desktop-mode-chip{min-height:44px!important;padding:0 14px!important;border-radius:10px!important;border:1px solid #dfeadf!important;background:#f8fff9!important;color:#327154!important;-webkit-text-fill-color:#327154!important;display:inline-flex!important;align-items:center!important;font-size:10px!important;font-weight:900!important;white-space:nowrap!important}
+body.nilo-v33-exact .topbar .btn{min-height:44px!important;border-radius:10px!important;padding:0 14px!important;font-size:11px!important;font-weight:900!important;box-shadow:none!important;transform:none!important;white-space:nowrap!important}
+body.nilo-v33-exact .topbar .btn.secondary{background:transparent!important;border:1px solid rgba(255,255,255,.30)!important;color:#fff!important;-webkit-text-fill-color:#fff!important}
+body.nilo-v33-exact .topbar .btn.secondary:hover{background:rgba(255,255,255,.07)!important}
+body.nilo-v33-exact .topbar .btn.primary,#quickNewDeliveryBtn{background:linear-gradient(180deg,#ffe227,var(--ap-yellow))!important;border:1px solid #ffe968!important;color:var(--ap-navy)!important;-webkit-text-fill-color:var(--ap-navy)!important;box-shadow:0 7px 18px rgba(255,213,0,.13)!important}
+.ap-top-collapsed-brands{display:none!important;align-items:center;gap:9px;height:48px;flex:0 0 auto}
+.ap-top-collapsed-brands img:first-child{width:112px;height:38px;object-fit:contain}.ap-top-collapsed-brands img:last-child{width:98px;height:34px;object-fit:contain;filter:brightness(0) invert(1)}.ap-top-collapsed-brands span{width:1px;height:34px;background:rgba(255,255,255,.28)}
+body.nilo-v33-exact.ap-menu-collapsed .ap-top-collapsed-brands{display:flex!important}
+body.nilo-v33-exact.ap-menu-collapsed .ap-side-logo{display:none!important}
+.ap-mobile-brand{display:none}
+
+/* ===================== CONTEÚDO / SUPERFÍCIES ===================== */
+body.nilo-v33-exact .filter-panel{margin:12px 16px 0!important;padding:12px 14px!important;border-radius:13px!important;border:1px solid var(--ap-line)!important;background:#fff!important;box-shadow:var(--ap-shadow)!important;color:var(--ap-text)!important}
+body.nilo-v33-exact[data-ap-view="today"] .filter-panel,
+body.nilo-v33-exact[data-ap-view="deliveries"] .filter-panel,
+body.nilo-v33-exact[data-ap-view="scheduled"] .filter-panel,
+body.nilo-v33-exact[data-ap-view="pending"] .filter-panel,
+body.nilo-v33-exact[data-ap-view="cycles"] .filter-panel,
+body.nilo-v33-exact[data-ap-view="route-history"] .filter-panel,
+body.nilo-v33-exact[data-ap-view="odometer"] .filter-panel,
+body.nilo-v33-exact[data-ap-view="settings"] .filter-panel,
+body.nilo-v33-exact[data-ap-view="trash"] .filter-panel,
+body.nilo-v33-exact[data-ap-view="trace"] .filter-panel{display:none!important}
+body.nilo-v33-exact .filter-intro strong{color:var(--ap-text)!important;-webkit-text-fill-color:var(--ap-text)!important}.filter-intro small{color:var(--ap-muted)!important;-webkit-text-fill-color:var(--ap-muted)!important}.filter-icon{background:#edf4ff!important;color:var(--ap-blue)!important}
+body.nilo-v33-exact .filter-fields{gap:8px!important}
+
+body.nilo-v33-exact #view .card,
+body.nilo-v33-exact #view .section-card,
+body.nilo-v33-exact #view .management-panel,
+body.nilo-v33-exact #view .v16-card,
+body.nilo-v33-exact #view .panel,
+body.nilo-v33-exact #view .table-wrap,
+body.nilo-v33-exact #view .settings-side,
+body.nilo-v33-exact #view #settingsContent{
+  background:#fff!important;color:var(--ap-text)!important;border:1px solid var(--ap-line)!important;border-radius:13px!important;box-shadow:var(--ap-shadow)!important
+}
+body.nilo-v33-exact #view :where(h1,h2,h3,h4,strong,b,.cell-title,.v16-card-title strong){color:var(--ap-text)!important;-webkit-text-fill-color:var(--ap-text)!important}
+body.nilo-v33-exact #view :where(p,small,.cell-sub,.muted,.v16-card-title span){color:var(--ap-muted)!important;-webkit-text-fill-color:var(--ap-muted)!important}
+body.nilo-v33-exact #view .section-head{margin-bottom:12px!important}.section-head h2{font-size:15px!important}.section-head p{font-size:10px!important}.section-badge{background:#edf4ff!important;color:var(--ap-blue)!important}
+body.nilo-v33-exact #view .btn{border-radius:9px!important;font-weight:850!important;box-shadow:none!important}
+body.nilo-v33-exact #view .btn.primary{background:linear-gradient(180deg,#1475ff,#0766ef)!important;border:1px solid #0766ef!important;color:#fff!important;-webkit-text-fill-color:#fff!important}
+body.nilo-v33-exact #view .btn.secondary{background:#fff!important;color:#0c4fa8!important;-webkit-text-fill-color:#0c4fa8!important;border:1px solid #cdd9e9!important}
+body.nilo-v33-exact input,body.nilo-v33-exact select,body.nilo-v33-exact textarea{background:#fff!important;color:#092653!important;-webkit-text-fill-color:#092653!important;border:1px solid #d5deea!important;border-radius:9px!important;box-shadow:none!important}
+body.nilo-v33-exact input:focus,body.nilo-v33-exact select:focus,body.nilo-v33-exact textarea:focus{border-color:#5596ef!important;box-shadow:0 0 0 3px rgba(8,105,247,.10)!important}
+body.nilo-v33-exact label{color:#51647e!important;-webkit-text-fill-color:#51647e!important;font-weight:760!important}
+
+/* KPI cards */
+body.nilo-v33-exact #view .operation-pulse-grid,
+body.nilo-v33-exact #view .metrics-grid,
+body.nilo-v33-exact #view .executive-primary-grid{display:grid!important;grid-template-columns:repeat(5,minmax(0,1fr))!important;gap:12px!important;margin:0 0 14px!important}
+body.nilo-v33-exact #view .operation-pulse-card,
+body.nilo-v33-exact #view .metric-card,
+body.nilo-v33-exact #view .executive-metric{min-height:112px!important;border:1px solid var(--ap-line)!important;border-radius:13px!important;background:#fff!important;box-shadow:var(--ap-shadow)!important;color:var(--ap-text)!important;padding:15px!important;display:flex!important;align-items:center!important;gap:13px!important;text-align:left!important}
+body.nilo-v33-exact #view .operation-pulse-card:hover{transform:translateY(-1px)!important}
+body.nilo-v33-exact #view .operation-pulse-icon,
+body.nilo-v33-exact #view .metric-icon,
+body.nilo-v33-exact #view .executive-metric-icon{width:48px!important;height:48px!important;min-width:48px!important;border-radius:11px!important;display:grid!important;place-items:center!important;font-weight:950!important;font-style:normal!important;background:#e8f2ff!important;color:var(--ap-blue)!important;-webkit-text-fill-color:var(--ap-blue)!important}
+body.nilo-v33-exact #view .operation-pulse-card.success .operation-pulse-icon,body.nilo-v33-exact #view .executive-metric.success .executive-metric-icon{background:#e7f8ee!important;color:#16a05d!important;-webkit-text-fill-color:#16a05d!important}
+body.nilo-v33-exact #view .operation-pulse-card.warning .operation-pulse-icon,body.nilo-v33-exact #view .executive-metric.warning .executive-metric-icon{background:#fff4e3!important;color:#ff8a00!important;-webkit-text-fill-color:#ff8a00!important}
+body.nilo-v33-exact #view .operation-pulse-card.danger .operation-pulse-icon,body.nilo-v33-exact #view .executive-metric.danger .executive-metric-icon{background:#ffebe8!important;color:#ef3f34!important;-webkit-text-fill-color:#ef3f34!important}
+body.nilo-v33-exact #view .operation-pulse-card.focus .operation-pulse-icon{background:#e8f2ff!important;color:#0067f6!important;-webkit-text-fill-color:#0067f6!important}
+body.nilo-v33-exact #view .operation-pulse-copy{display:flex!important;flex-direction:column!important;gap:2px!important;min-width:0!important}.operation-pulse-copy small{font-size:10px!important;font-weight:850!important;color:#3a4d67!important;-webkit-text-fill-color:#3a4d67!important}.operation-pulse-copy strong{font-size:24px!important;line-height:1!important;font-weight:950!important;color:var(--ap-text)!important;-webkit-text-fill-color:var(--ap-text)!important}.operation-pulse-copy em{font-size:9px!important;font-style:normal!important;color:#718096!important;-webkit-text-fill-color:#718096!important}
+body.nilo-v33-exact #view .metric-value,body.nilo-v33-exact #view .executive-metric strong{font-size:23px!important;font-weight:950!important;color:var(--ap-text)!important;-webkit-text-fill-color:var(--ap-text)!important}
+
+/* Hero: no pacote aprovado o título já está no topo. Mantemos apenas avisos operacionais relevantes. */
+body.nilo-v33-exact #view .hero-strip,
+body.nilo-v33-exact #view .cycle-hero,
+body.nilo-v33-exact #view .mileage-hero,
+body.nilo-v33-exact #view .route-history-hero,
+body.nilo-v33-exact #view .trash-hero,
+body.nilo-v33-exact #view .v11-dashboard-hero{background:#fff!important;color:var(--ap-text)!important;border:1px solid var(--ap-line)!important;border-radius:13px!important;box-shadow:var(--ap-shadow)!important}
+body.nilo-v33-exact[data-ap-view="dashboard"] #view .v11-dashboard-hero,
+body.nilo-v33-exact[data-ap-view="cycles"] #view .cycle-hero,
+body.nilo-v33-exact[data-ap-view="odometer"] #view .mileage-hero{display:none!important}
+body.nilo-v33-exact #view .v11-operation-hero{display:none!important}
+body.nilo-v33-exact #view .v11-operation-hero.closed-day{display:flex!important;background:linear-gradient(100deg,#fff7dc,#fff)!important;border:1px solid #f2d677!important;border-radius:12px!important;box-shadow:none!important;padding:12px 14px!important;margin:0 0 12px!important;color:var(--ap-text)!important}
+body.nilo-v33-exact #view .v11-operation-hero.closed-day *{color:var(--ap-text)!important;-webkit-text-fill-color:var(--ap-text)!important}
+
+/* Próxima ação: cartão azul-marinho igual ao aprovado */
+body.nilo-v33-exact #view .next-best-action{display:grid!important;grid-template-columns:58px minmax(0,1fr) auto!important;align-items:center!important;gap:14px!important;padding:16px 18px!important;margin:0 0 14px!important;border-radius:13px!important;background:linear-gradient(125deg,#032958,#07559b)!important;border:1px solid rgba(0,0,0,.03)!important;box-shadow:var(--ap-shadow)!important;color:#fff!important}
+body.nilo-v33-exact #view .next-best-action *{color:#fff!important;-webkit-text-fill-color:#fff!important}.next-best-icon{width:48px!important;height:48px!important;border-radius:10px!important;background:#f3f9c9!important;color:#527100!important;-webkit-text-fill-color:#527100!important;display:grid!important;place-items:center!important;font-weight:950!important}.next-best-copy>span{font-size:9px!important;font-weight:950!important;letter-spacing:.06em!important}.next-best-copy h3{font-size:17px!important;margin:3px 0 2px!important}.next-best-copy p{font-size:10px!important;opacity:.9}.next-best-action .btn.primary{min-width:180px!important;background:linear-gradient(180deg,#1681ff,#0067ef)!important;border:0!important}
+
+/* Seções da central */
+body.nilo-v33-exact #view .v11-separated-section{display:grid!important;grid-template-columns:44px minmax(0,1fr)!important;gap:10px!important;align-items:start!important;margin:0 0 13px!important}.v11-section-number{width:44px!important;height:44px!important;border-radius:11px!important;background:linear-gradient(180deg,#ffe533,var(--ap-yellow))!important;color:var(--ap-navy)!important;-webkit-text-fill-color:var(--ap-navy)!important;display:grid!important;place-items:center!important;font-size:17px!important;font-weight:950!important;border:0!important}.v11-section-card{padding:15px!important}
+
+/* Cards de entrega / linha do tempo */
+body.nilo-v33-exact #view .v11-delivery-grid{gap:12px!important}
+body.nilo-v33-exact #view .v11-delivery-card{overflow:hidden!important;border-radius:13px!important;border:1px solid #cfdbe8!important;background:#fff!important;box-shadow:none!important}
+body.nilo-v33-exact #view .v11-delivery-head{background:#fff!important;border-bottom:1px solid #e1e8f1!important;padding:14px!important}
+body.nilo-v33-exact #view .journey-timeline{background:#263f4d!important;padding:13px 12px!important;margin:0!important;border-radius:0!important}.journey-timeline:before{background:#b7c7ca!important}.journey-step-copy small,.journey-step-copy strong{color:#fff!important;-webkit-text-fill-color:#fff!important}.journey-dot{background:#edf4ee!important;border-color:#c7d5cb!important;color:#6f8276!important;-webkit-text-fill-color:#6f8276!important}.journey-step.done .journey-dot{background:#edf8ef!important;border-color:#7dbd8f!important;color:#4d9d63!important;-webkit-text-fill-color:#4d9d63!important}.journey-step.active .journey-dot{background:#f7ffd2!important;border-color:#a9c626!important;color:#5f7700!important;-webkit-text-fill-color:#5f7700!important;box-shadow:0 0 0 4px rgba(255,213,0,.11)!important}
+body.nilo-v33-exact #view .v11-delivery-insights{background:#263f4d!important;padding:0 12px 12px!important;gap:8px!important}.v11-delivery-insights>div{background:#fff!important;border:0!important;border-radius:9px!important;padding:9px!important}.v11-delivery-insights small{color:#7b8895!important;-webkit-text-fill-color:#7b8895!important}.v11-delivery-insights strong{color:var(--ap-text)!important;-webkit-text-fill-color:var(--ap-text)!important}
+body.nilo-v33-exact #view .v11-next-action{margin:0 12px 11px!important;border-radius:10px!important}.v11-more-actions{border-top:1px solid #e2e8ef!important;background:#fff!important}
+
+/* Tabelas */
+body.nilo-v33-exact #view .table-wrap{overflow:auto!important;border-radius:12px!important}
+body.nilo-v33-exact #view table{width:100%!important;border-collapse:collapse!important;background:#fff!important}
+body.nilo-v33-exact #view th{background:#f7f9fc!important;color:#54657b!important;-webkit-text-fill-color:#54657b!important;border-bottom:1px solid var(--ap-line)!important;font-size:9px!important;font-weight:900!important;text-transform:uppercase!important;letter-spacing:.02em!important;padding:10px!important}
+body.nilo-v33-exact #view td{background:#fff!important;color:#17335c!important;-webkit-text-fill-color:#17335c!important;border-bottom:1px solid #edf1f6!important;padding:10px!important;font-size:10px!important}.table-wrap tbody tr:hover td{background:#fbfdff!important}
+.badge{border-radius:999px!important;font-weight:850!important}.badge.green{background:#eaf8ef!important;color:#1a944f!important;-webkit-text-fill-color:#1a944f!important}.badge.yellow{background:#fff5df!important;color:#e58a00!important;-webkit-text-fill-color:#e58a00!important}.badge.red{background:#ffecea!important;color:#e94339!important;-webkit-text-fill-color:#e94339!important}.badge.blue{background:#eaf2ff!important;color:#0870ee!important;-webkit-text-fill-color:#0870ee!important}.badge.purple{background:#f1eaff!important;color:#774ce8!important;-webkit-text-fill-color:#774ce8!important}.badge.gray{background:#f0f3f7!important;color:#65758a!important;-webkit-text-fill-color:#65758a!important}
+
+/* Painéis analíticos */
+body.nilo-v33-exact #view .management-panel-grid{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:12px!important;margin:0 0 12px!important}.management-panel{padding:14px!important}.management-panel-head>span{width:38px!important;height:38px!important;border-radius:10px!important;background:#edf4ff!important;color:var(--ap-blue)!important;-webkit-text-fill-color:var(--ap-blue)!important}.management-row{border-color:#edf1f6!important}.management-row>strong{font-size:13px!important}
+body.nilo-v33-exact[data-ap-view="dashboard"] #view{padding-top:12px!important}
+body.nilo-v33-exact[data-ap-view="dashboard"] .filter-panel,
+body.nilo-v33-exact[data-ap-view="reports"] .filter-panel,
+body.nilo-v33-exact[data-ap-view="neighborhoods"] .filter-panel,
+body.nilo-v33-exact[data-ap-view="costs"] .filter-panel{display:flex!important}
+
+/* Entregas: painel de busca/lançamento com cara da tela aprovada */
+body.nilo-v33-exact #view .delivery-search-panel{display:grid!important;grid-template-columns:1.15fr 1fr 1fr 1.15fr auto!important;gap:8px!important;align-items:end!important;padding:14px!important;margin:0 0 12px!important;background:#fff!important;border:1px solid var(--ap-line)!important;border-radius:13px!important;box-shadow:var(--ap-shadow)!important}.delivery-search-intro{align-self:center!important}.delivery-search-intro strong{font-size:13px!important;color:var(--ap-text)!important;-webkit-text-fill-color:var(--ap-text)!important}.delivery-search-intro small{display:block!important;margin-top:2px!important;color:var(--ap-muted)!important;-webkit-text-fill-color:var(--ap-muted)!important;font-size:9px!important}
+
+/* Ciclos / rotas */
+body.nilo-v33-exact[data-ap-view="cycles"] #view .metrics-grid{grid-template-columns:repeat(4,minmax(0,1fr))!important}
+body.nilo-v33-exact #view .cycle-card,body.nilo-v33-exact #view .route-history-card{background:#fff!important;border:1px solid var(--ap-line)!important;border-radius:13px!important;box-shadow:var(--ap-shadow)!important}
+body.nilo-v33-exact #view .v24-route-planner{background:#fff!important;border:1px solid var(--ap-line)!important;border-radius:13px!important;box-shadow:var(--ap-shadow)!important;padding:14px!important}.v24-map-frame{border-radius:12px!important;border-color:#d7e0eb!important}.v24-route-summary>div{background:#fff!important;border-color:#e0e7ef!important}.v24-stop{border-color:#e0e7ef!important}.v24-stop>span{background:var(--ap-blue)!important}
+
+/* Quilometragem */
+body.nilo-v33-exact[data-ap-view="odometer"] #view .metrics-grid{grid-template-columns:repeat(4,minmax(0,1fr))!important}
+body.nilo-v33-exact #view .odometer-card,body.nilo-v33-exact #view .mileage-card{background:#fff!important;border:1px solid var(--ap-line)!important;border-radius:13px!important;box-shadow:var(--ap-shadow)!important}
+
+/* Configurações / administração */
+body.nilo-v33-exact #view .settings-tabs{display:flex!important;gap:7px!important;flex-wrap:wrap!important;margin:0 0 12px!important}.settings-tabs .tab-btn{min-height:34px!important;padding:0 13px!important;border:1px solid #cfd9e6!important;border-radius:9px!important;background:#263f4d!important;color:#fff!important;-webkit-text-fill-color:#fff!important;font-size:10px!important;font-weight:850!important}.settings-tabs .tab-btn.active{background:linear-gradient(180deg,#8e701b,#6f5713)!important;border-color:#8a6b13!important;color:#fff!important;-webkit-text-fill-color:#fff!important}
+body.nilo-v33-exact #view .settings-grid{display:grid!important;grid-template-columns:290px minmax(0,1fr)!important;gap:12px!important}.settings-side{padding:16px!important}.settings-stat{border-color:#e5ebf2!important}.settings-stat span{color:#35506f!important;-webkit-text-fill-color:#35506f!important}.settings-stat strong{color:var(--ap-text)!important;-webkit-text-fill-color:var(--ap-text)!important}
+body.nilo-v33-exact #view #settingsContent{padding:16px!important}
+
+/* Modais genéricos */
+body.nilo-v33-exact .modal-wrap{background:rgba(2,18,43,.48)!important;backdrop-filter:blur(3px)!important}.modal{border-radius:15px!important;border:1px solid #dce5ef!important;background:#fff!important;box-shadow:0 24px 70px rgba(2,18,43,.25)!important}.modal-head{background:linear-gradient(105deg,var(--ap-navy),#074783)!important;color:#fff!important}.modal-head h2,.modal-head p,.modal-kicker{color:#fff!important;-webkit-text-fill-color:#fff!important}.close-modal{color:#fff!important;border-color:rgba(255,255,255,.2)!important;background:rgba(255,255,255,.06)!important}
+
+/* Registrar compra no desktop: página visual, não caixa flutuante */
+body.nilo-v33-exact .modal-wrap.ap-register-wrap{position:fixed!important;top:var(--ap-topbar)!important;left:var(--ap-sidebar)!important;right:0!important;bottom:0!important;width:auto!important;height:auto!important;padding:0!important;background:var(--ap-bg)!important;backdrop-filter:none!important;display:block!important;z-index:125!important;overflow:auto!important}
+body.nilo-v33-exact.ap-menu-collapsed .modal-wrap.ap-register-wrap{left:var(--ap-sidebar-collapsed)!important}
+body.nilo-v33-exact .modal-wrap.ap-register-wrap.hidden{display:none!important}
+body.nilo-v33-exact .ap-register-wrap .modal{width:100%!important;max-width:none!important;min-height:100%!important;max-height:none!important;margin:0!important;border:0!important;border-radius:0!important;background:var(--ap-bg)!important;box-shadow:none!important;overflow:visible!important}
+body.nilo-v33-exact .ap-register-wrap .modal-head{position:sticky!important;top:0!important;z-index:5!important;padding:16px 18px 13px!important;background:var(--ap-bg)!important;border-bottom:0!important;color:var(--ap-text)!important;display:block!important}.ap-register-wrap .modal-head h2{font-size:24px!important;color:var(--ap-text)!important;-webkit-text-fill-color:var(--ap-text)!important;margin:0!important}.ap-register-wrap .modal-head p{font-size:10px!important;color:var(--ap-muted)!important;-webkit-text-fill-color:var(--ap-muted)!important;margin:4px 0 0!important}.ap-register-wrap .modal-kicker{display:none!important}.ap-register-wrap .close-modal{position:absolute!important;right:18px!important;top:18px!important;color:#35506f!important;background:#fff!important;border:1px solid #d4deea!important}.ap-register-stepper{display:grid!important;grid-template-columns:repeat(5,minmax(0,1fr))!important;gap:6px!important;max-width:720px!important;margin-top:12px!important}.ap-register-stepper span{display:flex!important;align-items:center!important;gap:6px!important;color:#6d7b90!important;font-size:9px!important;font-weight:850!important;white-space:nowrap!important}.ap-register-stepper b{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:#dfe6ef;color:#4a5d76;font-size:10px}.ap-register-stepper span:first-child b{background:var(--ap-yellow);color:var(--ap-navy)}
+body.nilo-v33-exact .ap-register-wrap #modalBody{padding:0 18px 20px!important}.ap-register-wrap #quickDeliveryForm{display:grid!important;grid-template-columns:repeat(12,minmax(0,1fr))!important;gap:12px!important;align-items:start!important}.ap-register-wrap #quickDeliveryForm>.previous-purchase-banner{grid-column:1/-1!important}.ap-register-wrap #quickDeliveryForm>.quick-step-card{margin:0!important;padding:14px!important;background:#fff!important;border:1px solid var(--ap-line)!important;border-radius:13px!important;box-shadow:var(--ap-shadow)!important}.ap-register-wrap #quickDeliveryForm>.quick-step-card:nth-of-type(1){grid-column:1/5!important}.ap-register-wrap #quickDeliveryForm>.v28-quick-type-step{grid-column:5/9!important}.ap-register-wrap #quickDeliveryForm>.quick-step-card:nth-of-type(3){grid-column:9/13!important}.ap-register-wrap #quickDeliveryForm>.quick-step-card:nth-of-type(4){grid-column:9/13!important}.ap-register-wrap #quickDeliveryForm>.quick-step-card:nth-of-type(n+5){grid-column:1/-1!important}.ap-register-wrap .quick-step-head{display:flex!important;gap:8px!important;align-items:flex-start!important;margin-bottom:11px!important}.ap-register-wrap .quick-step-head>span{width:25px!important;height:25px!important;min-width:25px!important;border-radius:8px!important;background:#edf4ff!important;color:var(--ap-blue)!important;-webkit-text-fill-color:var(--ap-blue)!important;display:grid!important;place-items:center!important;font-size:10px!important;font-weight:950!important}.ap-register-wrap .quick-step-head strong{font-size:13px!important;color:var(--ap-text)!important;-webkit-text-fill-color:var(--ap-text)!important}.ap-register-wrap .quick-step-head small{font-size:8px!important;color:var(--ap-muted)!important;-webkit-text-fill-color:var(--ap-muted)!important}.ap-register-wrap .quick-entry-grid{gap:8px!important}.ap-register-wrap .v27-type-options{display:grid!important;grid-template-columns:1fr 1fr!important;gap:8px!important}.ap-register-wrap .v27-type-option{min-height:58px!important;border:1px solid #cfd9e7!important;border-radius:10px!important;background:#fff!important;padding:9px!important}.ap-register-wrap .v27-type-option.selected{border-color:var(--ap-blue)!important;background:#f6faff!important;box-shadow:0 0 0 2px rgba(8,105,247,.08)!important}.ap-register-wrap .v27-type-option strong{color:var(--ap-text)!important;-webkit-text-fill-color:var(--ap-text)!important}.ap-register-wrap .v26-large-controls{background:#fff9e9!important;border:1px solid #f0d48a!important;border-radius:10px!important;padding:10px!important}.ap-register-wrap .v27-trip-flow{margin-top:8px!important}.ap-register-wrap .v27-trip-card{background:#fff!important;border:1px solid #dfe6ee!important;border-radius:9px!important}.ap-register-wrap .form-actions{grid-column:1/-1!important;position:sticky!important;bottom:0!important;background:rgba(244,247,251,.96)!important;border-top:1px solid #e1e7ef!important;padding:12px 0 0!important;z-index:3!important}
+
+/* ===================== MOBILE APROVADO ===================== */
+.ap-mobile-dock,.ap-mobile-register{display:none}
+@media(max-width:1100px) and (min-width:901px){
+  :root{--ap-sidebar:220px}
+  body.nilo-v33-exact .topbar{padding-left:14px!important;padding-right:14px!important}.ap-greeting{font-size:15px!important}body.nilo-v33-exact .topbar h1{font-size:20px!important}.topbar-actions{gap:6px!important}.topbar .btn{padding-left:10px!important;padding-right:10px!important}.desktop-mode-chip{padding:0 10px!important}
+  body.nilo-v33-exact #view .operation-pulse-grid,body.nilo-v33-exact #view .metrics-grid,body.nilo-v33-exact #view .executive-primary-grid{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+}
+
+@media(max-width:900px){
+  :root{--ap-topbar:190px}
+  html,body{background:var(--ap-navy)!important}
+  body.nilo-v33-exact{background:linear-gradient(180deg,#031b43,#063675 62%,#042653)!important;padding-bottom:86px!important}
+  body.nilo-v33-exact .app-shell{display:block!important;width:100%!important;min-height:100vh!important;background:transparent!important}
+  body.nilo-v33-exact .main-content{width:100%!important;background:transparent!important}
+  body.nilo-v33-exact .sidebar{position:fixed!important;left:-286px!important;top:0!important;bottom:0!important;width:270px!important;min-width:270px!important;max-width:270px!important;height:100dvh!important;z-index:1600!important;transition:left .2s ease!important;box-shadow:20px 0 50px rgba(0,0,0,.26)!important}
+  body.nilo-v33-exact .sidebar.open{left:0!important}
+  body.nilo-v33-exact.ap-menu-collapsed .sidebar{width:270px!important;min-width:270px!important;max-width:270px!important}
+  body.nilo-v33-exact .sidebar-overlay{display:block!important;position:fixed!important;inset:0!important;background:rgba(1,15,36,.58)!important;z-index:1550!important;opacity:0!important;pointer-events:none!important;transition:.2s ease!important}.sidebar-overlay.open{opacity:1!important;pointer-events:auto!important}
+  body.nilo-v33-exact .ap-side-logo img{width:150px!important}.ap-triela-box{display:grid!important}.ap-mascot{display:block!important}.ap-status-card{display:flex!important}
+
+  body.nilo-v33-exact .topbar{position:relative!important;top:auto!important;min-height:190px!important;padding:15px 18px 20px!important;background:linear-gradient(145deg,#031b43,#073e7f)!important;display:block!important;border-bottom:0!important}
+  body.nilo-v33-exact .ap-desktop-toggle{display:none!important}
+  body.nilo-v33-exact .topbar-title{display:none!important}
+  body.nilo-v33-exact .topbar-actions{display:none!important}
+  .ap-mobile-brand{display:block!important}
+  .ap-mobile-brand-row{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:12px!important}.ap-mobile-brand-logos{display:flex!important;align-items:center!important;gap:15px!important;min-width:0!important}.ap-mobile-brand-logos img.ap-mobile-nilo{width:145px!important;height:48px!important;object-fit:contain!important}.ap-mobile-brand-sep{width:1px;height:42px;background:rgba(255,255,255,.35)}.ap-mobile-brand-logos img.ap-mobile-triela{width:125px!important;height:46px!important;object-fit:contain!important;filter:brightness(0) invert(1)!important}.ap-mobile-tools{display:flex!important;align-items:center!important;gap:10px!important}.ap-mobile-bell{font-size:26px!important;color:#fff}.ap-mobile-avatar{width:46px;height:46px;border-radius:50%;border:3px solid var(--ap-yellow);background:#fff;object-fit:contain;padding:2px}.ap-mobile-greeting{margin-top:17px!important}.ap-mobile-greeting strong{display:block!important;color:#fff!important;font-size:28px!important;line-height:1.05!important;font-weight:950!important;letter-spacing:-.02em!important}.ap-mobile-greeting span{display:block!important;margin-top:5px!important;color:#fff!important;font-size:15px!important}.ap-mobile-greeting small{display:block!important;margin-top:5px!important;color:#d8e6f8!important;font-size:12px!important}.ap-mobile-greeting small:before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:#14cf7b;margin-right:6px}
+
+  body.nilo-v33-exact .filter-panel{margin:10px!important;display:none!important}
+  body.nilo-v33-exact #view{padding:12px 10px 125px!important;background:transparent!important}
+  body.nilo-v33-exact #view .v11-operation-hero.closed-day{margin:0 0 10px!important}
+  body.nilo-v33-exact #view .operation-pulse-grid,body.nilo-v33-exact #view .metrics-grid,body.nilo-v33-exact #view .executive-primary-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:9px!important;margin-bottom:10px!important}.operation-pulse-card,.metric-card,.executive-metric{min-height:126px!important;padding:13px!important;display:block!important}.operation-pulse-icon,.metric-icon,.executive-metric-icon{width:42px!important;height:42px!important;min-width:42px!important;margin-bottom:10px!important}.operation-pulse-copy strong{font-size:24px!important}.operation-pulse-copy small{font-size:10px!important}.operation-pulse-copy em{font-size:9px!important}
+  body.nilo-v33-exact #view .next-best-action{grid-template-columns:48px minmax(0,1fr)!important;gap:10px!important;padding:15px!important;margin-bottom:10px!important}.next-best-action .btn{grid-column:1/-1!important;width:100%!important;min-height:48px!important}.next-best-copy h3{font-size:19px!important}.next-best-copy p{font-size:12px!important}
+  body.nilo-v33-exact #view .v11-separated-section{display:block!important;margin-bottom:10px!important}.v11-section-number{display:none!important}.v11-section-card{padding:12px!important}
+  body.nilo-v33-exact #view .v11-delivery-grid{grid-template-columns:1fr!important}.journey-timeline{overflow-x:auto!important}.v11-delivery-insights{grid-template-columns:repeat(2,1fr)!important}
+  body.nilo-v33-exact #view .management-panel-grid{grid-template-columns:1fr!important}.settings-grid{grid-template-columns:1fr!important}.settings-side{display:none!important}.settings-tabs{overflow-x:auto!important;flex-wrap:nowrap!important;padding-bottom:4px!important}.settings-tabs .tab-btn{flex:0 0 auto!important}
+  body.nilo-v33-exact #view .delivery-search-panel{grid-template-columns:1fr!important}.delivery-search-intro{margin-bottom:3px!important}
+  body.nilo-v33-exact #view .table-wrap{overflow:auto!important}
+
+  .ap-mobile-dock{display:grid!important;grid-template-columns:repeat(5,1fr)!important;position:fixed!important;left:10px!important;right:10px!important;bottom:8px!important;z-index:2000!important;background:linear-gradient(180deg,#052654,#062f68)!important;border:1px solid rgba(255,255,255,.12)!important;border-radius:24px!important;padding:8px 4px max(8px,env(safe-area-inset-bottom))!important;box-shadow:0 14px 45px rgba(0,0,0,.26)!important}.ap-mobile-dock button{border:0!important;background:transparent!important;color:#eef5ff!important;-webkit-text-fill-color:#eef5ff!important;display:grid!important;place-items:center!important;gap:4px!important;min-height:56px!important;font-size:10px!important;font-weight:800!important}.ap-mobile-dock button svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.ap-mobile-dock button.active{color:var(--ap-yellow)!important;-webkit-text-fill-color:var(--ap-yellow)!important}.ap-mobile-register{display:flex!important;align-items:center!important;justify-content:center!important;gap:7px!important;position:fixed!important;z-index:2001!important;left:50%!important;bottom:76px!important;transform:translateX(-50%)!important;border:0!important;border-radius:999px!important;background:linear-gradient(180deg,#ffe32b,var(--ap-yellow))!important;color:var(--ap-navy)!important;-webkit-text-fill-color:var(--ap-navy)!important;font-weight:950!important;font-size:14px!important;padding:14px 22px!important;box-shadow:0 11px 28px rgba(255,213,0,.28)!important;white-space:nowrap!important}
+  body.nilo-v33-exact .mobile-app-dock{display:none!important}
+
+  /* registrar compra mobile aprovado */
+  body.nilo-v33-exact .modal-wrap.ap-register-wrap{position:fixed!important;inset:0!important;width:100%!important;height:100dvh!important;background:#f7f9fc!important;padding:0!important;z-index:2200!important;overflow:auto!important}.ap-register-wrap .modal{width:100%!important;min-height:100dvh!important;background:#f7f9fc!important}.ap-register-wrap .modal-head{position:relative!important;top:auto!important;padding:17px 16px 18px!important;background:linear-gradient(145deg,#031b43,#073e7f)!important;color:#fff!important}.ap-register-wrap .modal-head h2{color:#fff!important;-webkit-text-fill-color:#fff!important;font-size:24px!important;padding-left:45px!important}.ap-register-wrap .modal-head p{color:#dce8fa!important;-webkit-text-fill-color:#dce8fa!important;font-size:12px!important;padding-left:45px!important}.ap-register-wrap .close-modal{left:15px!important;right:auto!important;top:17px!important;color:#fff!important;background:rgba(255,255,255,.05)!important;border-color:rgba(255,255,255,.18)!important}.ap-register-stepper{margin-top:18px!important;max-width:none!important;grid-template-columns:repeat(5,1fr)!important;gap:3px!important}.ap-register-stepper span{display:grid!important;place-items:center!important;gap:6px!important;color:#fff!important;font-size:9px!important;text-align:center!important}.ap-register-stepper b{width:34px!important;height:34px!important;font-size:13px!important}.ap-register-wrap #modalBody{padding:12px 10px 120px!important}.ap-register-wrap #quickDeliveryForm{display:block!important}.ap-register-wrap #quickDeliveryForm>.quick-step-card{margin:0 0 10px!important;padding:13px!important}.ap-register-wrap #quickDeliveryForm>.previous-purchase-banner{margin-bottom:10px!important}.ap-register-wrap .v27-type-options{grid-template-columns:1fr 1fr!important}.ap-register-wrap .v26-large-controls{background:#fff8df!important}.ap-register-wrap .v27-trip-flow{display:grid!important;grid-template-columns:repeat(3,1fr)!important;gap:7px!important}.ap-register-wrap .v27-trip-card{min-width:0!important}.ap-register-wrap .form-actions{position:fixed!important;left:10px!important;right:10px!important;bottom:78px!important;padding:0!important;border:0!important;background:transparent!important;z-index:2300!important}.ap-register-wrap .form-actions .btn.primary{width:100%!important;min-height:58px!important;border-radius:12px!important;background:linear-gradient(180deg,#ffe32b,var(--ap-yellow))!important;color:var(--ap-navy)!important;-webkit-text-fill-color:var(--ap-navy)!important;font-size:17px!important}.ap-register-wrap .form-actions .btn.secondary{display:none!important}
+}
+
+@media(max-width:560px){
+  .ap-mobile-brand-logos{gap:9px!important}.ap-mobile-brand-logos img.ap-mobile-nilo{width:120px!important}.ap-mobile-brand-logos img.ap-mobile-triela{width:100px!important}.ap-mobile-brand-sep{height:36px!important}.ap-mobile-avatar{width:42px;height:42px}.ap-mobile-bell{font-size:22px!important}.ap-mobile-greeting strong{font-size:25px!important}
+  body.nilo-v33-exact #view .operation-pulse-grid,body.nilo-v33-exact #view .metrics-grid,body.nilo-v33-exact #view .executive-primary-grid{grid-template-columns:1fr 1fr!important}.ap-register-wrap .v27-trip-flow{grid-template-columns:1fr!important}
+}
