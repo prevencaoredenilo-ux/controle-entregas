@@ -1,0 +1,21 @@
+NILO ENTREGAS — V35.0 ARTES APROVADAS EXATAS
+
+Objetivo:
+Reproduzir a identidade e a composição das artes finais aprovadas, mantendo e melhorando todas as funções.
+
+Principais correções:
+- menu lateral simplificado e alinhado às artes;
+- Central sem título duplicado dentro do conteúdo;
+- mapa da Central no mesmo padrão visual da arte;
+- Novo ciclo e Encerrar ciclo acessíveis na própria Central;
+- Chegada ao cliente mantida como marco separado;
+- Entregas & Programadas no padrão aprovado;
+- Ciclos & Rotas com Levadas / Entregues / Voltaram / Tempo;
+- resumo de devolvidas completo;
+- KM/Frota preservado com imagens e botões funcionais;
+- Análises com filtro por Dia/Semana/Mês/Personalizado + Entregador + Bairro;
+- relatório pronto atual mantido + relatório personalizado adicional;
+- Administração reorganizada no mesmo padrão visual das artes;
+- mobile preservado.
+
+Não substitui app.js, V31, V24 ou public-sync.

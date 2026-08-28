@@ -1,18 +1,18 @@
 /**
- * NILO ENTREGAS • V34.0.0 • FINAL APROVADA
+ * NILO ENTREGAS • V35.0.0 • ARTES APROVADAS EXATAS
  * ------------------------------------------------------------
  * Implementa o pacote visual aprovado (desktop + mobile) sem
  * gravar dados, sem alterar IndexedDB/Supabase e sem remover ações.
  */
 (() => {
   'use strict';
-  const VERSION = '34.0.0';
+  const VERSION = '35.0.0';
   const q = (s,r=document) => r.querySelector(s);
   const qa = (s,r=document) => [...r.querySelectorAll(s)];
   const A = {
-    nilo:'logo-nilo-aprovada.png?v=34.0.0',
-    triela:'logo-triela-aprovada.png?v=34.0.0',
-    mascot:'mascote-nilo-aprovado.png?v=34.0.0'
+    nilo:'logo-nilo-aprovada.png?v=35.0.0',
+    triela:'logo-triela-aprovada.png?v=35.0.0',
+    mascot:'mascote-nilo-aprovado.png?v=35.0.0'
   };
 
   const icons = {
@@ -84,37 +84,27 @@
   }
 
   function organizeNav(){
-    const nav=q('#mainNav'); if(!nav || nav.dataset.apExact==='1') return;
+    const nav=q('#mainNav'); if(!nav || nav.dataset.apExact==='2') return;
     const buttons=qa('.nav-item',nav); if(!buttons.length) return;
     const byView=new Map(buttons.map(b=>[b.dataset.view,b]));
     buttons.forEach(b=>{
-      const v=b.dataset.view;
-      const lab=menuLabel(b); if(lab && labelMap[v]) setText(lab,labelMap[v]);
+      const v=b.dataset.view; const lab=menuLabel(b);
+      const visibleLabels={today:'Central de Operação',deliveries:'Entregas',cycles:'Roteirização',trace:'Pesquisar entregas',dashboard:'Desempenho',reports:'Relatórios',odometer:'Quilometragem & Frota',settings:'Administração & Cadastros'};
+      if(lab && visibleLabels[v]) setText(lab,visibleLabels[v]);
       const ico=q('.nav-ico',b); if(ico && icons[v]) ico.innerHTML=icons[v];
-      b.title=labelMap[v]||lab?.textContent||v||'Menu'; b.remove();
+      b.title=visibleLabels[v]||labelMap[v]||lab?.textContent||v||'Menu'; b.remove();
     });
-    qa('.nav-caption',nav).forEach(x=>x.remove());
-    nav.textContent='';
-
+    qa('.nav-caption',nav).forEach(x=>x.remove()); nav.textContent='';
     const op=group('OPERAÇÃO');
-    ['today'].forEach(v=>{const b=byView.get(v);if(b)op.appendChild(b)});
-    const deliveryCombo=combo('ENTREGAS & PROGRAMAÇÕES',['deliveries','scheduled','pending'],byView,'compact-box'); if(deliveryCombo.querySelector('.nav-item'))op.appendChild(deliveryCombo);
-    const routeCombo=combo('ROTAS, CICLOS & KM',['cycles','route-history','odometer'],byView,'compact-box'); if(routeCombo.querySelector('.nav-item'))op.appendChild(routeCombo);
-    const trace=byView.get('trace'); if(trace)op.appendChild(trace);
-    nav.appendChild(op);
-
+    ['today','deliveries','cycles','trace'].forEach(v=>{const b=byView.get(v);if(b)op.appendChild(b)});nav.appendChild(op);
     const an=group('ANÁLISES');
-    ['dashboard','reports','neighborhoods','costs'].forEach(v=>{const b=byView.get(v);if(b)an.appendChild(b)}); if(an.querySelector('.nav-item'))nav.appendChild(an);
-
+    ['dashboard','reports','odometer'].forEach(v=>{const b=byView.get(v);if(b)an.appendChild(b)});nav.appendChild(an);
     const ad=group('ADMINISTRAÇÃO');
-    ['settings','trash'].forEach(v=>{const b=byView.get(v);if(b)ad.appendChild(b)}); if(ad.querySelector('.nav-item'))nav.appendChild(ad);
-
-    const used=new Set(['today','deliveries','scheduled','pending','cycles','route-history','odometer','trace','dashboard','reports','neighborhoods','costs','settings','trash']);
-    const remaining=buttons.filter(b=>!used.has(b.dataset.view)); if(remaining.length){const other=group('OUTROS');remaining.forEach(b=>other.appendChild(b));nav.appendChild(other)}
-
-    const mode=q('.mode-card');
-    if(mode){mode.remove(); const train=group('TREINAMENTO','ap-training-wrap'); train.appendChild(mode); nav.appendChild(train)}
-    nav.dataset.apExact='1';
+    ['settings'].forEach(v=>{const b=byView.get(v);if(b)ad.appendChild(b)});nav.appendChild(ad);
+    const hidden=document.createElement('div');hidden.className='ap-nav-hidden';
+    ['scheduled','pending','route-history','neighborhoods','costs','trash'].forEach(v=>{const b=byView.get(v);if(b)hidden.appendChild(b)});nav.appendChild(hidden);
+    const mode=q('.mode-card');if(mode){mode.remove();const train=group('TREINAMENTO','ap-training-wrap');train.appendChild(mode);nav.appendChild(train)}
+    nav.dataset.apExact='2';
   }
 
   function ensureBottomBranding(){
