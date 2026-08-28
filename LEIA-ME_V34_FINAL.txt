@@ -1,0 +1,25 @@
+NILO ENTREGAS — V34.0 FINAL APROVADA
+
+Implementação baseada nas artes finais aprovadas.
+
+Preserva:
+- app.js 14.8.0
+- operational-fixes-v31.js
+- route-planner-stable-v24.js
+- public-sync.js V32.1
+- Supabase e dados existentes
+- relatórios prontos atuais
+
+Melhora:
+- mesma identidade visual aprovada em todas as abas
+- Central com montar novo ciclo, encerrar ciclo e registrar chegada
+- marco separado Chegada ao cliente
+- filtros por período livre
+- Entregas/Programadas com pesquisa avançada
+- Ciclos/Rotas com ações integradas
+- KM/Frota com cards aprovados e botões reais
+- Análises com filtros por período e gráficos profissionais
+- relatório pronto atual mantido
+- novo montador de relatório personalizado
+- Administração completa, backup, treinamento e lixeira
+- mobile responsivo
