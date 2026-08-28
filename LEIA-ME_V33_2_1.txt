@@ -1,0 +1,29 @@
+NILO ENTREGAS — V33.2.1 • LAYOUT APROVADO RESTAURADO
+
+ESTA É A VOLTA AO ÚLTIMO VISUAL APROVADO (V33/V33.2).
+Não é um novo desenho.
+
+Correções técnicas feitas sem redesenhar:
+- remove a faixa lateral de 152px herdada da V32;
+- menu aberto = 252px e conteúdo começa imediatamente ao lado;
+- menu recolhido = 76px e conteúdo começa imediatamente ao lado;
+- barra superior acompanha a largura útil;
+- Triela correta enviada pelo usuário;
+- mascote de corpo inteiro limpo, na ordem Triela -> mascote -> status;
+- favicon/PWA com mascote de corpo inteiro;
+- remove conflito visual V34;
+- mantém public-sync V32.1, V31 operacional e V24 de rotas.
+
+SUBSTITUIR NA RAIZ DO GITHUB:
+index.html
+public-sync.js
+nilo-approved-v33.js
+sw.js
+manifest.webmanifest
+favicon-v33.png
+
+SUBSTITUIR A PASTA icons:
+icons/icon-192.png
+icons/icon-512.png
+
+Os arquivos V34 podem permanecer no repositório, mas o index desta versão NÃO os carrega.

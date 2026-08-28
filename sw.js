@@ -1,4 +1,4 @@
-const CACHE_NAME = 'controle-entregas-v34-1-menu-mascote';
+const CACHE_NAME = 'controle-entregas-v33-2-1-layout-aprovado';
 const APP_SHELL = [
   './',
   './index.html',
@@ -9,14 +9,11 @@ const APP_SHELL = [
   './public-sync.js?v=32.1.0',
   './route-view-stable-v19.js?v=19.0.0',
   './manifest.webmanifest',
+  './favicon-v33.png?v=33.2.1',
   './route-planner-stable-v24.js?v=24.0.0',
   './nilo-contrast-v28.css?v=28.0.0',
   './operational-fixes-v31.js?v=31.0.0',
-  './nilo-approved-v34.js?v=34.1.0',
-  './nilo-v34.png?v=34.1.0',
-  './triela-v34.png?v=34.1.0',
-  './mascote-v34.png?v=34.1.0',
-  './favicon-v34.png?v=34.1.0',
+  './nilo-approved-v33.js?v=33.2.1',
   './icons/icon-192.png',
   './icons/icon-512.png',
   'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.4'
