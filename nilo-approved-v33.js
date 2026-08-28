@@ -1,18 +1,18 @@
 /**
- * NILO ENTREGAS • V33.5.0 • FINAL APROVADA
+ * NILO ENTREGAS • V33.6.0 • FINAL APROVADA
  * ------------------------------------------------------------
  * Implementa o pacote visual aprovado (desktop + mobile) sem
  * gravar dados, sem alterar IndexedDB/Supabase e sem remover ações.
  */
 (() => {
   'use strict';
-  const VERSION = '33.5.0';
+  const VERSION = '33.6.0';
   const q = (s,r=document) => r.querySelector(s);
   const qa = (s,r=document) => [...r.querySelectorAll(s)];
   const A = {
-    nilo:'logo-nilo-aprovada.png?v=33.5.0',
-    triela:'logo-triela-aprovada.png?v=33.5.0',
-    mascot:'mascote-nilo-aprovado.png?v=33.5.0'
+    nilo:'logo-nilo-aprovada.png?v=33.6.0',
+    triela:'logo-triela-aprovada.png?v=33.6.0',
+    mascot:'mascote-nilo-aprovado.png?v=33.6.0'
   };
 
   const icons = {

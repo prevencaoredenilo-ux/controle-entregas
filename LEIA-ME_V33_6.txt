@@ -1,0 +1,40 @@
+NILO ENTREGAS — V33.6 FUNÇÕES COMPLETAS + VISUAL ATUAL
+
+Objetivo:
+Manter o visual V33 aprovado e recuperar o acesso a todas as funcionalidades do sistema anterior.
+
+Recuperado / reconectado:
+- Encerrar e reabrir operação do dia;
+- checkpoint e tela operacional completa;
+- registrar, editar e consultar custos;
+- categorias de custos;
+- Programadas / Reagendadas completas;
+- Central de Pendências completa;
+- Pesquisa completa de entregas;
+- histórico completo de entregas e ações;
+- montar nova saída;
+- detectar / reutilizar saídas;
+- editar, gerenciar e fechar ciclos;
+- roteiro planejado;
+- histórico REAL de rotas/GPS por período;
+- abrir rotas no Google Maps;
+- abrir / fechar / editar KM por veículo;
+- controle completo de quilometragem;
+- dashboard completo;
+- relatórios completos;
+- análise por bairro;
+- lixeira com restaurar / excluir / esvaziar;
+- cadastros completos: veículos, bairros, colaboradores, categorias de custo, motivos, regras e dados;
+- ambiente de treinamento.
+
+Estratégia:
+As telas aprovadas continuam como VISÃO ATUAL.
+As telas completas do app original ficam acessíveis por uma barra "FUNÇÕES COMPLETAS",
+com o mesmo tema azul-marinho / branco / amarelo.
+
+Segurança:
+- NÃO substitui app.js
+- NÃO substitui operational-fixes-v31.js
+- NÃO substitui route-planner-stable-v24.js
+- NÃO altera a estrutura do Supabase
+- NÃO apaga dados

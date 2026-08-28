@@ -1,0 +1,21 @@
+CHECKLIST V33.6
+[ ] Visual atual preservado
+[ ] Encerrar/Reabrir dia
+[ ] Custos completos
+[ ] Categorias de custo
+[ ] Programadas/Reagendadas
+[ ] Pendências
+[ ] Pesquisa e histórico completo
+[ ] Montar saída
+[ ] Detectar/reutilizar saídas
+[ ] Editar/gerenciar/fechar ciclo
+[ ] Histórico GPS real
+[ ] Google Maps
+[ ] Abrir/Fechar/Editar KM
+[ ] Dashboard completo
+[ ] Relatórios completos
+[ ] Análise por bairro
+[ ] Cadastros completos
+[ ] Lixeira completa
+[ ] Treinamento
+[ ] Backup/sincronização preservados
