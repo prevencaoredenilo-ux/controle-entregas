@@ -1,0 +1,36 @@
+NILO ENTREGAS — V33 VISUAL APROVADA
+===================================
+
+ESTA ATUALIZAÇÃO É VISUAL/ORGANIZACIONAL.
+Ela NÃO substitui app.js, NÃO substitui public-sync.js e NÃO substitui operational-fixes-v31.js.
+
+O QUE ENTRA NA V33
+- Novo padrão visual navy/azul + amarelo + branco.
+- Ícones do menu no padrão aprovado.
+- Menu organizado por OPERAÇÃO, ANÁLISES, ADMINISTRAÇÃO e TREINAMENTO.
+- Funções parecidas agrupadas visualmente, sem excluir nenhum botão original.
+- Menu aberto: Triela fica no bloco inferior do menu e o mascote aparece no menu.
+- Menu recolhido: NILO + Triela continuam no topo.
+- Área interna das abas recebe o mesmo padrão visual, com variações leves de cor.
+- Registrar compra continua acessível no topo, na operação e por atalho no mobile.
+- Modal de Registrar nova compra recebe novo visual e passo a passo, preservando todos os campos e handlers atuais.
+- Mobile recebe navegação inferior: Início, Entregas, Rotas, Relatórios e Mais + atalho Registrar compra.
+
+FUNCIONALIDADES PRESERVADAS
+- Entregas e programadas
+- Entrega normal e entrega grande / múltiplas viagens
+- Ciclos, retornos e relançamento de devolvidas
+- Rotas e histórico de rotas
+- Quilometragem
+- Custos, análises e relatórios
+- Cadastros, lixeira e treinamento
+- Backup automático V32 e sincronização Supabase
+
+PARA ATUALIZAR NO GITHUB
+Substitua SOMENTE:
+1. index.html
+2. sw.js
+3. nilo-approved-v33.js
+
+NÃO substitua app.js, public-sync.js, operational-fixes-v31.js ou o banco.
+Depois aguarde o GitHub Pages atualizar e faça Ctrl+F5 uma vez.

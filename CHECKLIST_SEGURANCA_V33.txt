@@ -1,0 +1,12 @@
+CHECKLIST DE SEGURANÇA — V33
+
+[OK] Não apaga IndexedDB.
+[OK] Não limpa localStorage.
+[OK] Não altera Supabase.
+[OK] Não altera o modelo de dados.
+[OK] Não remove IDs/data-view dos botões originais.
+[OK] Não substitui V31 operacional.
+[OK] Não substitui backup automático V32.
+[OK] Mantém Entrega Grande / múltiplas viagens.
+[OK] Mantém devolvidas e relançamento em novo ciclo.
+[OK] Mantém rotas V24 e análises V19.
