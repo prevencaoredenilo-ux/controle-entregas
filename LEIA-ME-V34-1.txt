@@ -1,0 +1,21 @@
+NILO ENTREGAS — V34.1 AJUSTE MENU + MASCOTE
+
+CORRIGE EXATAMENTE O PRINT:
+- elimina a área branca riscada abaixo do menu;
+- menu azul ocupa toda a altura da tela;
+- ao recolher, fica somente a barra estreita de 76 px;
+- ao abrir, fica com 252 px;
+- conteúdo e barra superior acompanham automaticamente;
+- mascote fica integrado ao menu, sem aquela moldura/quadro aparente;
+- Triela permanece acima do mascote;
+- status permanece abaixo.
+
+NÃO ALTERA:
+dados, Supabase, backup, entregas, ciclos, rotas, relatórios ou V31 operacional.
+
+SUBSTITUA NA RAIZ:
+index.html
+nilo-approved-v34.js
+sw.js
+
+Os demais arquivos V34 permanecem.
