@@ -1,49 +1,24 @@
-const CACHE_NAME = 'controle-entregas-v35-artes-aprovadas-exatas';
-const APP_SHELL = [
-  './',
-  './index.html',
-  './styles.css?v=14.8.0',
-  './nilo-layout-v15.css?v=15.0.0',
-  './ui-stable-v19.css?v=19.0.0',
-  './app.js?v=14.8.0',
-  './public-sync.js?v=32.1.0',
-  './route-view-stable-v19.js?v=19.0.0',
-  './manifest.webmanifest',
-  './favicon-v33.png?v=35.0.0',
-  './route-planner-stable-v24.js?v=24.0.0',
-  './nilo-contrast-v28.css?v=28.0.0',
-  './operational-fixes-v31.js?v=31.0.0',
-  './nilo-approved-v33-exact.css?v=35.0.0',
-  './nilo-approved-v33-screens.css?v=35.0.0',
-  './nilo-approved-v33.js?v=35.0.0',
-  './nilo-approved-v33-screens.js?v=35.0.0',
-  './logo-nilo-aprovada.png?v=35.0.0',
-  './logo-triela-aprovada.png?v=35.0.0',
-  './mascote-nilo-aprovado.png?v=35.0.0',
-  './map-central-v35.png?v=35.0.0',
-  './map-routes-v35.png?v=35.0.0',
-  './vehicle-fiorino-v33.png?v=35.0.0',
-  './vehicle-moto-v33.png?v=35.0.0',
-  './vehicle-utilitario-v33.png?v=35.0.0',
-  './icons/icon-192.png',
-  './icons/icon-512.png',
-  'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.4'
+const CACHE = 'orbita-v2-cache-2';
+const ASSETS = [
+  './', './index.html', './styles.css', './app.js', './db.js', './helpers.js', './views.js', './manifest.webmanifest',
+  './assets/brand/nilo-logo.png', './assets/brand/mascote.png', './assets/brand/triela-logo.png',
+  './icons/icon-192.png', './icons/icon-512.png',
 ];
-self.addEventListener('install', event => {
-  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(APP_SHELL)).then(() => self.skipWaiting()));
+
+self.addEventListener('install', (event) => {
+  event.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
 });
-self.addEventListener('activate', event => {
-  event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key)))).then(() => self.clients.claim()));
+self.addEventListener('activate', (event) => {
+  event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim()));
 });
-self.addEventListener('fetch', event => {
-  if(event.request.method !== 'GET') return;
-  event.respondWith(fetch(event.request).then(response => {
-    if(response && response.ok){const copy=response.clone();caches.open(CACHE_NAME).then(cache=>cache.put(event.request,copy));}
-    return response;
-  }).catch(async()=>{
-    const cached=await caches.match(event.request);
-    if(cached)return cached;
-    if(event.request.mode==='navigate')return caches.match('./index.html');
-    return Response.error();
-  }));
+self.addEventListener('fetch', (event) => {
+  const req = event.request;
+  if (req.mode === 'navigate') { event.respondWith(fetch(req).catch(() => caches.match('./index.html'))); return; }
+  event.respondWith(
+    caches.match(req).then((cached) => cached || fetch(req).then((res) => {
+      const clone = res.clone();
+      caches.open(CACHE).then((cache) => cache.put(req, clone));
+      return res;
+    }).catch(() => cached))
+  );
 });

@@ -1,182 +1,78 @@
-# Controle de Entregas • Nilo Supermercado — V14.8.0
+# Órbita — Controle de Entregas (v2 completo, client-side)
 
-Versão focada em **histórico real das rotas, uso mais simples no celular e segurança dos dados**, mantendo todas as funções, buscas, relatórios, roteirização, tempo real, continuidade offline e agendamentos.
+## Como publicar
+Suba **todos os arquivos desta pasta** (incluindo `icons/`) para um repositório GitHub e ative o GitHub Pages na branch `main`, pasta raiz — mesmo processo do app original. Funciona 100% offline (IndexedDB + Service Worker) e é instalável como PWA.
 
-## Novidades da V14.8.0
+## Identidade visual (atualizado)
 
-- Nova função separada **Histórico de rotas**, sem substituir ou alterar os relatórios existentes.
-- Consulta de trajetos por hoje, semana, mês, ano ou período específico, com filtro por entregador.
-- Mapa consolidado das rotas pesquisadas, distância GPS, duração, entregas levadas, finalizadas e devolvidas.
-- Cada ciclo aberto possui a ação **Ativar GPS**; no celular, o sistema tenta iniciar a gravação ao confirmar a saída.
-- Pontos de localização são armazenados no aparelho mesmo sem internet e entram na sincronização automática já usada pelo sistema.
-- Ao fechar o ciclo, o trajeto GPS é encerrado e preservado no histórico.
-- O backup JSON e a restauração segura passaram a incluir também os trajetos GPS.
-- O Google Maps pode abrir uma aproximação do trajeto real pelas ruas, além do roteiro planejado por prioridade e bairro.
-- Navegação lateral mais compacta, hierarquia visual mais clara e telas de rota adaptadas para uso com uma mão no celular.
+Logo Nilo, mascote e logo Triela Soluções aplicados de verdade (pasta `assets/brand/`), paleta trocada para azul Nilo (`#0B2A4A`) + amarelo Nilo (`#FFDD00`) + branco, slogan na sidebar, mascote com selo de humor conforme o desempenho do dia, logo Triela discreta no rodapé, ícones do PWA gerados com o mascote.
 
-> Para registrar o trajeto, o entregador precisa permitir a localização e manter o aplicativo aberto durante a rota. O GPS funciona sem internet, mas o navegador do celular pode pausar a coleta se o aplicativo for fechado ou o sistema operacional interromper a página.
+**O que não deu pra fazer nessa rodada**: o recolhimento da sidebar (logo grande → rosto do mascote) mencionado no documento não foi implementado — hoje a sidebar é fixa ou vira menu hambúrguer no mobile, sem estado "recolhido" intermediário no desktop.
 
-## Ajuste da V14.7.1
+## Atualização — ajustes de UX e o que vem do repositório de referência mais avançado
 
-- O roteiro sugerido mostra **ENTREGA Nº X** logo após a NF e o bairro.
-- A tela completa da rota também apresenta o número da entrega.
-- O número exibido à esquerda do cartão continua sendo a posição da parada no roteiro.
+Você indicou o repositório `prevencaoredenilo-ux/controle-entregas` (V14.8) como referência adicional. Ele está muito além do que qualquer um dos pacotes anteriores — GPS de rota em tempo real, sincronização multi-dispositivo via Supabase Realtime, previsão estatística de movimento futuro, Excel com 30+ abas analíticas. **Não implementei nada disso ainda** — é trabalho substancial e depende de backend real. Fica como roteiro para as próximas rodadas, priorizado assim (na minha avaliação, mas me diga se a ordem deveria ser outra):
+1. Sincronização multi-dispositivo (Supabase Realtime) — depende do backend da Fase 1.
+2. Detecção automática de ciclo por saída simultânea (mesma data/hora/veículo/entregador).
+3. Cálculo de SLA (compra→saída, compra→entrega) com limites configuráveis.
+4. Excel com múltiplas abas analíticas (hoje exportamos CSVs separados, não um único Excel com abas).
+5. GPS de rota e previsão de movimento futuro — funcionalidades mais avançadas, ficam por último.
 
-## Novidades da V14.7.0
+### O que apliquei nesta rodada (concreto e testado)
+- Central Operacional: card de saudação bem mais destacado, saudação automática por horário **+ nome do colaborador** (seletor "Quem está operando?" na sidebar — não é login/senha, é só identificação local para personalizar e assinar lançamentos), frase motivacional automática conforme o desempenho do dia, tira de alertas do dia (atrasos, prioritárias, KM pendente, reentregas).
+- Cards com animação de entrada, números contando, e tooltip ao passar o mouse explicando cada indicador.
+- Ação rápida de **Registrar KM** direto na Central Operacional (além de nova entrega, iniciar/finalizar ciclo).
+- Cadastro de veículo bem mais robusto: fabricante, modelo, placa, ano de fabricação, tipo, capacidade.
+- Novo cadastro de **Colaboradores** (para a saudação/identificação, separado dos Entregadores da operação).
+- Dashboard bem mais completo: taxa de sucesso, produtividade por ciclo, KM total, reembolsos, gráfico de entregas por dia da semana, gráfico de distribuição por status, rankings por entregador/veículo/bairro, indicadores de qualidade dos dados (campos faltando). Os gráficos são SVG feitos à mão (sem biblioteca externa) — garante que funcionem 100% offline.
+- Relatórios: exportação em CSVs separados por área (entregas, ciclos, KM, custos, auditoria) além do "exportar tudo", e o relatório de impressão/PDF ganhou seções de indicadores, financeiro, gráfico por dia da semana e ranking.
 
-- O cadastro da entrega possui rua/avenida, número, complemento e ponto de referência.
-- Uma entrega pode ser marcada como **prioritária** e passa obrigatoriamente para o início do roteiro do ciclo.
-- Ao montar a saída, o sistema mostra ao vivo a ordem sugerida por prioridade e sequência dos bairros.
-- Cada bairro possui uma ordem de roteiro configurável em **Cadastros > Bairros**.
-- O ciclo ganhou a ação **Rota no Google Maps**, com saída e retorno ao mercado, lista numerada das NFs e indicação de endereço exato ou parada aproximada pelo bairro.
-- Quando existem muitas paradas, o sistema também cria trechos menores para facilitar o uso no celular.
-- O Google Maps é aberto por URL universal e não exige chave de API; o mapa e o cálculo das ruas precisam de internet.
-- A interface mobile ganhou barra inferior de navegação, botão central de nova compra, campos maiores, formulários em uma coluna, modais em formato de painel e ações fixas mais acessíveis.
-- Excel e impressão/PDF passaram a incluir endereço, referência, prioridade e posição sugerida no roteiro.
+## O que está implementado e testado (sintaxe validada, lógica revisada)
 
-## Novidades da V14.6.0
+- Central Operacional: saudação por horário, indicador online/offline, contadores do dia (na loja, em rota, prioritárias, atrasadas, ciclos ativos, reentrega, agendadas, KM pendente), ações rápidas, mascote com humor conforme desempenho do dia.
+- Cadastro de entrega completo (seção 7): todos os campos pedidos, número de compra/chegada gerados automaticamente (contínuo/diário) no momento de salvar, bloqueio de cupom duplicado, validação de obrigatórios, máscara de telefone.
+- Fluxo de status (seção 8): Na loja → Em rota → Finalizada, Finalizada → Retorno/Reentrega, Retirada na loja com pergunta de reembolso, reagendamento que preserva a tentativa anterior — tudo com histórico append-only por entrega.
+- Ciclos (seção 9): iniciar ciclo bloqueia veículo/entregador já em uso, ordena por prioridade + ordem de bairro, permite reordenar manualmente; finalizar ciclo pergunta "voltou?" uma pendência por vez e só fecha quando tudo estiver resolvido.
+- Quilometragem: KM inicial/final por veículo/expediente, com validação de KM final ≥ inicial.
+- Custos e financeiro: lançamento de custos, resumo com taxas, reembolsos, custos, saldo, custo por KM e por entrega.
+- Busca geral por múltiplos campos.
+- Relatórios: impressão/PDF (via impressão do navegador) e exportação CSV (abre no Excel).
+- Auditoria automática (toda escrita relevante gera um evento, sem edição posterior).
+- Lixeira com restauração, backup/restauração completa em JSON (com backup de segurança automático antes de restaurar).
+- Cadastros administrativos: veículos, entregadores, bairros (com ordem de rota), categorias de custo, motivos de retorno — desativar preserva histórico.
+- Modo Treinamento separado da Operação Real (seletor na sidebar), sem misturar dados nos números.
 
-- Celular e computador usam os mesmos dados após entrar com o usuário e a senha já cadastrados no sistema Nilo.
-- Cada alteração é sincronizada separadamente pelo Supabase Realtime, sem misturar as tabelas do outro sistema existente.
-- Sem internet, o aplicativo continua funcionando e registra uma fila local por entrega, ciclo, custo ou cadastro.
-- Quando a conexão volta, a fila é enviada automaticamente e as outras telas conectadas recebem as atualizações.
-- As tabelas online usam Row Level Security e aceitam somente usuários vinculados ao espaço de entregas.
-- O indicador lateral informa se o sistema está sincronizado, offline ou com alterações aguardando envio.
+## O que ficou faltando ou simplificado — não vou fingir que está pronto
 
-## Novidades da V14.5.0
+- **Entrega Grande com múltiplas viagens**: o campo de quantidade de viagens existe e é salvo, mas a tela para registrar a saída/chegada de cada viagem individualmente **não foi construída** — hoje a entrega Grande segue o mesmo fluxo de status das demais.
+- **"Custos pendentes" na Central Operacional**: não implementei esse indicador porque o modelo atual não tem um conceito claro de custo "pendente" (todo custo lançado já é considerado fechado). Precisa de definição sua sobre o que conta como pendente.
+- **Login individual, perfis (admin/líder/operacional/consulta) e RLS**: **não existe neste pacote**. Isso exige backend real (Supabase) — já entreguei o schema e as políticas de segurança (`db/01_schema.sql` e `db/02_rls.sql`, na entrega anterior), mas não estão plugadas aqui. Hoje qualquer pessoa com o link tem acesso total.
+- **Sincronização entre dispositivos, fila com idempotência, detecção de conflito**: **não implementado**. Só funciona em um aparelho por vez. Depende do mesmo backend acima.
+- **Corte oficial em 01/09/2026**: não apliquei esse filtro porque, sem autenticação/backend, não há "histórico anterior" de verdade a esconder — é um sistema novo. Quando plugarmos o backend, esse filtro entra nas queries.
+- **Testes automatizados**: não existem. O que fiz foi validação de sintaxe (`node --check`) e revisão manual da lógica — não é a mesma coisa que testes de fluxo executados de verdade, e não vou chamar isso de "testado".
+- **Identidade visual Nilo/Triela**: mantive a paleta própria que já vínhamos usando (navy + laranja) em vez da paleta azul/amarelo Nilo — não recebi os arquivos de logo/mascote mencionados no documento. Se você me enviar os assets, eu adapto as cores e substituo o mascote emoji por algo com a marca de verdade.
 
-- Entregas programadas e reagendadas registram dia, hora e detalhes do agendamento.
-- A cadeia de uma entrega agendada fica fora dos indicadores comuns de atraso, sem perder seus tempos operacionais e seu histórico.
-- No fechamento do ciclo, o sistema pergunta se alguma entrega voltou sem ser entregue.
-- Ao responder **Sim**, aparecem somente as notas fiscais ainda não finalizadas; cada NF que voltou exige um motivo e aceita um detalhe complementar.
-- Somente nomes de clientes e nomes de bairros são convertidos para caixa alta.
-- Telefones são exibidos na máscara brasileira `( 99 ) 9 9999-9999`.
+## Checklist da seção 16 do seu documento
 
-## Previsão de movimento da V14.4.3
-
-- O Dashboard antecipa o movimento das **próximas 5 semanas completas**.
-- Mostra o próximo dia provável de maior movimento, a semana prevista de pico e o dia da semana mais forte.
-- A estimativa combina a média histórica do dia da semana com o comportamento da semana do mês.
-- Entregas programadas e reagendadas ainda abertas entram como **volume mínimo já conhecido** para a data futura.
-- A previsão informa o nível de confiança: Alta, Média, Inicial, Baixa ou Somente agenda, conforme a quantidade de histórico disponível.
-- O Excel passou para **31 abas**, incluindo `PREVISAO_MOVIMENTO` com a estimativa detalhada de cada um dos próximos 35 dias.
-- O PDF recebeu os principais alertas preventivos e uma tabela com o movimento esperado em cada semana.
-- A previsão é recalculada automaticamente conforme novas entregas são finalizadas, sem alterar os dados existentes.
-
-## Novos insights da V14.4.2
-
-- O relatório mostra a **data exata com mais entregas**, em dia/mês/ano, acompanhada do dia da semana e da quantidade entregue.
-- Um novo indicador identifica o **dia da semana com maior média diária de entregas**.
-- Outro indicador identifica a **semana do mês com maior média diária**, separando dias 1–7, 8–14, 15–21, 22–28 e 29 até o fim do mês.
-- As médias usam automaticamente até os **365 dias mais recentes com histórico disponível**. Se houver menos de um ano, usam todo o intervalo existente.
-- O PDF e o resumo executivo do Excel informam o início, o fim, os dias de calendário e a quantidade de entregas usados no cálculo.
-- São contabilizadas compras realmente entregues ao cliente, considerando todas as tentativas ligadas e sem duplicar reagendamentos.
-
-## Correção da V14.4.1
-
-- Programações e reagendamentos agora são conferidos pela cadeia completa da compra antes de qualquer contagem.
-- Se uma tentativa posterior possui finalização no cliente, a compra é contabilizada como **Entregue**, mesmo que um registro anterior permaneça como `Programada` ou `Reagendada` no histórico.
-- A agenda separa compras **abertas**, **em atendimento** e **já entregues após programação**, sem excluir ou reescrever registros antigos.
-- Dashboard, análises por bairro, Excel e impressão/PDF usam a situação consolidada da compra nos totais atuais.
-- O Excel preserva o status de cada registro e acrescenta a situação consolidada; a aba `PROGRAMADAS` passa a mostrar também o resultado final, a data/hora da entrega e a tentativa concluída.
-- Nenhum dado operacional é removido: programação, reagendamento, tentativas e ocorrências continuam disponíveis para auditoria.
-
-## Novidades da V14.4
-
-- Dashboard gerencial ampliado com indicadores financeiros, operacionais, SLA e produtividade, mantendo o tema e a estrutura conhecidos pela equipe.
-- Novos gráficos de cumprimento dos prazos, fluxo compra → saída → finalização, distribuição por status, custos por categoria, evolução diária, faturamento x custos e bairros.
-- Valores aparecem com unidades consistentes: moeda em **R$**, percentuais em **%**, duração em **h e min** e distância em **km**.
-- O Excel passou para **30 abas**, acrescentando `SLA_PRAZOS`, `FLUXO_OPERACIONAL` e `RESUMO_MENSAL`.
-- As células do Excel continuam numéricas e agora recebem formatos próprios de moeda brasileira, porcentagem, duração, minutos e quilômetros, permitindo filtros, fórmulas e novas análises.
-- Impressão/PDF ganhou painel visual de prazos, gráfico por status, resumo mensal e formatação contextual dos indicadores.
-- Nenhum dado de entrega é convertido ou removido: os novos painéis e relatórios são calculados sobre os registros já existentes.
-
-## Novidades da V14.3
-
-- Na V14.3.8, o sistema calcula em tempo corrido **Compra → Saída** e **Compra → Entrega finalizada no cliente**. A saída fica fora do padrão acima de 2h e a entrega final fica fora do padrão acima de 3h30.
-- A Central de Operação mostra o tempo total transcorrido e o prazo restante. Exemplo: compra às 10:00 e saída às 12:00 deixam 1h30 para finalizar no cliente.
-- Histórico, rastreamento, edição, Dashboard, alertas, Excel e impressão/PDF exibem os novos tempos e padrões. Registros antigos sem horários suficientes aparecem como não calculáveis e não são marcados como OK.
-- Os limites podem ser ajustados em **Cadastros > Regras**, sem modificar os dados já cadastrados.
-- Na V14.3.7, o número da compra aparece no Histórico de entregas com o mesmo tamanho, peso e cor do número do cupom; DOC e caixa continuam em texto secundário.
-- Na V14.3.6, a tela **Pesquisar Entregas** ganhou um filtro separado para o número automático da compra/entrega gerado pelo próprio sistema.
-- O nº da compra/entrega e o nº do cupom usam o mesmo destaque amarelo no cadastro e nos resultados da pesquisa.
-- Na V14.3.5, as duas pesquisas também localizam pelo nome completo ou por parte do nome do cliente, ignorando diferenças de maiúsculas e acentos.
-- Na V14.3.4, a antiga tela de rastreamento virou **Pesquisar Entregas**, com filtros separados por nº do cupom, data, DOC e caixa e uma lista para selecionar o histórico desejado.
-- Todos os campos do lançamento rápido passaram a ter a mesma largura e altura; o **Nº DO CUPOM** aparece claramente como obrigatório.
-- Na V14.3.3, o nome **Cupom PDV** foi substituído por **Nº DO CUPOM** na interface, no Excel e na impressão/PDF, sem alterar os cupons já cadastrados.
-- A tela **Entregas** pesquisa todo o histórico por número da compra, número do cupom, DOC, caixa ou dia, separadamente ou combinando os filtros.
-- Na V14.3.1, o número da compra é preenchido automaticamente, não pode ser alterado por engano e acompanha a data escolhida.
-- O campo do número usa o mesmo fundo azul-escuro dos demais campos, com número amarelo de alto contraste.
-- Confirmação visual dos campos **Nº DO CUPOM**, **Nº do DOC**, **Nº do caixa**, **nome do cliente** e **telefone** no lançamento rápido.
-- DOC e caixa são obrigatórios; nome e telefone continuam opcionais.
-- Os seletores de ano oferecem 10 anos anteriores e 20 anos futuros, além de qualquer ano já existente nos dados.
-- O Excel passou para **27 abas**, incluindo resumo diário, distribuição das taxas do PDV e metodologia dos indicadores.
-- Arquivos JavaScript, CSS e service worker receberam identificação de versão para evitar que o navegador continue exibindo uma versão antiga após a publicação.
-- A atualização continua criando uma cópia local da versão anterior e preservando todos os registros.
-
-## Novidades da V14.2
-
-- O Excel passou de 14 para 24 abas formatadas na V14.2 e chegou a 27 abas na V14.3.
-- Comparação automática com o período imediatamente anterior.
-- Análises por dia da semana e faixa de horário para identificar picos.
-- Rankings de qualidade por bairro, entregador, veículo e caixa PDV.
-- Produtividade, sucesso, atrasos, problemas, tempos médios e faturamento por caixa, equipe, veículo e bairro.
-- Clientes recorrentes, frequência, bairros atendidos, problemas e faturamento por cliente.
-- Motivos de ocorrências, devoluções, reagendamentos e cancelamentos.
-- Qualidade dos dados e lista detalhada de campos ausentes, duplicidades, lacunas e horários inconsistentes.
-- Previsão das entregas programadas por data, situação, bairro, contato e próxima ação.
-- Impressão/PDF com insights, comparação, ranking e qualidade dos dados.
-- Todos os indicadores são calculados durante a geração do relatório e não modificam os registros armazenados.
-
-## Novidades da V14.1
-
-- O lançamento rápido possui campos separados para **Nº DO CUPOM**, **Nº do DOC** e **Nº do caixa**.
-- **Nome do cliente** e **número de telefone** são opcionais.
-- Os novos dados aparecem na operação, edição, agenda, rastreamento e relatórios.
-- O Excel da V14.1 incluía 14 abas; a V14.2 ampliou essa estrutura para 24 abas analíticas.
-- A impressão/PDF também mostra a identificação completa das compras e os principais dados operacionais.
-- A migração mantém todas as entregas atuais; registros antigos apenas recebem os novos campos vazios.
-- Antes da primeira migração, uma cópia local da versão anterior fica disponível em **Cadastros > Dados > Backup antes da atualização**.
-
-## Principais melhorias da V14
-
-- A restauração valida o arquivo e mostra uma comparação antes de substituir os dados.
-- Um backup dos dados atuais é baixado automaticamente antes da restauração confirmada.
-- Arquivos incompatíveis, excessivamente grandes ou com estruturas inseguras são recusados.
-- Os indicadores de dias ativos e dias fechados agora mostram zero quando não há movimento.
-- Textos de pendências e concordância de singular/plural foram corrigidos.
-- O status de conexão deixa claro que os dados continuam locais e não sincronizados.
-- Modais fecham com `Esc`, mantêm o foco dentro da janela e devolvem o foco ao botão de origem.
-- Contraste e tamanho dos textos do cadastro rápido foram corrigidos.
-- O modo offline usa a rede quando disponível e o cache quando necessário, reduzindo o risco de uma versão antiga permanecer presa no aparelho.
-
-## Regra operacional mantida da V13
-
-**Todas as entregas que saem juntas recebem automaticamente o mesmo ciclo.**
-
-O sistema considera a mesma saída quando as entregas possuem:
-
-- a mesma data;
-- a mesma hora de saída;
-- o mesmo veículo;
-- o mesmo entregador.
-
-Ao confirmar uma nova saída com uma ou várias entregas, o sistema gera automaticamente um código como `CIC-20260714-03` e vincula todas as entregas selecionadas a esse ciclo.
-
-## Detecção automática de saídas já registradas
-
-A V13 também consegue revisar entregas já existentes que tenham horário de saída, veículo e entregador, mas ainda não possuam ciclo. Quando encontrar registros da mesma saída, cria o ciclo e faz os vínculos automaticamente.
-
-Na tela **Ciclos**, existe o botão **Detectar saídas já registradas** para executar essa verificação manualmente quando necessário.
-
-## O que continua igual
-
-- Cada entrega tem seu próprio horário de finalização na casa do cliente.
-- O retorno à loja fecha o ciclo inteiro.
-- O KM continua sendo informado apenas uma vez no início e no fim do expediente de cada veículo.
-- Reagendamentos não duplicam faturamento.
-- A taxa de entrega entra na receita no registro da compra.
-- Modo Treinamento e Operação Real continuam separados.
-- Registros apagados continuam indo para a Lixeira.
-
-Faça um **Backup JSON** antes de atualizar a versão publicada.
+| Item | Status |
+|---|---|
+| Cadastro de entrega válida / rejeição sem obrigatórios | ✅ Implementado |
+| Edição de entrega | ✅ Implementado |
+| Geração automática de compra/chegada | ✅ Implementado |
+| Ciclo completo / ciclo com pendência | ✅ Implementado |
+| Retorno, reentrega, reagendamento | ✅ Implementado |
+| Retirada com/sem reembolso | ✅ Implementado |
+| Entrega Grande com múltiplas viagens | ⚠️ Parcial (campo existe, fluxo de viagens não) |
+| Bloqueio de veículo/entregador ocupado | ✅ Implementado |
+| KM inicial/final e validação | ✅ Implementado |
+| Custos e resultado financeiro | ✅ Implementado |
+| Backup e restauração | ✅ Implementado |
+| Lixeira e recuperação | ✅ Implementado |
+| Auditoria | ✅ Implementado (sem tela de detalhe do "antes/depois" ainda) |
+| Treinamento separado da Operação Real | ✅ Implementado |
+| Permissões por perfil | ❌ Não implementado (precisa de backend) |
+| Offline | ✅ Implementado |
+| Reconexão e sincronização sem duplicidade | ❌ Não implementado (precisa de backend) |
+| Conflito entre dispositivos | ❌ Não implementado (precisa de backend) |
+| Mobile / Desktop / PWA instalada | ✅ Responsivo e instalável (não testado em aparelho físico por mim) |
+| Relatórios gerencial e Excel | ✅ Implementado |

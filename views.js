@@ -1,0 +1,1281 @@
+import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, AuditLog, Counters } from './db.js';
+import { $, $$, money, dateBR, dateTimeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, barChartSVG } from './helpers.js';
+import { getEnv, getOperatorName, closeModal, openModal, refreshApp } from './app.js';
+
+/* =========================================================
+   CENTRAL OPERACIONAL
+   ========================================================= */
+export async function renderCentral() {
+  const env = getEnv();
+  const rows = await Deliveries.active(env);
+  const cycles = await Cycles.all();
+  const openCycles = cycles.filter((c) => c.status === 'aberto' && !c.deletedAt);
+
+  const naLoja = rows.filter((r) => r.status === 'na_loja');
+  const emRota = rows.filter((r) => r.status === 'em_rota');
+  const prioritarias = rows.filter((r) => r.priority === 'alta' && ['na_loja', 'em_rota'].includes(r.status));
+  const reentrega = rows.filter((r) => r.status === 'reentrega');
+  const agendadas = rows.filter((r) => r.type === 'agendada' && r.status === 'programada');
+  const atrasadas = rows.filter((r) => {
+    if (r.status !== 'na_loja' && r.status !== 'em_rota') return false;
+    const mins = (Date.now() - new Date(r.entryTime).getTime()) / 60000;
+    return mins > 60;
+  });
+  const kmPendente = (await OdometerLogs.all()).filter((k) => k.environment === env && k.kmEnd == null).length;
+
+  const finalized = rows.filter((r) => r.status === 'finalizada').length;
+  const problems = rows.filter((r) => ['retorno', 'cancelada'].includes(r.status)).length;
+  const totalForRatio = rows.length || 1;
+  const ratio = finalized / totalForRatio;
+  const mood = problems > finalized && rows.length > 0 ? '😟' : ratio > 0.7 ? '😄' : ratio > 0.3 ? '🙂' : rows.length ? '😐' : '🙂';
+  const phrase = motivationalPhrase(mood);
+
+  const hour = new Date().getHours();
+  const greet = hour < 12 ? 'Bom dia' : hour < 18 ? 'Boa tarde' : 'Boa noite';
+  const operatorName = getOperatorName();
+
+  const alerts = [];
+  if (atrasadas.length) alerts.push(`⚠️ ${atrasadas.length} entrega(s) atrasada(s) há mais de 60 min`);
+  if (prioritarias.length) alerts.push(`⭐ ${prioritarias.length} entrega(s) prioritária(s) aguardando`);
+  if (kmPendente) alerts.push(`⌁ ${kmPendente} veículo(s) sem KM final registrado`);
+  if (reentrega.length) alerts.push(`↻ ${reentrega.length} entrega(s) aguardando reentrega`);
+
+  return `
+    <div class="greeting-card">
+      <div class="mascot-frame">
+        <img src="assets/brand/mascote.png" alt="Mascote Nilo" />
+        <div class="mascot-mood" id="mascotMood">${mood}</div>
+      </div>
+      <div style="flex:1">
+        <div class="greeting-title">${greet}${operatorName ? ', ' + escapeHtml(operatorName) : ''}! 👋</div>
+        <div class="greeting-phrase">${phrase}</div>
+        <div style="color:var(--text-muted);font-size:12px;margin-top:2px">${env === 'treino' ? '🎓 Modo Treinamento — nada aqui entra no histórico oficial.' : 'Operação Real'}</div>
+      </div>
+    </div>
+
+    ${alerts.length ? `<div class="alert-strip">${alerts.map((a) => `<span class="alert-chip">${a}</span>`).join('')}</div>` : ''}
+
+    <div class="stat-row">
+      <div class="stat-card" data-tip="Compras já lançadas, aguardando formar um ciclo de saída"><small>Na loja</small><strong data-count="${naLoja.length}">0</strong></div>
+      <div class="stat-card" data-tip="Saíram para entrega e ainda não foram finalizadas"><small>Em rota</small><strong data-count="${emRota.length}">0</strong></div>
+      <div class="stat-card" data-tip="Prioridade Alta, ainda na loja ou em rota"><small>Prioritárias</small><strong data-count="${prioritarias.length}">0</strong></div>
+      <div class="stat-card ${atrasadas.length ? 'accent' : ''}" data-tip="Na loja ou em rota há mais de 60 minutos"><small>Atrasadas (&gt;60min)</small><strong data-count="${atrasadas.length}">0</strong></div>
+    </div>
+    <div class="stat-row">
+      <div class="stat-card" data-tip="Ciclos abertos agora, com veículo/entregador ocupados"><small>Ciclos ativos</small><strong data-count="${openCycles.length}">0</strong></div>
+      <div class="stat-card" data-tip="Voltaram e precisam ser entregues novamente"><small>Para reentrega</small><strong data-count="${reentrega.length}">0</strong></div>
+      <div class="stat-card" data-tip="Programadas para data/hora futura"><small>Agendadas</small><strong data-count="${agendadas.length}">0</strong></div>
+      <div class="stat-card" data-tip="Veículos com expediente aberto sem KM final"><small>KM pendente</small><strong data-count="${kmPendente}">0</strong></div>
+    </div>
+
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin:18px 0 22px">
+      <button class="btn-primary" id="qaNewDelivery">＋ Nova entrega</button>
+      <button class="btn-ghost" id="qaStartCycle">▶ Iniciar ciclo</button>
+      <button class="btn-ghost" id="qaCloseCycle">■ Finalizar ciclo</button>
+      <button class="btn-ghost" id="qaKm">⌁ Registrar KM</button>
+    </div>
+
+    <h3 style="margin:0 0 10px;font-size:14px">Entregas na loja e em rota</h3>
+    ${await miniList([...naLoja, ...emRota])}
+  `;
+}
+
+async function miniList(rows) {
+  if (!rows.length) return `<div class="empty-state"><strong>Nada por aqui agora</strong>As entregas na loja e em rota aparecem nesta lista.</div>`;
+  const trs = rows.slice(0, 30).map((r) => `
+    <tr data-id="${r.id}" class="row-click">
+      <td><strong>#${r.purchaseNumber}</strong></td>
+      <td>${escapeHtml(r.clientName || 'Sem nome')}<br><span style="color:var(--text-muted);font-size:11px">${escapeHtml(r.street || '')}</span></td>
+      <td>${badge(r.status)}</td>
+      <td>${r.priority === 'alta' ? '<span class="badge problema">Alta</span>' : '—'}</td>
+      <td>${money(r.deliveryFee)}</td>
+    </tr>`).join('');
+  return `<div class="table-wrap"><table><thead><tr><th>Compra</th><th>Cliente</th><th>Status</th><th>Prioridade</th><th>Taxa</th></tr></thead><tbody>${trs}</tbody></table></div>`;
+}
+
+export function wireCentralEvents() {
+  $$('.row-click').forEach((tr) => tr.addEventListener('click', async () => {
+    const rec = await Deliveries.get(tr.dataset.id);
+    if (rec) openDeliveryModal(rec);
+  }));
+  $('#qaNewDelivery')?.addEventListener('click', () => openDeliveryModal());
+  $('#qaStartCycle')?.addEventListener('click', () => openStartCycleModal());
+  $('#qaKm')?.addEventListener('click', () => openKmStartModal());
+  $('#qaCloseCycle')?.addEventListener('click', async () => {
+    const cycles = (await Cycles.all()).filter((c) => c.status === 'aberto' && !c.deletedAt);
+    if (!cycles.length) return toast('Não há ciclo aberto no momento.', 'error');
+    openCloseCycleModal(cycles[0]);
+  });
+}
+
+/* =========================================================
+   MODAL — CADASTRO / EDIÇÃO DE ENTREGA (seção 7 e 8)
+   ========================================================= */
+export async function openDeliveryModal(record = null) {
+  const isEdit = !!record;
+  const env = getEnv();
+  const neighborhoods = (await Neighborhoods.all()).filter((n) => n.active);
+  const vehicles = (await Vehicles.all()).filter((v) => v.active);
+  const drivers = (await Drivers.all()).filter((d) => d.active);
+
+  const body = `
+    <form id="deliveryForm">
+      <div class="field-row">
+        <label>Nº da compra<input value="${record?.purchaseNumber ?? '(automático ao salvar)'}" disabled /></label>
+        <label>Nº de chegada<input value="${record?.arrivalNumber ?? '(automático ao salvar)'}" disabled /></label>
+      </div>
+      <div class="field-row">
+        <label>Hora de entrada *<input type="time" name="entryTimeOnly" required value="${record ? new Date(record.entryTime).toTimeString().slice(0,5) : new Date().toTimeString().slice(0,5)}" /></label>
+        <label>PDV/Caixa *<input name="pdv" required value="${escapeHtml(record?.pdv || '')}" /></label>
+      </div>
+      <div class="field-row">
+        <label>DOC *<input name="doc" required value="${escapeHtml(record?.doc || '')}" /></label>
+        <label>Cupom<input name="coupon" value="${escapeHtml(record?.coupon || '')}" /></label>
+      </div>
+      <label>Cliente<input name="clientName" value="${escapeHtml(record?.clientName || '')}" placeholder="Opcional" /></label>
+      <label>Telefone<input name="phone" value="${escapeHtml(record?.phone || '')}" placeholder="(99) 99999-9999" data-mask="phone" /></label>
+      <label>Endereço *<input name="street" required value="${escapeHtml(record?.street || '')}" /></label>
+      <div class="field-row">
+        <label>Número<input name="houseNumber" value="${escapeHtml(record?.houseNumber || '')}" /></label>
+        <label>Complemento<input name="complement" value="${escapeHtml(record?.complement || '')}" /></label>
+      </div>
+      <label>Referência<input name="reference" value="${escapeHtml(record?.reference || '')}" /></label>
+      <label>Bairro *
+        <select name="neighborhoodId" required>
+          <option value="">Selecione…</option>
+          ${neighborhoods.map((n) => `<option value="${n.id}" ${record?.neighborhoodId === n.id ? 'selected' : ''}>${escapeHtml(n.name)}</option>`).join('')}
+        </select>
+        ${!neighborhoods.length ? '<small style="color:var(--status-problema)">Nenhum bairro cadastrado — cadastre em Cadastros → Bairros.</small>' : ''}
+      </label>
+      <div class="field-row">
+        <label>Taxa de entrega
+          <select name="feeOption">
+            <option value="6.99" ${record?.deliveryFee === 6.99 ? 'selected' : ''}>R$ 6,99</option>
+            <option value="9.99" ${record?.deliveryFee === 9.99 ? 'selected' : ''}>R$ 9,99</option>
+            <option value="0" ${record?.deliveryFee === 0 ? 'selected' : ''}>Sem taxa</option>
+            <option value="livre" ${record && ![6.99,9.99,0].includes(record.deliveryFee) ? 'selected' : ''}>Valor livre</option>
+          </select>
+        </label>
+        <label>Valor livre (se aplicável)<input name="feeCustom" type="number" step="0.01" min="0" value="${record && ![6.99,9.99,0].includes(record?.deliveryFee) ? record.deliveryFee : ''}" /></label>
+      </div>
+      <div class="field-row">
+        <label>Tamanho
+          <select name="size" id="sizeSelect">
+            <option value="normal" ${record?.size !== 'grande' ? 'selected' : ''}>Normal</option>
+            <option value="grande" ${record?.size === 'grande' ? 'selected' : ''}>Grande</option>
+          </select>
+        </label>
+        <label>Viagens (se Grande)<input name="tripCount" type="number" min="1" value="${record?.tripCount || 1}" ${record?.size !== 'grande' ? 'disabled' : ''} /></label>
+      </div>
+      <div class="field-row">
+        <label>Prioridade
+          <select name="priority">
+            <option value="normal" ${record?.priority !== 'alta' ? 'selected' : ''}>Normal</option>
+            <option value="alta" ${record?.priority === 'alta' ? 'selected' : ''}>Alta</option>
+          </select>
+        </label>
+        <label>Tipo
+          <select name="type" id="typeSelect">
+            <option value="hoje" ${record?.type !== 'agendada' ? 'selected' : ''}>Hoje</option>
+            <option value="agendada" ${record?.type === 'agendada' ? 'selected' : ''}>Agendada</option>
+          </select>
+        </label>
+      </div>
+      <label id="scheduledWrap" class="${record?.type === 'agendada' ? '' : 'hidden'}">Data/hora agendada *
+        <input name="scheduledAt" type="datetime-local" value="${record?.scheduledAt ? record.scheduledAt.slice(0,16) : ''}" />
+      </label>
+      <div class="field-row">
+        <label>Veículo
+          <select name="vehicleId">
+            <option value="">—</option>
+            ${vehicles.map((v) => `<option value="${v.id}" ${record?.vehicleId === v.id ? 'selected' : ''}>${escapeHtml(v.label)}</option>`).join('')}
+          </select>
+        </label>
+        <label>Entregador
+          <select name="driverId">
+            <option value="">—</option>
+            ${drivers.map((d) => `<option value="${d.id}" ${record?.driverId === d.id ? 'selected' : ''}>${escapeHtml(d.name)}</option>`).join('')}
+          </select>
+        </label>
+      </div>
+      <label>Observações<textarea name="notes" rows="2">${escapeHtml(record?.notes || '')}</textarea></label>
+    </form>
+  `;
+
+  const statusActions = isEdit ? deliveryStatusActionsHtml(record) : '';
+
+  openModal({
+    title: isEdit ? `Editar entrega #${record.purchaseNumber}` : 'Registrar entrega',
+    subtitle: isEdit ? `Status atual: ${STATUS_META[record.status]?.label}` : 'Preencha os campos obrigatórios (*)',
+    body: body + statusActions,
+    actions: isEdit
+      ? [
+          { label: 'Remover (lixeira)', kind: 'danger', onClick: async () => { await Deliveries.softDelete(record.id); toast('Entrega enviada para a lixeira.', 'success'); closeModal(); refreshApp(); } },
+          { label: 'Cancelar', kind: 'ghost', onClick: closeModal },
+          { label: 'Salvar alterações', kind: 'primary', onClick: () => saveDeliveryForm(record) },
+        ]
+      : [
+          { label: 'Cancelar', kind: 'ghost', onClick: closeModal },
+          { label: 'Registrar', kind: 'primary', onClick: () => saveDeliveryForm(null) },
+        ],
+  });
+
+  $('#sizeSelect')?.addEventListener('change', (e) => {
+    $('input[name="tripCount"]').disabled = e.target.value !== 'grande';
+  });
+  $('#typeSelect')?.addEventListener('change', (e) => {
+    $('#scheduledWrap').classList.toggle('hidden', e.target.value !== 'agendada');
+  });
+  wireDeliveryStatusActions(record);
+  wirePhoneMask($('#modalBody'));
+}
+
+function deliveryStatusActionsHtml(record) {
+  const buttons = [];
+  if (record.status === 'na_loja') buttons.push('<button type="button" class="btn-ghost btn-small" data-action="em_rota">Marcar Em rota</button>');
+  if (record.status === 'em_rota') {
+    buttons.push('<button type="button" class="btn-ghost btn-small" data-action="finalizada">Marcar Finalizada</button>');
+    buttons.push('<button type="button" class="btn-ghost btn-small" data-action="retirada">Retirada na loja</button>');
+  }
+  if (record.status === 'na_loja') buttons.push('<button type="button" class="btn-ghost btn-small" data-action="retirada">Retirada na loja</button>');
+  if (record.status === 'finalizada') {
+    buttons.push('<button type="button" class="btn-ghost btn-small" data-action="retorno">Registrar retorno</button>');
+  }
+  if (record.type === 'agendada' || record.status === 'programada') {
+    buttons.push('<button type="button" class="btn-ghost btn-small" data-action="reagendar">Reagendar</button>');
+  }
+  const history = (record.statusHistory || []).slice(-5).reverse().map((h) =>
+    `<div style="font-size:11.5px;color:var(--text-muted)">${dateTimeBR(h.at)} — ${STATUS_META[h.from]?.label || h.from || 'início'} → ${STATUS_META[h.to]?.label || h.to}${h.note ? ' · ' + escapeHtml(h.note) : ''}</div>`
+  ).join('');
+  return `
+    <div style="border-top:1px solid var(--line);margin-top:6px;padding-top:12px">
+      <label style="margin-bottom:8px">Ações de status</label>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">${buttons.join('') || '<span style="font-size:12px;color:var(--text-muted)">Sem transições disponíveis para o status atual.</span>'}</div>
+      ${history ? `<div style="margin-top:10px"><label>Histórico recente</label>${history}</div>` : ''}
+    </div>`;
+}
+
+function wireDeliveryStatusActions(record) {
+  if (!record) return;
+  $$('#modalBody [data-action]').forEach((btn) => {
+    guardClick(btn, async () => {
+      const action = btn.dataset.action;
+      if (action === 'em_rota') { await Deliveries.changeStatus(record.id, 'em_rota'); toast('Entrega em rota.', 'success'); closeModal(); refreshApp(); }
+      if (action === 'finalizada') { await Deliveries.changeStatus(record.id, 'finalizada'); toast('Entrega finalizada.', 'success'); closeModal(); refreshApp(); }
+      if (action === 'retirada') openRetiradaFlow(record);
+      if (action === 'retorno') openRetornoFlow(record);
+      if (action === 'reagendar') openReagendarFlow(record);
+    });
+  });
+}
+
+async function saveDeliveryForm(record) {
+  const form = $('#deliveryForm');
+  if (!form.reportValidity()) return;
+  const fd = Object.fromEntries(new FormData(form).entries());
+  const env = getEnv();
+
+  const neighborhoods = await Neighborhoods.all();
+  if (!fd.neighborhoodId) return toast('Selecione um bairro cadastrado.', 'error');
+
+  let fee = fd.feeOption === 'livre' ? Number(fd.feeCustom || 0) : Number(fd.feeOption);
+  const [hh, mm] = (fd.entryTimeOnly || '00:00').split(':');
+  const entryTime = new Date();
+  entryTime.setHours(Number(hh), Number(mm), 0, 0);
+
+  if (fd.type === 'agendada' && !fd.scheduledAt) return toast('Informe a data e hora do agendamento.', 'error');
+
+  // duplicidade acidental de cupom no mesmo dia/ambiente
+  if (fd.coupon) {
+    const all = await Deliveries.active(env);
+    const dup = all.find((d) => d.coupon === fd.coupon && d.id !== record?.id);
+    if (dup) return toast('Já existe uma entrega ativa com esse número de cupom.', 'error');
+  }
+
+  const payload = {
+    environment: env,
+    entryTime: entryTime.toISOString(),
+    pdv: fd.pdv.trim(),
+    doc: fd.doc.trim(),
+    coupon: fd.coupon?.trim() || '',
+    clientName: fd.clientName?.trim() || '',
+    phone: fd.phone?.trim() || '',
+    street: fd.street.trim(),
+    houseNumber: fd.houseNumber?.trim() || '',
+    complement: fd.complement?.trim() || '',
+    reference: fd.reference?.trim() || '',
+    neighborhoodId: fd.neighborhoodId,
+    deliveryFee: fee,
+    size: fd.size,
+    tripCount: fd.size === 'grande' ? Number(fd.tripCount || 1) : 1,
+    trips: fd.size === 'grande' ? Array.from({ length: Number(fd.tripCount || 1) }, (_, i) => ({ tripIndex: i + 1, leftStoreAt: null, arrivedAt: null })) : [],
+    priority: fd.priority,
+    type: fd.type,
+    scheduledAt: fd.type === 'agendada' ? new Date(fd.scheduledAt).toISOString() : null,
+    vehicleId: fd.vehicleId || null,
+    driverId: fd.driverId || null,
+    notes: fd.notes?.trim() || '',
+  };
+
+  try {
+    if (record) {
+      await Deliveries.update(record.id, payload);
+      toast('Entrega atualizada.', 'success');
+    } else {
+      payload.purchaseNumber = await Counters.next(env, 'compra');
+      payload.arrivalNumber = await Counters.next(env, 'chegada');
+      payload.status = fd.type === 'agendada' ? 'programada' : 'na_loja';
+      payload.statusHistory = [];
+      payload.reschedules = [];
+      payload.deletedAt = null;
+      await Deliveries.add(payload);
+      toast(`Entrega #${payload.purchaseNumber} registrada.`, 'success');
+    }
+    closeModal();
+    refreshApp();
+  } catch (err) {
+    toast('Não foi possível salvar. ' + err.message, 'error');
+  }
+}
+
+/* ---------- retirada na loja (seção 10) ---------- */
+function openRetiradaFlow(record) {
+  openModal({
+    title: 'Retirada na loja',
+    subtitle: `Entrega #${record.purchaseNumber} — reembolsar a taxa de ${money(record.deliveryFee)}?`,
+    body: `<p style="font-size:13px;color:var(--text-muted)">Escolha uma opção abaixo. Isso fica registrado no histórico e no relatório financeiro.</p>`,
+    actions: [
+      { label: 'Cancelar', kind: 'ghost', onClick: closeModal },
+      { label: 'Não reembolsar', kind: 'ghost', onClick: async () => { await finishRetirada(record, false); } },
+      { label: 'Sim, reembolsar', kind: 'primary', onClick: async () => { await finishRetirada(record, true); } },
+    ],
+  });
+}
+async function finishRetirada(record, refunded) {
+  await Deliveries.update(record.id, { status: 'retirada_loja', pickedUpAtStore: true, refunded });
+  await Deliveries.changeStatus(record.id, 'retirada_loja', { note: refunded ? 'Retirada com reembolso' : 'Retirada sem reembolso' });
+  toast('Retirada registrada.', 'success');
+  closeModal();
+  refreshApp();
+}
+
+/* ---------- retorno / reentrega (seção 8 e 10) ---------- */
+async function openRetornoFlow(record) {
+  const reasons = (await ReturnReasons.all()).filter((r) => r.active);
+  openModal({
+    title: 'A entrega voltou?',
+    subtitle: `Entrega #${record.purchaseNumber} — registre o motivo para manter o histórico.`,
+    body: `
+      <form id="retornoForm">
+        <label>Motivo *
+          <select name="reasonId" required>
+            <option value="">Selecione…</option>
+            ${reasons.map((r) => `<option value="${r.id}">${escapeHtml(r.label)}</option>`).join('')}
+          </select>
+        </label>
+        <label>Observação<textarea name="note" rows="2"></textarea></label>
+        <label>Encaminhar para
+          <select name="nextStatus">
+            <option value="reentrega">Reentrega</option>
+            <option value="programada">Reagendar</option>
+            <option value="cancelada">Cancelar entrega</option>
+          </select>
+        </label>
+      </form>`,
+    actions: [
+      { label: 'Cancelar', kind: 'ghost', onClick: closeModal },
+      { label: 'Confirmar', kind: 'primary', onClick: async () => {
+        const form = $('#retornoForm');
+        if (!form.reportValidity()) return;
+        const fd = Object.fromEntries(new FormData(form).entries());
+        await Deliveries.changeStatus(record.id, fd.nextStatus, { reasonId: fd.reasonId, note: fd.note });
+        toast('Retorno registrado.', 'success');
+        closeModal();
+        refreshApp();
+      }},
+    ],
+  });
+}
+
+/* ---------- reagendamento (nunca sobrescreve a tentativa anterior) ---------- */
+function openReagendarFlow(record) {
+  openModal({
+    title: 'Reagendar entrega',
+    subtitle: `Entrega #${record.purchaseNumber} — a tentativa anterior fica preservada no histórico.`,
+    body: `
+      <form id="reagForm">
+        <label>Nova data/hora *<input type="datetime-local" name="newAt" required /></label>
+        <label>Motivo<input name="reason" /></label>
+      </form>`,
+    actions: [
+      { label: 'Cancelar', kind: 'ghost', onClick: closeModal },
+      { label: 'Confirmar', kind: 'primary', onClick: async () => {
+        const form = $('#reagForm');
+        if (!form.reportValidity()) return;
+        const fd = Object.fromEntries(new FormData(form).entries());
+        await Deliveries.reschedule(record.id, new Date(fd.newAt).toISOString(), fd.reason);
+        toast('Reagendado.', 'success');
+        closeModal();
+        refreshApp();
+      }},
+    ],
+  });
+}
+
+/* =========================================================
+   CICLOS (seção 9)
+   ========================================================= */
+export async function renderCycles() {
+  const cycles = (await Cycles.all()).filter((c) => !c.deletedAt).sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+  if (!cycles.length) return `<div class="empty-state"><strong>Nenhum ciclo iniciado</strong>Use "Iniciar ciclo" na Central Operacional.</div>`;
+
+  const vehicles = await Vehicles.all();
+  const drivers = await Drivers.all();
+  const vName = (id) => vehicles.find((v) => v.id === id)?.label || '—';
+  const dName = (id) => drivers.find((d) => d.id === id)?.name || '—';
+
+  const rows = await Promise.all(cycles.map(async (c) => {
+    const items = await Promise.all((c.deliveryIds || []).map((id) => Deliveries.get(id)));
+    const pending = items.filter((i) => i && ['em_rota'].includes(i.status)).length;
+    return `<tr data-id="${c.id}" class="row-click-cycle">
+      <td>${dateTimeBR(c.startedAt)}</td>
+      <td>${escapeHtml(vName(c.vehicleId))}</td>
+      <td>${escapeHtml(dName(c.driverId))}</td>
+      <td>${items.length}</td>
+      <td>${c.status === 'aberto' ? `<span class="badge transito">Aberto · ${pending} pendente(s)</span>` : `<span class="badge entregue">Fechado</span>`}</td>
+      <td>${c.status === 'aberto' ? '<button class="btn-ghost btn-small cycle-close-btn">Finalizar</button>' : dateTimeBR(c.closedAt)}</td>
+    </tr>`;
+  }));
+
+  return `<div class="table-wrap"><table><thead><tr><th>Início</th><th>Veículo</th><th>Entregador</th><th>Entregas</th><th>Status</th><th></th></tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
+}
+
+export function wireCyclesEvents() {
+  $$('.cycle-close-btn').forEach((btn) => btn.addEventListener('click', async (e) => {
+    const id = e.target.closest('tr').dataset.id;
+    const cycle = await Cycles.get(id);
+    openCloseCycleModal(cycle);
+  }));
+}
+
+export async function openStartCycleModal() {
+  const env = getEnv();
+  const openCycles = (await Cycles.all()).filter((c) => c.status === 'aberto' && !c.deletedAt);
+  const busyVehicles = new Set(openCycles.map((c) => c.vehicleId));
+  const busyDrivers = new Set(openCycles.map((c) => c.driverId));
+
+  const vehicles = (await Vehicles.all()).filter((v) => v.active);
+  const drivers = (await Drivers.all()).filter((d) => d.active);
+  const neighborhoods = await Neighborhoods.all();
+  const neighOrder = Object.fromEntries(neighborhoods.map((n) => [n.id, n.routeOrder ?? 0]));
+
+  const candidates = (await Deliveries.active(env))
+    .filter((d) => d.status === 'na_loja')
+    .sort((a, b) => {
+      if (a.priority !== b.priority) return a.priority === 'alta' ? -1 : 1;
+      return (neighOrder[a.neighborhoodId] || 0) - (neighOrder[b.neighborhoodId] || 0);
+    });
+
+  if (!candidates.length) return toast('Não há entregas "Na loja" para formar um ciclo.', 'error');
+
+  const body = `
+    <form id="startCycleForm">
+      <div class="field-row">
+        <label>Veículo *
+          <select name="vehicleId" required>
+            <option value="">Selecione…</option>
+            ${vehicles.map((v) => `<option value="${v.id}" ${busyVehicles.has(v.id) ? 'disabled' : ''}>${escapeHtml(v.label)}${busyVehicles.has(v.id) ? ' (em uso)' : ''}</option>`).join('')}
+          </select>
+        </label>
+        <label>Entregador *
+          <select name="driverId" required>
+            <option value="">Selecione…</option>
+            ${drivers.map((d) => `<option value="${d.id}" ${busyDrivers.has(d.id) ? 'disabled' : ''}>${escapeHtml(d.name)}${busyDrivers.has(d.id) ? ' (em uso)' : ''}</option>`).join('')}
+          </select>
+        </label>
+      </div>
+      <label>Entregas do ciclo (ordem sugerida: prioridade e bairro — arraste com os botões)</label>
+      <div id="cycleItemsList" style="display:grid;gap:6px">
+        ${candidates.map((d, i) => `
+          <div class="cycle-item" data-id="${d.id}" style="display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:8px;padding:8px 10px">
+            <input type="checkbox" checked />
+            <div style="flex:1">
+              <strong style="font-size:12.5px">#${d.purchaseNumber} · ${escapeHtml(d.clientName || d.street)}</strong>
+              <div style="font-size:11px;color:var(--text-muted)">${d.priority === 'alta' ? 'Prioridade alta · ' : ''}${escapeHtml(neighborhoods.find(n=>n.id===d.neighborhoodId)?.name || '')}</div>
+            </div>
+            <button type="button" class="btn-ghost btn-small move-up">↑</button>
+            <button type="button" class="btn-ghost btn-small move-down">↓</button>
+          </div>`).join('')}
+      </div>
+    </form>`;
+
+  openModal({
+    title: 'Iniciar ciclo',
+    subtitle: 'Veículo e entregador ficam bloqueados para outro ciclo até este ser finalizado.',
+    body,
+    actions: [
+      { label: 'Cancelar', kind: 'ghost', onClick: closeModal },
+      { label: 'Iniciar ciclo', kind: 'primary', onClick: async () => {
+        const form = $('#startCycleForm');
+        if (!form.reportValidity()) return;
+        const fd = Object.fromEntries(new FormData(form).entries());
+        const order = $$('.cycle-item').map((el) => el.dataset.id);
+        const checked = order.filter((id) => $(`.cycle-item[data-id="${id}"] input[type=checkbox]`).checked);
+        if (!checked.length) return toast('Selecione ao menos uma entrega.', 'error');
+
+        const cycle = await Cycles.add({
+          environment: env, vehicleId: fd.vehicleId, driverId: fd.driverId,
+          status: 'aberto', startedAt: new Date().toISOString(), closedAt: null,
+          deliveryIds: checked, deletedAt: null,
+        });
+        for (const id of checked) {
+          await Deliveries.update(id, { status: 'em_rota', cycleId: cycle.id, vehicleId: fd.vehicleId, driverId: fd.driverId });
+        }
+        toast('Ciclo iniciado.', 'success');
+        closeModal();
+        refreshApp();
+      }},
+    ],
+  });
+
+  $$('.move-up').forEach((b) => b.addEventListener('click', (e) => {
+    const item = e.target.closest('.cycle-item');
+    const prev = item.previousElementSibling;
+    if (prev) item.parentNode.insertBefore(item, prev);
+  }));
+  $$('.move-down').forEach((b) => b.addEventListener('click', (e) => {
+    const item = e.target.closest('.cycle-item');
+    const next = item.nextElementSibling;
+    if (next) item.parentNode.insertBefore(next, item);
+  }));
+}
+
+/* ---------- finalizar ciclo: uma pendência por vez (seção 9) ---------- */
+export async function openCloseCycleModal(cycle) {
+  const items = await Promise.all((cycle.deliveryIds || []).map((id) => Deliveries.get(id)));
+  const pending = items.filter((i) => i && i.status === 'em_rota');
+
+  if (!pending.length) {
+    await Cycles.update(cycle.id, { status: 'fechado', closedAt: new Date().toISOString() });
+    toast('Ciclo finalizado — todas as entregas já estavam resolvidas.', 'success');
+    refreshApp();
+    return;
+  }
+
+  showPendingOne(cycle, pending[0], pending.length);
+}
+
+function showPendingOne(cycle, delivery, remainingCount) {
+  const reasonsPromise = ReturnReasons.all();
+  openModal({
+    title: `Finalizar ciclo — ${remainingCount} pendente(s)`,
+    subtitle: `Entrega #${delivery.purchaseNumber} · ${escapeHtml(delivery.clientName || delivery.street)}`,
+    body: `<p style="font-size:14px;font-weight:700">A entrega voltou?</p><p style="font-size:12.5px;color:var(--text-muted)">Se não voltou, vamos registrar a hora de entrega ao cliente.</p>`,
+    actions: [
+      { label: 'Sim, voltou', kind: 'ghost', onClick: async () => {
+        const reasons = await reasonsPromise;
+        openModal({
+          title: 'Motivo do retorno',
+          subtitle: `Entrega #${delivery.purchaseNumber}`,
+          body: `
+            <form id="pendReturnForm">
+              <label>Motivo *
+                <select name="reasonId" required>
+                  <option value="">Selecione…</option>
+                  ${reasons.filter(r=>r.active).map((r) => `<option value="${r.id}">${escapeHtml(r.label)}</option>`).join('')}
+                </select>
+              </label>
+              <label>Observação<textarea name="note" rows="2"></textarea></label>
+              <label>Encaminhar para
+                <select name="nextStatus"><option value="reentrega">Reentrega</option><option value="programada">Reagendar</option></select>
+              </label>
+            </form>`,
+          actions: [
+            { label: 'Voltar', kind: 'ghost', onClick: () => showPendingOne(cycle, delivery, remainingCount) },
+            { label: 'Confirmar', kind: 'primary', onClick: async () => {
+              const form = $('#pendReturnForm');
+              if (!form.reportValidity()) return;
+              const fd = Object.fromEntries(new FormData(form).entries());
+              await Deliveries.changeStatus(delivery.id, fd.nextStatus, { reasonId: fd.reasonId, note: fd.note });
+              await advanceCloseCycle(cycle);
+            }},
+          ],
+        });
+      }},
+      { label: 'Não, foi entregue', kind: 'primary', onClick: async () => {
+        await Deliveries.changeStatus(delivery.id, 'finalizada');
+        await advanceCloseCycle(cycle);
+      }},
+    ],
+  });
+}
+
+async function advanceCloseCycle(cycle) {
+  const items = await Promise.all((cycle.deliveryIds || []).map((id) => Deliveries.get(id)));
+  const pending = items.filter((i) => i && i.status === 'em_rota');
+  if (pending.length) {
+    showPendingOne(cycle, pending[0], pending.length);
+  } else {
+    await Cycles.update(cycle.id, { status: 'fechado', closedAt: new Date().toISOString() });
+    toast('Ciclo finalizado. Veículo e entregador liberados.', 'success');
+    closeModal();
+    refreshApp();
+  }
+}
+
+/* =========================================================
+   QUILOMETRAGEM (seção 11)
+   ========================================================= */
+export async function renderKm() {
+  const env = getEnv();
+  const logs = (await OdometerLogs.all()).filter((l) => l.environment === env).sort((a, b) => b.shiftDate.localeCompare(a.shiftDate));
+  const vehicles = await Vehicles.all();
+  const vName = (id) => vehicles.find((v) => v.id === id)?.label || '—';
+
+  const rows = logs.map((l) => `
+    <tr data-id="${l.id}">
+      <td>${dateBR(l.shiftDate)}</td>
+      <td>${escapeHtml(vName(l.vehicleId))}</td>
+      <td>${l.kmStart ?? '—'}</td>
+      <td>${l.kmEnd ?? '—'}</td>
+      <td>${l.kmEnd != null && l.kmStart != null ? (l.kmEnd - l.kmStart).toFixed(1) : '—'}</td>
+      <td>${l.kmEnd == null ? '<button class="btn-ghost btn-small km-close-btn">Registrar KM final</button>' : ''}</td>
+    </tr>`).join('');
+
+  return `
+    <div style="margin-bottom:14px"><button class="btn-primary" id="kmNewBtn">＋ Iniciar expediente</button></div>
+    ${logs.length ? `<div class="table-wrap"><table><thead><tr><th>Data</th><th>Veículo</th><th>KM inicial</th><th>KM final</th><th>Rodado</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
+      : `<div class="empty-state"><strong>Nenhum registro de KM</strong>Clique em "Iniciar expediente" para o primeiro veículo do dia.</div>`}
+  `;
+}
+
+export function wireKmEvents() {
+  $('#kmNewBtn')?.addEventListener('click', openKmStartModal);
+  $$('.km-close-btn').forEach((btn) => btn.addEventListener('click', async (e) => {
+    const id = e.target.closest('tr').dataset.id;
+    const log = await OdometerLogs.get(id);
+    openKmEndModal(log);
+  }));
+}
+
+async function openKmStartModal() {
+  const vehicles = (await Vehicles.all()).filter((v) => v.active);
+  openModal({
+    title: 'Iniciar expediente',
+    body: `
+      <form id="kmStartForm">
+        <label>Veículo *
+          <select name="vehicleId" required>${vehicles.map((v) => `<option value="${v.id}">${escapeHtml(v.label)}</option>`).join('')}</select>
+        </label>
+        <label>KM inicial *<input name="kmStart" type="number" step="0.1" min="0" required /></label>
+      </form>`,
+    actions: [
+      { label: 'Cancelar', kind: 'ghost', onClick: closeModal },
+      { label: 'Salvar', kind: 'primary', onClick: async () => {
+        const form = $('#kmStartForm');
+        if (!form.reportValidity()) return;
+        const fd = Object.fromEntries(new FormData(form).entries());
+        await OdometerLogs.add({ environment: getEnv(), vehicleId: fd.vehicleId, shiftDate: new Date().toISOString().slice(0,10), kmStart: Number(fd.kmStart), kmEnd: null });
+        toast('Expediente iniciado.', 'success');
+        closeModal(); refreshApp();
+      }},
+    ],
+  });
+}
+
+function openKmEndModal(log) {
+  openModal({
+    title: 'Registrar KM final',
+    subtitle: `KM inicial: ${log.kmStart}`,
+    body: `<form id="kmEndForm"><label>KM final *<input name="kmEnd" type="number" step="0.1" min="0" required /></label></form>`,
+    actions: [
+      { label: 'Cancelar', kind: 'ghost', onClick: closeModal },
+      { label: 'Salvar', kind: 'primary', onClick: async () => {
+        const form = $('#kmEndForm');
+        if (!form.reportValidity()) return;
+        const fd = Object.fromEntries(new FormData(form).entries());
+        const kmEnd = Number(fd.kmEnd);
+        if (kmEnd < log.kmStart) return toast('KM final não pode ser menor que o KM inicial.', 'error');
+        await OdometerLogs.update(log.id, { kmEnd });
+        toast('KM final registrado.', 'success');
+        closeModal(); refreshApp();
+      }},
+    ],
+  });
+}
+
+/* =========================================================
+   CUSTOS E FINANCEIRO (seção 11)
+   ========================================================= */
+export async function renderCosts() {
+  const env = getEnv();
+  const costs = (await Costs.all()).filter((c) => c.environment === env && !c.deletedAt).sort((a, b) => b.date.localeCompare(a.date));
+  const categories = await CostCategories.all();
+  const vehicles = await Vehicles.all();
+  const drivers = await Drivers.all();
+  const catName = (id) => categories.find((c) => c.id === id)?.name || '—';
+  const vName = (id) => vehicles.find((v) => v.id === id)?.label || '—';
+  const dName = (id) => drivers.find((d) => d.id === id)?.name || '—';
+
+  const rows = costs.map((c) => `
+    <tr><td>${dateBR(c.date)}</td><td>${escapeHtml(catName(c.categoryId))}</td><td>${escapeHtml(vName(c.vehicleId))}</td><td>${escapeHtml(dName(c.driverId))}</td><td>${money(c.amount)}</td><td>${escapeHtml(c.note || '')}</td></tr>
+  `).join('');
+
+  const financial = await computeFinancialSummary(env);
+
+  return `
+    <div class="stat-row">
+      <div class="stat-card"><small>Total de taxas</small><strong>${money(financial.fees)}</strong></div>
+      <div class="stat-card"><small>Reembolsos</small><strong>${money(financial.refunds)}</strong></div>
+      <div class="stat-card"><small>Custos</small><strong>${money(financial.costsTotal)}</strong></div>
+      <div class="stat-card accent"><small>Saldo</small><strong>${money(financial.balance)}</strong></div>
+    </div>
+    <div class="stat-row" style="grid-template-columns:1fr 1fr">
+      <div class="stat-card"><small>Custo por KM</small><strong>${financial.kmTotal ? money(financial.costsTotal / financial.kmTotal) : '—'}</strong></div>
+      <div class="stat-card"><small>Custo por entrega</small><strong>${financial.deliveredCount ? money(financial.costsTotal / financial.deliveredCount) : '—'}</strong></div>
+    </div>
+    <div style="margin:16px 0"><button class="btn-primary" id="costNewBtn">＋ Registrar custo</button></div>
+    ${costs.length ? `<div class="table-wrap"><table><thead><tr><th>Data</th><th>Categoria</th><th>Veículo</th><th>Entregador</th><th>Valor</th><th>Obs.</th></tr></thead><tbody>${rows}</tbody></table></div>` : `<div class="empty-state"><strong>Nenhum custo lançado</strong></div>`}
+  `;
+}
+
+async function computeFinancialSummary(env) {
+  const deliveries = await Deliveries.active(env);
+  const finalized = deliveries.filter((d) => d.status === 'finalizada' || (d.status === 'retirada_loja' && !d.refunded));
+  const fees = finalized.reduce((s, d) => s + (Number(d.deliveryFee) || 0), 0);
+  const refunds = deliveries.filter((d) => d.refunded).reduce((s, d) => s + (Number(d.deliveryFee) || 0), 0);
+  const costsTotal = (await Costs.all()).filter((c) => c.environment === env && !c.deletedAt).reduce((s, c) => s + Number(c.amount || 0), 0);
+  const kmTotal = (await OdometerLogs.all()).filter((l) => l.environment === env && l.kmEnd != null).reduce((s, l) => s + (l.kmEnd - l.kmStart), 0);
+  const balance = fees - refunds - costsTotal;
+  return { fees, refunds, costsTotal, balance, kmTotal, deliveredCount: finalized.length };
+}
+
+export function wireCostsEvents() {
+  $('#costNewBtn')?.addEventListener('click', openCostModal);
+}
+
+async function openCostModal() {
+  const categories = (await CostCategories.all()).filter((c) => c.active);
+  const vehicles = await Vehicles.all();
+  const drivers = await Drivers.all();
+  openModal({
+    title: 'Registrar custo',
+    body: `
+      <form id="costForm">
+        <label>Data *<input type="date" name="date" required value="${new Date().toISOString().slice(0,10)}" /></label>
+        <label>Categoria *<select name="categoryId" required><option value="">Selecione…</option>${categories.map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}</select></label>
+        <div class="field-row">
+          <label>Veículo<select name="vehicleId"><option value="">—</option>${vehicles.map((v) => `<option value="${v.id}">${escapeHtml(v.label)}</option>`).join('')}</select></label>
+          <label>Entregador<select name="driverId"><option value="">—</option>${drivers.map((d) => `<option value="${d.id}">${escapeHtml(d.name)}</option>`).join('')}</select></label>
+        </div>
+        <label>Valor *<input type="number" step="0.01" min="0" name="amount" required /></label>
+        <label>Comprovante/observação<textarea name="note" rows="2"></textarea></label>
+      </form>`,
+    actions: [
+      { label: 'Cancelar', kind: 'ghost', onClick: closeModal },
+      { label: 'Salvar', kind: 'primary', onClick: async () => {
+        const form = $('#costForm');
+        if (!form.reportValidity()) return;
+        const fd = Object.fromEntries(new FormData(form).entries());
+        await Costs.add({ environment: getEnv(), date: fd.date, categoryId: fd.categoryId, vehicleId: fd.vehicleId || null, driverId: fd.driverId || null, amount: Number(fd.amount), note: fd.note, deletedAt: null });
+        toast('Custo registrado.', 'success');
+        closeModal(); refreshApp();
+      }},
+    ],
+  });
+}
+
+/* =========================================================
+   DASHBOARD (seção 14) — métricas, rankings e gráficos
+   ========================================================= */
+export async function renderDashboard() {
+  const env = getEnv();
+  const rows = await Deliveries.active(env);
+  const finalized = rows.filter((r) => r.status === 'finalizada');
+  const problems = rows.filter((r) => ['retorno', 'reentrega', 'cancelada'].includes(r.status));
+  const refunded = rows.filter((r) => r.refunded);
+  const financial = await computeFinancialSummary(env);
+  const cycles = (await Cycles.all()).filter((c) => !c.deletedAt);
+  const closedCycles = cycles.filter((c) => c.status === 'fechado');
+
+  const drivers = await Drivers.all();
+  const vehicles = await Vehicles.all();
+  const neighborhoods = await Neighborhoods.all();
+
+  if (!rows.length) {
+    return `<div class="empty-state"><strong>Sem dados ainda</strong>Os números e gráficos aparecem assim que você registrar entregas.</div>`;
+  }
+
+  // produtividade
+  const successRate = rows.length ? Math.round((finalized.length / rows.length) * 100) : 0;
+  const avgPerCycle = closedCycles.length ? (finalized.length / closedCycles.length).toFixed(1) : '—';
+
+  // qualidade dos dados
+  const missingPhone = rows.filter((r) => !r.phone).length;
+  const missingClient = rows.filter((r) => !r.clientName).length;
+  const missingVehicleOrDriver = rows.filter((r) => !r.vehicleId || !r.driverId).length;
+
+  // rankings
+  const rank = (items, keyFn, nameFn) => {
+    const map = {};
+    items.forEach((it) => { const k = keyFn(it); if (k) map[k] = (map[k] || 0) + 1; });
+    return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([id, count]) => [nameFn(id), count]);
+  };
+  const rankingDriver = rank(finalized, (d) => d.driverId, (id) => drivers.find((d) => d.id === id)?.name || 'Sem entregador');
+  const rankingVehicle = rank(finalized, (d) => d.vehicleId, (id) => vehicles.find((v) => v.id === id)?.label || 'Sem veículo');
+  const rankingNeighborhood = rank(rows, (d) => d.neighborhoodId, (id) => neighborhoods.find((n) => n.id === id)?.name || 'Sem bairro');
+
+  // entregas por dia da semana
+  const weekdayNames = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+  const byWeekday = new Array(7).fill(0);
+  rows.forEach((r) => { byWeekday[new Date(r.entryTime).getDay()]++; });
+
+  // distribuição por status
+  const statusKeys = Object.keys(STATUS_META);
+  const statusCounts = statusKeys.map((k) => rows.filter((r) => r.status === k).length);
+  const statusLabels = statusKeys.map((k) => STATUS_META[k].label);
+
+  const rankTable = (title, data, tip) => `
+    <div class="stat-card" data-tip="${tip}">
+      <small>${title}</small>
+      <table style="width:100%;margin-top:8px;font-size:12.5px">
+        ${data.length ? data.map(([name, count]) => `<tr><td style="padding:3px 0">${escapeHtml(name)}</td><td style="text-align:right;font-weight:800">${count}</td></tr>`).join('') : '<tr><td style="color:var(--text-muted)">Sem dados suficientes</td></tr>'}
+      </table>
+    </div>`;
+
+  return `
+    <div class="stat-row">
+      <div class="stat-card" data-tip="Todas as entregas ativas no ambiente atual"><small>Total de entregas</small><strong data-count="${rows.length}">0</strong></div>
+      <div class="stat-card" data-tip="Percentual de entregas que chegaram ao cliente"><small>Taxa de sucesso</small><strong data-count="${successRate}">0</strong>%</div>
+      <div class="stat-card" data-tip="Retorno, reentrega ou cancelada"><small>Retorno/Problemas</small><strong data-count="${problems.length}">0</strong></div>
+      <div class="stat-card accent" data-tip="Taxas recebidas menos reembolsos menos custos"><small>Saldo financeiro</small><strong>${money(financial.balance)}</strong></div>
+    </div>
+    <div class="stat-row">
+      <div class="stat-card" data-tip="Ciclos abertos + fechados no período"><small>Ciclos realizados</small><strong data-count="${cycles.length}">0</strong></div>
+      <div class="stat-card" data-tip="Entregas finalizadas por ciclo fechado, em média"><small>Produtividade média/ciclo</small><strong>${avgPerCycle}</strong></div>
+      <div class="stat-card" data-tip="KM total rodado no ambiente atual"><small>KM total rodado</small><strong>${financial.kmTotal.toFixed(1)}</strong></div>
+      <div class="stat-card" data-tip="Taxas retiradas do resultado por retirada na loja"><small>Reembolsos</small><strong>${money(financial.refunds)}</strong></div>
+    </div>
+
+    <h3 style="font-size:14px;margin:22px 0 10px">Entregas por dia da semana</h3>
+    <div class="stat-card" data-tip="Volume total por dia da semana, desde o início dos registros">
+      ${barChartSVG({ labels: weekdayNames, values: byWeekday, color: 'var(--ink)' })}
+    </div>
+
+    <h3 style="font-size:14px;margin:22px 0 10px">Distribuição por status</h3>
+    <div class="stat-card" data-tip="Quantidade de entregas em cada status atual">
+      ${barChartSVG({ labels: statusLabels, values: statusCounts, color: 'var(--accent)' })}
+    </div>
+
+    <h3 style="font-size:14px;margin:22px 0 10px">Rankings</h3>
+    <div class="stat-row" style="grid-template-columns:repeat(3,1fr)">
+      ${rankTable('Por entregador (finalizadas)', rankingDriver, 'Quem mais finalizou entregas')}
+      ${rankTable('Por veículo (finalizadas)', rankingVehicle, 'Qual veículo mais rodou entregas finalizadas')}
+      ${rankTable('Por bairro (volume)', rankingNeighborhood, 'Bairros com mais entregas registradas')}
+    </div>
+
+    <h3 style="font-size:14px;margin:22px 0 10px">Qualidade dos dados</h3>
+    <div class="stat-row" style="grid-template-columns:repeat(3,1fr)">
+      <div class="stat-card" data-tip="Entregas sem telefone preenchido"><small>Sem telefone</small><strong data-count="${missingPhone}">0</strong></div>
+      <div class="stat-card" data-tip="Entregas sem nome de cliente"><small>Sem nome de cliente</small><strong data-count="${missingClient}">0</strong></div>
+      <div class="stat-card" data-tip="Entregas sem veículo ou entregador vinculado"><small>Sem veículo/entregador</small><strong data-count="${missingVehicleOrDriver}">0</strong></div>
+    </div>
+  `;
+}
+
+/* =========================================================
+   BUSCA GERAL (seção 14)
+   ========================================================= */
+export async function renderSearch() {
+  return `
+    <input id="searchInput" placeholder="Buscar por compra, cliente, telefone, endereço, bairro, veículo, entregador, status…" style="width:100%;padding:11px 14px;border-radius:9px;border:1px solid var(--line);margin-bottom:14px;font-size:13px" />
+    <div id="searchResults"></div>
+  `;
+}
+export function wireSearchEvents() {
+  const input = $('#searchInput');
+  if (!input) return;
+  input.addEventListener('input', async () => {
+    const q = input.value.trim().toLowerCase();
+    const env = getEnv();
+    const rows = await Deliveries.active(env);
+    const neighborhoods = await Neighborhoods.all();
+    const vehicles = await Vehicles.all();
+    const drivers = await Drivers.all();
+    const nName = (id) => neighborhoods.find((n) => n.id === id)?.name || '';
+    const vName = (id) => vehicles.find((v) => v.id === id)?.label || '';
+    const dName = (id) => drivers.find((d) => d.id === id)?.name || '';
+
+    const filtered = !q ? [] : rows.filter((r) => [
+      r.purchaseNumber, r.arrivalNumber, r.coupon, r.doc, r.pdv, r.clientName, r.phone,
+      r.street, nName(r.neighborhoodId), vName(r.vehicleId), dName(r.driverId), r.status, r.priority,
+    ].some((f) => String(f ?? '').toLowerCase().includes(q)));
+
+    $('#searchResults').innerHTML = !q
+      ? '<div class="empty-state"><strong>Digite para buscar</strong>Combine termos: nome, bairro, status, número da compra, etc.</div>'
+      : (filtered.length ? await miniList(filtered) : '<div class="empty-state"><strong>Nada encontrado</strong></div>');
+    wireCentralEvents();
+  });
+}
+
+/* =========================================================
+   RELATÓRIOS (seção 14)
+   ========================================================= */
+export async function renderReports() {
+  return `
+    <div class="stat-row" style="grid-template-columns:1fr 1fr">
+      <div class="stat-card">
+        <small>Relatório gerencial</small>
+        <p style="font-size:12.5px;color:var(--text-muted);margin:8px 0">Resumo completo com indicadores, gráfico e financeiro — pronto para impressão/PDF.</p>
+        <button class="btn-primary btn-small" id="printReportBtn">🖶 Imprimir / Salvar PDF</button>
+      </div>
+      <div class="stat-card">
+        <small>Relatório analítico</small>
+        <p style="font-size:12.5px;color:var(--text-muted);margin:8px 0">Um arquivo CSV por área — todos abrem direto no Excel.</p>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn-ghost btn-small export-btn" data-kind="deliveries">Entregas</button>
+          <button class="btn-ghost btn-small export-btn" data-kind="cycles">Ciclos</button>
+          <button class="btn-ghost btn-small export-btn" data-kind="km">Quilometragem</button>
+          <button class="btn-ghost btn-small export-btn" data-kind="costs">Custos</button>
+          <button class="btn-ghost btn-small export-btn" data-kind="audit">Auditoria</button>
+          <button class="btn-primary btn-small" id="exportAllBtn">⇩ Exportar tudo</button>
+        </div>
+      </div>
+    </div>
+    <div id="printArea" class="hidden"></div>
+  `;
+}
+
+async function buildExport(kind, env) {
+  const neighborhoods = await Neighborhoods.all();
+  const vehicles = await Vehicles.all();
+  const drivers = await Drivers.all();
+  const nName = (id) => neighborhoods.find((n) => n.id === id)?.name || '';
+  const vName = (id) => vehicles.find((v) => v.id === id)?.label || '';
+  const dName = (id) => drivers.find((d) => d.id === id)?.name || '';
+
+  if (kind === 'deliveries') {
+    const rows = await Deliveries.active(env);
+    const header = ['Compra','Chegada','Data entrada','PDV','DOC','Cupom','Cliente','Telefone','Endereço','Nº','Complemento','Referência','Bairro','Taxa','Tamanho','Viagens','Prioridade','Tipo','Agendado para','Status','Veículo','Entregador','Reembolsado','Observações'];
+    const lines = rows.map((r) => [r.purchaseNumber, r.arrivalNumber, dateTimeBR(r.entryTime), r.pdv, r.doc, r.coupon, r.clientName, r.phone, r.street, r.houseNumber, r.complement, r.reference, nName(r.neighborhoodId), r.deliveryFee, r.size, r.tripCount, r.priority, r.type, r.scheduledAt ? dateTimeBR(r.scheduledAt) : '', STATUS_META[r.status]?.label, vName(r.vehicleId), dName(r.driverId), r.refunded ? 'Sim' : 'Não', r.notes]);
+    return { name: 'entregas', header, lines };
+  }
+  if (kind === 'cycles') {
+    const rows = (await Cycles.all()).filter((c) => c.environment === env && !c.deletedAt);
+    const header = ['Início', 'Fim', 'Veículo', 'Entregador', 'Status', 'Qtd. entregas'];
+    const lines = rows.map((c) => [dateTimeBR(c.startedAt), c.closedAt ? dateTimeBR(c.closedAt) : '', vName(c.vehicleId), dName(c.driverId), c.status, (c.deliveryIds || []).length]);
+    return { name: 'ciclos', header, lines };
+  }
+  if (kind === 'km') {
+    const rows = (await OdometerLogs.all()).filter((l) => l.environment === env);
+    const header = ['Data', 'Veículo', 'KM inicial', 'KM final', 'KM rodado'];
+    const lines = rows.map((l) => [dateBR(l.shiftDate), vName(l.vehicleId), l.kmStart, l.kmEnd ?? '', l.kmEnd != null ? (l.kmEnd - l.kmStart).toFixed(1) : '']);
+    return { name: 'quilometragem', header, lines };
+  }
+  if (kind === 'costs') {
+    const categories = await CostCategories.all();
+    const rows = (await Costs.all()).filter((c) => c.environment === env && !c.deletedAt);
+    const header = ['Data', 'Categoria', 'Veículo', 'Entregador', 'Valor', 'Observação'];
+    const lines = rows.map((c) => [dateBR(c.date), categories.find((cat) => cat.id === c.categoryId)?.name || '', vName(c.vehicleId), dName(c.driverId), c.amount, c.note]);
+    return { name: 'custos', header, lines };
+  }
+  if (kind === 'audit') {
+    const rows = await AuditLog.all();
+    const header = ['Quando', 'Entidade', 'Ação', 'ID do registro'];
+    const lines = rows.map((e) => [dateTimeBR(e.at), e.entityTable, e.action, e.entityId]);
+    return { name: 'auditoria', header, lines };
+  }
+}
+
+export function wireReportsEvents() {
+  $$('.export-btn').forEach((btn) => btn.addEventListener('click', async () => {
+    const env = getEnv();
+    const { name, header, lines } = await buildExport(btn.dataset.kind, env);
+    downloadCSV(`orbita-${name}-${env}-${new Date().toISOString().slice(0,10)}.csv`, [header, ...lines]);
+    toast('Arquivo CSV gerado.', 'success');
+  }));
+
+  $('#exportAllBtn')?.addEventListener('click', async () => {
+    const env = getEnv();
+    for (const kind of ['deliveries', 'cycles', 'km', 'costs', 'audit']) {
+      const { name, header, lines } = await buildExport(kind, env);
+      downloadCSV(`orbita-${name}-${env}-${new Date().toISOString().slice(0,10)}.csv`, [header, ...lines]);
+      await new Promise((r) => setTimeout(r, 250)); // evita o navegador bloquear downloads múltiplos
+    }
+    toast('5 arquivos CSV gerados.', 'success');
+  });
+
+  $('#printReportBtn')?.addEventListener('click', async () => {
+    const env = getEnv();
+    const rows = await Deliveries.active(env);
+    const financial = await computeFinancialSummary(env);
+    const cycles = (await Cycles.all()).filter((c) => c.environment === env && !c.deletedAt);
+    const drivers = await Drivers.all();
+    const finalized = rows.filter((r) => r.status === 'finalizada');
+    const byDriver = {};
+    finalized.forEach((d) => { byDriver[d.driverId] = (byDriver[d.driverId] || 0) + 1; });
+    const rankingRows = Object.entries(byDriver).sort((a,b) => b[1]-a[1]).slice(0,5)
+      .map(([id, c]) => `<tr><td>${escapeHtml(drivers.find(d=>d.id===id)?.name || 'Sem entregador')}</td><td>${c}</td></tr>`).join('');
+
+    const weekdayNames = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+    const byWeekday = new Array(7).fill(0);
+    rows.forEach((r) => { byWeekday[new Date(r.entryTime).getDay()]++; });
+
+    const area = $('#printArea');
+    area.innerHTML = `
+      <h2>Relatório gerencial — ${env === 'treino' ? 'Treinamento' : 'Operação Real'}</h2>
+      <p>Gerado em ${dateTimeBR(new Date().toISOString())}</p>
+      <h3>Indicadores gerais</h3>
+      <table border="1" cellpadding="6" style="border-collapse:collapse;width:100%;margin-bottom:16px">
+        <tr><td>Total de entregas</td><td>${rows.length}</td></tr>
+        <tr><td>Finalizadas</td><td>${finalized.length}</td></tr>
+        <tr><td>Taxa de sucesso</td><td>${rows.length ? Math.round(finalized.length/rows.length*100) : 0}%</td></tr>
+        <tr><td>Ciclos realizados</td><td>${cycles.length}</td></tr>
+        <tr><td>KM total rodado</td><td>${financial.kmTotal.toFixed(1)} km</td></tr>
+      </table>
+      <h3>Financeiro</h3>
+      <table border="1" cellpadding="6" style="border-collapse:collapse;width:100%;margin-bottom:16px">
+        <tr><td>Total de taxas</td><td>${money(financial.fees)}</td></tr>
+        <tr><td>Reembolsos</td><td>${money(financial.refunds)}</td></tr>
+        <tr><td>Custos</td><td>${money(financial.costsTotal)}</td></tr>
+        <tr><td>Saldo</td><td>${money(financial.balance)}</td></tr>
+      </table>
+      <h3>Entregas por dia da semana</h3>
+      <table border="1" cellpadding="6" style="border-collapse:collapse;width:100%;margin-bottom:16px">
+        <tr>${weekdayNames.map(d=>`<th>${d}</th>`).join('')}</tr>
+        <tr>${byWeekday.map(v=>`<td style="text-align:center">${v}</td>`).join('')}</tr>
+      </table>
+      <h3>Ranking por entregador</h3>
+      <table border="1" cellpadding="6" style="border-collapse:collapse;width:100%">
+        <tr><th>Entregador</th><th>Entregas finalizadas</th></tr>
+        ${rankingRows || '<tr><td colspan="2">Sem dados suficientes</td></tr>'}
+      </table>`;
+    area.classList.remove('hidden');
+    window.print();
+  });
+}
+
+/* =========================================================
+   AUDITORIA (seção 13)
+   ========================================================= */
+export async function renderAudit() {
+  const log = await AuditLog.all();
+  if (!log.length) return `<div class="empty-state"><strong>Sem eventos ainda</strong></div>`;
+  const rows = log.slice(0, 200).map((e) => `
+    <tr><td>${dateTimeBR(e.at)}</td><td>${escapeHtml(e.entityTable)}</td><td>${e.action}</td><td style="font-family:monospace;font-size:11px">${escapeHtml(e.entityId).slice(0,14)}</td></tr>
+  `).join('');
+  return `<div class="table-wrap"><table><thead><tr><th>Quando</th><th>Entidade</th><th>Ação</th><th>ID</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+/* =========================================================
+   LIXEIRA
+   ========================================================= */
+export async function renderTrash() {
+  const env = getEnv();
+  const rows = (await Deliveries.trashed(env)).sort((a, b) => (b.deletedAt || '').localeCompare(a.deletedAt || ''));
+  if (!rows.length) return `<div class="empty-state"><strong>Lixeira vazia</strong></div>`;
+  const trs = rows.map((r) => `
+    <tr data-id="${r.id}">
+      <td><strong>#${r.purchaseNumber}</strong> ${escapeHtml(r.clientName || '')}</td>
+      <td>${dateBR(r.deletedAt)}</td>
+      <td><button class="btn-ghost btn-small restore-btn">Restaurar</button></td>
+    </tr>`).join('');
+  return `<div class="table-wrap"><table><thead><tr><th>Entrega</th><th>Removida em</th><th></th></tr></thead><tbody>${trs}</tbody></table></div>`;
+}
+export function wireTrashEvents() {
+  $$('.restore-btn').forEach((btn) => btn.addEventListener('click', async (e) => {
+    const id = e.target.closest('tr').dataset.id;
+    await Deliveries.restore(id);
+    toast('Entrega restaurada.', 'success');
+    refreshApp();
+  }));
+}
+
+/* =========================================================
+   CADASTROS ADMINISTRATIVOS (seção 15)
+   ========================================================= */
+export async function renderRegistry(tab = 'vehicles') {
+  const tabs = [
+    ['vehicles', 'Veículos'], ['drivers', 'Entregadores'], ['collaborators', 'Colaboradores'], ['neighborhoods', 'Bairros'],
+    ['costCategories', 'Categorias de custo'], ['returnReasons', 'Motivos de retorno'],
+  ];
+  const tabsHtml = tabs.map(([key, label]) => `<button class="btn-ghost btn-small registry-tab ${tab === key ? 'active-tab' : ''}" data-tab="${key}">${label}</button>`).join('');
+
+  let listHtml = '';
+  if (tab === 'vehicles') listHtml = await vehicleList();
+  if (tab === 'drivers') listHtml = await registryList(Drivers, 'name', 'drivers');
+  if (tab === 'collaborators') listHtml = await registryList(Collaborators, 'name', 'collaborators');
+  if (tab === 'neighborhoods') listHtml = await registryList(Neighborhoods, 'name', 'neighborhoods', true);
+  if (tab === 'costCategories') listHtml = await registryList(CostCategories, 'name', 'costCategories');
+  if (tab === 'returnReasons') listHtml = await registryList(ReturnReasons, 'label', 'returnReasons');
+
+  return `<div style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap">${tabsHtml}</div>
+    <div style="margin-bottom:12px"><button class="btn-primary btn-small" id="registryAddBtn" data-tab="${tab}">＋ Adicionar</button></div>
+    ${listHtml}`;
+}
+
+async function registryList(store, field, storeName, showOrder = false) {
+  const rows = await store.all();
+  if (!rows.length) return `<div class="empty-state"><strong>Nada cadastrado ainda</strong></div>`;
+  const trs = rows.map((r) => `
+    <tr data-id="${r.id}" data-store="${storeName}">
+      <td>${escapeHtml(r[field])}${showOrder ? ` <span style="color:var(--text-muted);font-size:11px">(ordem ${r.routeOrder ?? 0})</span>` : ''}</td>
+      <td>${r.active === false ? '<span class="badge problema">Inativo</span>' : '<span class="badge entregue">Ativo</span>'}</td>
+      <td><button class="btn-ghost btn-small registry-toggle">${r.active === false ? 'Reativar' : 'Desativar'}</button></td>
+    </tr>`).join('');
+  return `<div class="table-wrap"><table><thead><tr><th>Nome</th><th>Status</th><th></th></tr></thead><tbody>${trs}</tbody></table></div>`;
+}
+
+async function vehicleList() {
+  const rows = await Vehicles.all();
+  if (!rows.length) return `<div class="empty-state"><strong>Nenhum veículo cadastrado</strong></div>`;
+  const trs = rows.map((v) => `
+    <tr data-id="${v.id}" data-store="vehicles">
+      <td><strong>${escapeHtml(v.label)}</strong></td>
+      <td>${escapeHtml(v.brand || '—')}</td>
+      <td>${escapeHtml(v.model || '—')}</td>
+      <td>${escapeHtml(v.plate || '—')}</td>
+      <td>${escapeHtml(v.year || '—')}</td>
+      <td>${v.active === false ? '<span class="badge problema">Inativo</span>' : '<span class="badge entregue">Ativo</span>'}</td>
+      <td><button class="btn-ghost btn-small registry-toggle">${v.active === false ? 'Reativar' : 'Desativar'}</button></td>
+    </tr>`).join('');
+  return `<div class="table-wrap"><table><thead><tr><th>Apelido</th><th>Fabricante</th><th>Modelo</th><th>Placa</th><th>Ano</th><th>Status</th><th></th></tr></thead><tbody>${trs}</tbody></table></div>`;
+}
+
+const REGISTRY_STORES = { vehicles: Vehicles, drivers: Drivers, collaborators: Collaborators, neighborhoods: Neighborhoods, costCategories: CostCategories, returnReasons: ReturnReasons };
+const REGISTRY_FIELD = { vehicles: 'label', drivers: 'name', collaborators: 'name', neighborhoods: 'name', costCategories: 'name', returnReasons: 'label' };
+
+export function wireRegistryEvents(currentTab, onTabChange) {
+  $$('.registry-tab').forEach((btn) => btn.addEventListener('click', () => onTabChange(btn.dataset.tab)));
+  $('#registryAddBtn')?.addEventListener('click', () => openRegistryAddModal(currentTab));
+  $$('.registry-toggle').forEach((btn) => btn.addEventListener('click', async (e) => {
+    const tr = e.target.closest('tr');
+    const store = REGISTRY_STORES[tr.dataset.store];
+    const rec = await store.get(tr.dataset.id);
+    // desativar preserva histórico — nunca apaga (seção 15)
+    await store.update(rec.id, rec.active === false ? { active: true } : { active: false, deactivatedAt: new Date().toISOString() });
+    toast('Atualizado.', 'success');
+    onTabChange(currentTab);
+  }));
+}
+
+function openRegistryAddModal(tab) {
+  if (tab === 'vehicles') return openVehicleAddModal();
+  const field = REGISTRY_FIELD[tab];
+  const store = REGISTRY_STORES[tab];
+  const isNeighborhood = tab === 'neighborhoods';
+  openModal({
+    title: 'Novo cadastro',
+    body: `
+      <form id="registryForm">
+        <label>Nome *<input name="${field}" required /></label>
+        ${isNeighborhood ? '<label>Ordem de rota<input name="routeOrder" type="number" value="0" /></label>' : ''}
+      </form>`,
+    actions: [
+      { label: 'Cancelar', kind: 'ghost', onClick: closeModal },
+      { label: 'Salvar', kind: 'primary', onClick: async () => {
+        const form = $('#registryForm');
+        if (!form.reportValidity()) return;
+        const fd = Object.fromEntries(new FormData(form).entries());
+        const payload = { [field]: fd[field].trim(), active: true };
+        if (isNeighborhood) payload.routeOrder = Number(fd.routeOrder || 0);
+        await store.add(payload);
+        toast('Cadastrado.', 'success');
+        closeModal();
+        refreshApp();
+      }},
+    ],
+  });
+}
+
+function openVehicleAddModal() {
+  const years = Array.from({ length: 36 }, (_, i) => new Date().getFullYear() + 1 - i);
+  openModal({
+    title: 'Novo veículo',
+    body: `
+      <form id="vehicleForm">
+        <label>Apelido (como aparece nas listas) *<input name="label" required placeholder="Ex: Fiorino 1" /></label>
+        <div class="field-row">
+          <label>Fabricante<input name="brand" placeholder="Ex: Fiat" /></label>
+          <label>Modelo<input name="model" placeholder="Ex: Fiorino Furgão" /></label>
+        </div>
+        <div class="field-row">
+          <label>Placa<input name="plate" placeholder="ABC-1D23" style="text-transform:uppercase" /></label>
+          <label>Ano de fabricação<select name="year"><option value="">—</option>${years.map((y) => `<option value="${y}">${y}</option>`).join('')}</select></label>
+        </div>
+        <div class="field-row">
+          <label>Tipo<select name="type"><option value="carro">Carro</option><option value="moto">Moto</option><option value="van">Van/Furgão</option><option value="outro">Outro</option></select></label>
+          <label>Capacidade (kg)<input name="capacity" type="number" min="0" placeholder="Opcional" /></label>
+        </div>
+      </form>`,
+    actions: [
+      { label: 'Cancelar', kind: 'ghost', onClick: closeModal },
+      { label: 'Salvar', kind: 'primary', onClick: async () => {
+        const form = $('#vehicleForm');
+        if (!form.reportValidity()) return;
+        const fd = Object.fromEntries(new FormData(form).entries());
+        await Vehicles.add({
+          label: fd.label.trim(), brand: fd.brand?.trim() || '', model: fd.model?.trim() || '',
+          plate: fd.plate?.trim().toUpperCase() || '', year: fd.year || '', type: fd.type, capacity: fd.capacity ? Number(fd.capacity) : null,
+          active: true,
+        });
+        toast('Veículo cadastrado.', 'success');
+        closeModal();
+        refreshApp();
+      }},
+    ],
+  });
+}
+
+/* =========================================================
+   CONFIGURAÇÕES (backup, treinamento, empresa)
+   ========================================================= */
+export async function renderSettings() {
+  const cfg = JSON.parse(localStorage.getItem('orbita_settings') || '{}');
+  return `
+    <div class="stat-card" style="margin-bottom:16px">
+      <small>Backup e restauração</small>
+      <p style="font-size:12.5px;color:var(--text-muted);margin:8px 0">O backup gera um snapshot antes de qualquer restauração, para nunca perder dados por engano.</p>
+      <div style="display:flex;gap:8px">
+        <button class="btn-ghost btn-small" id="settingsBackupBtn">⇩ Backup completo (JSON)</button>
+        <label class="btn-ghost btn-small" style="cursor:pointer">⇧ Restaurar<input type="file" id="settingsRestoreInput" accept="application/json" hidden /></label>
+      </div>
+    </div>
+    <div class="stat-card">
+      <small>Empresa</small>
+      <form id="companyForm" style="margin-top:8px;display:grid;gap:8px;max-width:360px">
+        <label>Nome<input name="companyName" value="${escapeHtml(cfg.companyName || 'Nilo Supermercado')}" /></label>
+        <label>Limite de atraso (minutos)<input name="delayLimit" type="number" value="${cfg.delayLimit || 60}" /></label>
+        <button type="submit" class="btn-primary btn-small" style="width:fit-content">Salvar</button>
+      </form>
+    </div>
+  `;
+}
+export function wireSettingsEvents() {
+  $('#settingsBackupBtn')?.addEventListener('click', async () => {
+    const data = await (await import('./db.js')).exportAll();
+    downloadJSON(`orbita-backup-completo-${new Date().toISOString().slice(0,10)}.json`, data);
+    toast('Backup completo gerado.', 'success');
+  });
+  $('#settingsRestoreInput')?.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (!confirm('Isso vai substituir os dados atuais pelo conteúdo do backup. Um backup de segurança dos dados atuais será baixado antes. Continuar?')) { e.target.value = ''; return; }
+    const currentBackup = await (await import('./db.js')).exportAll();
+    downloadJSON(`orbita-backup-seguranca-antes-restauracao-${Date.now()}.json`, currentBackup);
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      await (await import('./db.js')).importAll(data);
+      toast('Backup restaurado.', 'success');
+      refreshApp();
+    } catch { toast('Arquivo de backup inválido.', 'error'); }
+    e.target.value = '';
+  });
+  $('#companyForm')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const fd = Object.fromEntries(new FormData(e.target).entries());
+    localStorage.setItem('orbita_settings', JSON.stringify({ companyName: fd.companyName, delayLimit: Number(fd.delayLimit) }));
+    toast('Configurações salvas.', 'success');
+  });
+}
