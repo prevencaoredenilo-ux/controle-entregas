@@ -1,6 +1,6 @@
-import { ensureSeed, saveAutoBackup } from './db.js?v=2.9';
-import { $, $$, toast, initTooltips, animateStatCards, performanceProfile } from './helpers.js?v=2.9';
-import * as V from './views.js?v=2.9';
+import { ensureSeed, saveAutoBackup } from './db.js?v=3.0';
+import { $, $$, toast, initTooltips, animateStatCards, performanceProfile } from './helpers.js?v=3.0';
+import * as V from './views.js?v=3.0';
 
 let currentView = 'central';
 let currentRegistryTab = 'vehicles';
@@ -110,7 +110,7 @@ function wireNav() {
 }
 
 async function openOperatorPicker() {
-  const { Collaborators } = await import('./db.js?v=2.9');
+  const { Collaborators } = await import('./db.js?v=3.0');
   const list = (await Collaborators.all()).filter((c) => c.active !== false);
   openModal({
     title: 'Quem está operando agora?',
@@ -179,51 +179,82 @@ const GENERAL_CURIOSITIES = [
 
 function openFunBreak() {
   openModal({
-    title: '🛡️ Prevenção em Foco',
-    subtitle: 'Treino rápido de Prevenção de Perdas e curiosidades gerais — escolha uma resposta e veja a explicação.',
+    title: '🛡️ Pergunta rápida',
+    subtitle: 'Uma pergunta por vez. O sistema não repete nenhuma até passar por todo o banco de perguntas.',
     body: `<div class="knowledge-quiz" id="knowledgeQuiz">
-      <div class="quiz-mode-row">
-        <button type="button" class="quiz-mode-btn active" data-quiz-mode="prevencao"><span>🛡️</span><strong>Prevenção de Perdas</strong><small>Situações do dia a dia</small></button>
-        <button type="button" class="quiz-mode-btn" data-quiz-mode="geral"><span>💡</span><strong>Curiosidades gerais</strong><small>Conhecimento rápido</small></button>
-      </div>
       <div class="quiz-card" id="quizCard"></div>
     </div>`,
     actions: [{ label: 'Fechar', kind: 'ghost', onClick: closeModal }],
   });
-  startKnowledgeQuiz('prevencao');
-  $$('.quiz-mode-btn').forEach((btn)=>btn.addEventListener('click',()=>{
-    $$('.quiz-mode-btn').forEach((b)=>b.classList.toggle('active',b===btn));
-    startKnowledgeQuiz(btn.dataset.quizMode);
-  }));
+  startKnowledgeQuestion();
 }
 
-let quizState = { mode:'prevencao', index:0, score:0, answered:false, order:[] };
-function startKnowledgeQuiz(mode='prevencao') {
-  const bank = mode === 'geral' ? GENERAL_CURIOSITIES : PREVENTION_QUESTIONS;
-  const order = bank.map((_,i)=>i).sort(()=>Math.random()-.5);
-  quizState = { mode, index:0, score:0, answered:false, order };
+const QUESTION_HISTORY_KEY = 'orbita_question_history_v3';
+const KNOWLEDGE_QUESTIONS = [
+  ...PREVENTION_QUESTIONS.map((item, i) => ({ ...item, id: `prev-${i + 1}`, group: 'PREVENÇÃO DE PERDAS' })),
+  ...GENERAL_CURIOSITIES.map((item, i) => ({ ...item, id: `geral-${i + 1}`, group: 'CURIOSIDADE GERAL' })),
+];
+let quizState = { question: null, answered: false };
+
+function readQuestionHistory() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(QUESTION_HISTORY_KEY) || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (_) { return []; }
+}
+
+function getNextKnowledgeQuestion() {
+  const validIds = new Set(KNOWLEDGE_QUESTIONS.map((q) => q.id));
+  let history = readQuestionHistory().filter((id) => validIds.has(id));
+  let available = KNOWLEDGE_QUESTIONS.filter((q) => !history.includes(q.id));
+
+  // Só reinicia a sequência depois que TODAS as perguntas já apareceram.
+  // Ao reiniciar, evita repetir imediatamente a última pergunta do ciclo anterior.
+  if (!available.length) {
+    const lastId = history.at(-1) || null;
+    history = [];
+    available = KNOWLEDGE_QUESTIONS.filter((q) => q.id !== lastId);
+    if (!available.length) available = [...KNOWLEDGE_QUESTIONS];
+  }
+
+  const question = available[Math.floor(Math.random() * available.length)];
+  const nextHistory = [...history, question.id];
+  localStorage.setItem(QUESTION_HISTORY_KEY, JSON.stringify(nextHistory));
+  return question;
+}
+
+function startKnowledgeQuestion() {
+  quizState = { question: getNextKnowledgeQuestion(), answered: false };
   renderKnowledgeQuestion();
 }
+
 function renderKnowledgeQuestion() {
-  const card=$('#quizCard'); if(!card)return;
-  const bank=quizState.mode==='geral'?GENERAL_CURIOSITIES:PREVENTION_QUESTIONS;
-  const q=bank[quizState.order[quizState.index % quizState.order.length]];
-  card.innerHTML=`<div class="quiz-progress"><span>${quizState.mode==='geral'?'CURIOSIDADE GERAL':'PREVENÇÃO DE PERDAS'}</span><strong>${quizState.index+1}/${Math.min(quizState.order.length,10)}</strong></div>
+  const card = $('#quizCard'); if (!card || !quizState.question) return;
+  const q = quizState.question;
+  card.innerHTML = `<div class="quiz-progress"><span>${q.group}</span><strong>SEM REPETIR</strong></div>
     <h3>${escapeAttr(q.q)}</h3>
-    <div class="quiz-options">${q.options.map((opt,i)=>`<button type="button" class="quiz-option" data-answer="${i}"><i>${String.fromCharCode(65+i)}</i><span>${escapeAttr(opt)}</span></button>`).join('')}</div>
+    <div class="quiz-options">${q.options.map((opt, i) => `<button type="button" class="quiz-option" data-answer="${i}"><i>${String.fromCharCode(65 + i)}</i><span>${escapeAttr(opt)}</span></button>`).join('')}</div>
     <div class="quiz-feedback hidden" id="quizFeedback"></div>
-    <div class="quiz-footer"><span>Acertos: <strong id="quizScore">${quizState.score}</strong></span><button type="button" class="btn-primary btn-small hidden" id="quizNextBtn">Próxima pergunta ›</button></div>`;
-  $$('.quiz-option').forEach((btn)=>btn.addEventListener('click',()=>answerKnowledgeQuestion(Number(btn.dataset.answer),q)));
+    <div class="quiz-footer"><span>Uma pergunta de cada vez</span><button type="button" class="btn-primary btn-small hidden" id="quizNextBtn">Outra pergunta ›</button></div>`;
+  $$('.quiz-option').forEach((btn) => btn.addEventListener('click', () => answerKnowledgeQuestion(Number(btn.dataset.answer), q)));
 }
-function answerKnowledgeQuestion(selected,q){
-  if(quizState.answered)return; quizState.answered=true;
-  const correct=selected===q.correct; if(correct)quizState.score++;
-  $$('.quiz-option').forEach((btn)=>{const i=Number(btn.dataset.answer);btn.disabled=true;if(i===q.correct)btn.classList.add('correct');else if(i===selected)btn.classList.add('wrong');});
-  const feedback=$('#quizFeedback'); feedback?.classList.remove('hidden');
-  if(feedback)feedback.innerHTML=`<div class="${correct?'quiz-hit':'quiz-miss'}"><span>${correct?'✓':'!'}</span><div><strong>${correct?'Resposta correta!':'Quase — veja a resposta certa.'}</strong><p>${escapeAttr(q.note)}</p></div></div>`;
-  if($('#quizScore'))$('#quizScore').textContent=quizState.score;
-  const next=$('#quizNextBtn'); next?.classList.remove('hidden');
-  next?.addEventListener('click',()=>{quizState.index=(quizState.index+1)%Math.min(quizState.order.length,10);quizState.answered=false;renderKnowledgeQuestion();});
+
+function answerKnowledgeQuestion(selected, q) {
+  if (quizState.answered) return;
+  quizState.answered = true;
+  const correct = selected === q.correct;
+  $$('.quiz-option').forEach((btn) => {
+    const i = Number(btn.dataset.answer);
+    btn.disabled = true;
+    if (i === q.correct) btn.classList.add('correct');
+    else if (i === selected) btn.classList.add('wrong');
+  });
+  const feedback = $('#quizFeedback');
+  feedback?.classList.remove('hidden');
+  if (feedback) feedback.innerHTML = `<div class="${correct ? 'quiz-hit' : 'quiz-miss'}"><span>${correct ? '✓' : '!'}</span><div><strong>${correct ? 'Resposta correta!' : 'Resposta incorreta — veja a correta.'}</strong><p>${escapeAttr(q.note)}</p></div></div>`;
+  const next = $('#quizNextBtn');
+  next?.classList.remove('hidden');
+  next?.addEventListener('click', startKnowledgeQuestion, { once: true });
 }
 
 /* ---------- modal genérico ---------- */
@@ -298,7 +329,7 @@ async function render() {
 }
 
 async function updateBadges() {
-  const { Deliveries, Cycles } = await import('./db.js?v=2.9');
+  const { Deliveries, Cycles } = await import('./db.js?v=3.0');
   const rows = await Deliveries.active(environment);
   $('#pendingBadge').textContent = rows.filter((r) => r.status === 'na_loja').length;
   const trashed = await Deliveries.trashed(environment);
@@ -321,7 +352,7 @@ if ('serviceWorker' in navigator) {
     refreshingForUpdate = true;
     window.location.reload();
   });
-  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js?v=2.9', { updateViaCache: 'none' }).then((registration) => registration.update()).catch(() => {}));
+  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js?v=3.0', { updateViaCache: 'none' }).then((registration) => registration.update()).catch(() => {}));
 }
 
 boot();

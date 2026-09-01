@@ -1,4 +1,14 @@
-# Órbita v2.9 — Inteligência + Excel
+# Órbita v3.0 — Perguntas sem repetição + correção real do KM
+
+## Atualização v3.0
+- O recurso do topo agora mostra **somente perguntas**, uma por vez, misturando Prevenção de Perdas e conhecimentos gerais.
+- As perguntas ficam registradas localmente e **não se repetem até todas do banco terem aparecido**; quando o ciclo reinicia, a última pergunta não aparece novamente de imediato.
+- Foram removidos seletor de categorias, placar e sequência de quiz; permanecem pergunta, alternativas, resposta correta e explicação curta.
+- KM ganhou a ação **Corrigir fechamento antecipado** para o caso de alguém lançar o KM final no meio do expediente.
+- Essa ação reabre o expediente (KM final volta a ficar pendente), libera o veículo para continuar em ciclos e mantém o KM final lançado por engano no histórico/auditoria.
+- Se o fechamento geral do dia já tiver sido feito, ele é marcado como substituído e precisa ser confirmado novamente depois do KM final verdadeiro.
+- Para datas passadas, o KM final continua podendo ser corrigido por **Editar KM final**, mas a reabertura operacional fica limitada ao mesmo dia.
+
 
 ## Atualizações desta versão
 - Excel completo em um único arquivo `.xls` com 31 abas analíticas inspiradas no relatório de referência enviado.
