@@ -1,6 +1,6 @@
-import { ensureSeed, saveAutoBackup } from './db.js?v=3.2';
-import { $, $$, toast, initTooltips, animateStatCards, performanceProfile } from './helpers.js?v=3.2';
-import * as V from './views.js?v=3.2';
+import { ensureSeed, saveAutoBackup } from './db.js?v=3.3';
+import { $, $$, toast, initTooltips, animateStatCards, performanceProfile } from './helpers.js?v=3.3';
+import * as V from './views.js?v=3.3';
 
 let currentView = 'central';
 let currentRegistryTab = 'vehicles';
@@ -112,7 +112,7 @@ function wireNav() {
 }
 
 async function openOperatorPicker() {
-  const { Collaborators } = await import('./db.js?v=3.2');
+  const { Collaborators } = await import('./db.js?v=3.3');
   const list = (await Collaborators.all()).filter((c) => c.active !== false);
   openModal({
     title: 'Quem está operando agora?',
@@ -232,7 +232,7 @@ function showNextTickerQuestion() {
   const btn = $('#funBreakBtn');
   const isGeneral = q.group === 'CURIOSIDADE GERAL';
   if (text) text.textContent = q.q;
-  if (meta) meta.textContent = isGeneral ? 'Curiosidade Geral alternando automaticamente. Clique na pergunta para abrir as respostas.' : 'Prevenção de Perdas alternando automaticamente. Clique na pergunta para abrir as respostas.';
+  if (meta) meta.textContent = isGeneral ? 'Clique na pergunta para abrir as respostas da curiosidade.' : 'Clique na pergunta para abrir as respostas de prevenção.';
   if (icon) icon.textContent = q.icon;
   if (group) group.textContent = q.group;
   if (btn) {
@@ -359,7 +359,7 @@ async function render() {
 }
 
 async function updateBadges() {
-  const { Deliveries, Cycles } = await import('./db.js?v=3.2');
+  const { Deliveries, Cycles } = await import('./db.js?v=3.3');
   const rows = await Deliveries.active(environment);
   $('#pendingBadge').textContent = rows.filter((r) => r.status === 'na_loja').length;
   const trashed = await Deliveries.trashed(environment);
@@ -382,7 +382,7 @@ if ('serviceWorker' in navigator) {
     refreshingForUpdate = true;
     window.location.reload();
   });
-  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js?v=3.2', { updateViaCache: 'none' }).then((registration) => registration.update()).catch(() => {}));
+  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js?v=3.3', { updateViaCache: 'none' }).then((registration) => registration.update()).catch(() => {}));
 }
 
 boot();
