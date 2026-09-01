@@ -201,3 +201,12 @@ Você indicou o repositório `prevencaoredenilo-ux/controle-entregas` (V14.8) co
 - Perguntas aparecem automaticamente no topo, alternando rigorosamente entre Prevenção de Perdas e Curiosidades Gerais.
 - As opções de resposta só são abertas quando o operador clica na pergunta visível.
 - Cada categoria evita repetir perguntas até percorrer seu próprio banco.
+
+## Versão 3.6 — backup automático reforçado
+
+- Backup automático imediatamente após inclusão, edição ou exclusão de dados operacionais.
+- Mudanças de status, retornos, ciclos, quilometragem, custos e cadastros também disparam snapshot.
+- Backup periódico de segurança a cada 1 minuto, mesmo quando não ocorre nova alteração.
+- Snapshot adicional na abertura do sistema.
+- Retenção local dos 50 backups automáticos mais recentes.
+- A tela Configurações identifica se o backup foi de abertura, periódico de 1 minuto ou provocado por alteração.

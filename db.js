@@ -25,6 +25,21 @@ const STORES = {
 
 let dbPromise = null;
 
+// v3.6 — backup automático por alteração + backup periódico.
+// O gatilho por escrita só é habilitado depois do seed inicial para evitar snapshots desnecessários no primeiro boot.
+let writeThroughBackupEnabled = false;
+let autoBackupQueue = Promise.resolve();
+
+export function enableWriteThroughAutoBackup() { writeThroughBackupEnabled = true; }
+
+function requestWriteThroughBackup(reason = 'alteracao') {
+  if (!writeThroughBackupEnabled) return;
+  autoBackupQueue = autoBackupQueue
+    .then(() => new Promise((resolve) => setTimeout(resolve, 0)))
+    .then(() => saveAutoBackup(reason))
+    .catch(() => {});
+}
+
 function openDB() {
   if (dbPromise) return dbPromise;
   dbPromise = new Promise((resolve, reject) => {
@@ -96,7 +111,7 @@ function genericStore(name) {
       const full = { [keyName]: record[keyName] || uid(name.slice(0, 3)), createdAt: now, updatedAt: now, ...record };
       return new Promise((res, rej) => {
         const r = store.add(full);
-        r.onsuccess = async () => { await logAudit(name, full[keyName], 'create', null, full); res(full); };
+        r.onsuccess = async () => { await logAudit(name, full[keyName], 'create', null, full); requestWriteThroughBackup(`${name}:create`); res(full); };
         r.onerror = () => rej(r.error);
       });
     },
@@ -109,7 +124,7 @@ function genericStore(name) {
           if (!before) return rej(new Error('Registro não encontrado'));
           const after = { ...before, ...patch, updatedAt: new Date().toISOString() };
           const p = store.put(after);
-          p.onsuccess = async () => { await logAudit(name, id, 'update', before, after); res(after); };
+          p.onsuccess = async () => { await logAudit(name, id, 'update', before, after); requestWriteThroughBackup(`${name}:update`); res(after); };
           p.onerror = () => rej(p.error);
         };
         g.onerror = () => rej(g.error);
@@ -122,7 +137,7 @@ function genericStore(name) {
         g.onsuccess = () => {
           const before = g.result;
           const d = store.delete(id);
-          d.onsuccess = async () => { await logAudit(name, id, 'delete', before, null); res(); };
+          d.onsuccess = async () => { await logAudit(name, id, 'delete', before, null); requestWriteThroughBackup(`${name}:delete`); res(); };
           d.onerror = () => rej(d.error);
         };
       });
@@ -231,18 +246,19 @@ export async function importAll(data) {
   await OdometerLogs.replaceAll(data.odometerLogs || []);
   await Costs.replaceAll(data.costs || []);
   await DayClosures.replaceAll(data.dayClosures || []);
+  requestWriteThroughBackup('importacao-completa');
 }
 
-/* ---------- backup automático (rolling, guarda os últimos 5) ---------- */
-export async function saveAutoBackup() {
+/* ---------- backup automático (rolling, guarda os últimos 50) ---------- */
+export async function saveAutoBackup(reason = 'periodico') {
   const snapshot = await exportAll();
   const store = await tx('autoBackups', 'readwrite');
-  const entry = { id: uid('bkp'), at: new Date().toISOString(), data: snapshot };
+  const entry = { id: uid('bkp'), at: new Date().toISOString(), reason, data: snapshot };
   return new Promise((resolve, reject) => {
     const req = store.add(entry);
     req.onsuccess = async () => {
       const all = await listAutoBackups();
-      const excess = all.slice(5);
+      const excess = all.slice(50);
       const delStore = await tx('autoBackups', 'readwrite');
       excess.forEach((b) => delStore.delete(b.id));
       resolve(entry);
