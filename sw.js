@@ -1,4 +1,4 @@
-const CACHE = 'orbita-v2-cache-4';
+const CACHE = 'orbita-v2-cache-5';
 const ASSETS = [
   './', './index.html', './styles.css', './app.js', './db.js', './helpers.js', './views.js', './manifest.webmanifest',
   './assets/brand/nilo-logo.png', './assets/brand/mascote.png', './assets/brand/triela-logo.png',
@@ -15,10 +15,10 @@ self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.mode === 'navigate') { event.respondWith(fetch(req).catch(() => caches.match('./index.html'))); return; }
   event.respondWith(
-    caches.match(req).then((cached) => cached || fetch(req).then((res) => {
+    fetch(req).then((res) => {
       const clone = res.clone();
       caches.open(CACHE).then((cache) => cache.put(req, clone));
       return res;
-    }).catch(() => cached))
+    }).catch(() => caches.match(req))
   );
 });

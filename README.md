@@ -1,5 +1,17 @@
 # Órbita — Controle de Entregas (v2 completo, client-side)
 
+## Correção v2.2 — horários obrigatórios no cliente
+
+- Novo fluxo real: **Em rota → Na casa do cliente → Finalizada**.
+- A ação **Chegou ao cliente** exige a data/hora da chegada na casa.
+- A ação **Finalizar na casa do cliente** exige a chegada e a hora de conclusão; não permite conclusão anterior à chegada.
+- Ao iniciar um ciclo, a saída da loja passa a ser registrada automaticamente em cada entrega.
+- No fechamento assistido, responder **Não, foi entregue** abre obrigatoriamente os dois horários; não existe mais finalização direta sem hora.
+- Um ciclo não fecha se houver entrega em rota, na casa do cliente ou marcada como finalizada sem hora de conclusão.
+- Saída, chegada e finalização podem ser editadas posteriormente na ficha da entrega e cada alteração gera auditoria.
+- A fila da Central mostra os horários de chegada e finalização; os relatórios CSV e PDF também incluem os três horários.
+- Identificação visual **v2.2** adicionada à tela e atualização da PWA corrigida para não manter a interface anterior no cache.
+
 ## Atualização v2.1 — Central Operacional viva
 
 - Central Operacional transformada em mesa de comando: cadastro de entrega, início e finalização de ciclo, KM inicial/final e lançamento de custo podem ser executados sem sair da Central.

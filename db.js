@@ -148,11 +148,12 @@ export const Deliveries = {
     const rows = await deliveriesBase.all();
     return rows.filter((r) => !!r.deletedAt && r.environment === environment);
   },
-  async changeStatus(id, newStatus, { reasonId = null, note = '' } = {}) {
+  async changeStatus(id, newStatus, options = {}) {
+    const { reasonId = null, note = '', ...operationalFields } = options;
     const before = await deliveriesBase.get(id);
     const history = before.statusHistory || [];
     history.push({ from: before.status, to: newStatus, reasonId, note, at: new Date().toISOString() });
-    return deliveriesBase.update(id, { status: newStatus, statusHistory: history });
+    return deliveriesBase.update(id, { status: newStatus, statusHistory: history, ...operationalFields });
   },
   async reschedule(id, newScheduledAt, reason) {
     const before = await deliveriesBase.get(id);

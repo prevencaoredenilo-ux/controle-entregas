@@ -1,5 +1,5 @@
 import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, AuditLog, Counters } from './db.js';
-import { $, $$, money, dateBR, dateTimeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, barChartSVG, thermometerHTML } from './helpers.js';
+import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, barChartSVG, thermometerHTML } from './helpers.js';
 import { getEnv, getOperatorName, closeModal, openModal, refreshApp } from './app.js';
 
 /* =========================================================
@@ -16,12 +16,12 @@ export async function renderCentral() {
   const dName = (id) => drivers.find((d) => d.id === id)?.name || 'Entregador';
 
   const naLoja = rows.filter((r) => r.status === 'na_loja');
-  const emRota = rows.filter((r) => r.status === 'em_rota');
-  const prioritarias = rows.filter((r) => r.priority === 'alta' && ['na_loja', 'em_rota'].includes(r.status));
+  const emRota = rows.filter((r) => ['em_rota', 'no_cliente'].includes(r.status));
+  const prioritarias = rows.filter((r) => r.priority === 'alta' && ['na_loja', 'em_rota', 'no_cliente'].includes(r.status));
   const reentrega = rows.filter((r) => r.status === 'reentrega');
   const agendadas = rows.filter((r) => r.type === 'agendada' && r.status === 'programada');
   const atrasadas = rows.filter((r) => {
-    if (r.status !== 'na_loja' && r.status !== 'em_rota') return false;
+    if (!['na_loja', 'em_rota', 'no_cliente'].includes(r.status)) return false;
     const mins = (Date.now() - new Date(r.entryTime).getTime()) / 60000;
     return mins > 60;
   });
@@ -34,7 +34,7 @@ export async function renderCentral() {
     return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
   };
   const todayRows = rows.filter((r) => isToday(r.entryTime));
-  const completedToday = todayRows.filter((r) => ['finalizada', 'retirada_loja'].includes(r.status)).length;
+  const completedToday = todayRows.filter((r) => (r.status === 'finalizada' && !!r.deliveredAt) || r.status === 'retirada_loja').length;
   const problemsToday = todayRows.filter((r) => ['retorno', 'reentrega', 'cancelada'].includes(r.status)).length;
   const lateToday = atrasadas.filter((r) => isToday(r.entryTime)).length;
   const totalToday = todayRows.length;
@@ -79,7 +79,7 @@ export async function renderCentral() {
 
     <div class="stat-row">
       <button class="stat-card clickable" data-central-filter="na_loja" data-tip="Compras lançadas aguardando um ciclo. Clique para filtrar a fila."><span class="stat-icon blue">⌂</span><small>Na loja</small><strong data-count="${naLoja.length}">0</strong><em>aguardando saída</em></button>
-      <button class="stat-card clickable" data-central-filter="em_rota" data-tip="Entregas que saíram e ainda não foram concluídas. Clique para filtrar."><span class="stat-icon cyan">➜</span><small>Em rota</small><strong data-count="${emRota.length}">0</strong><em>em atendimento</em></button>
+      <button class="stat-card clickable" data-central-filter="em_andamento" data-tip="Entregas em rota ou já na casa do cliente. Clique para filtrar."><span class="stat-icon cyan">➜</span><small>Em andamento</small><strong data-count="${emRota.length}">0</strong><em>rota ou cliente</em></button>
       <button class="stat-card clickable" data-central-filter="alta" data-tip="Prioridades altas na loja ou em rota. Clique para filtrar."><span class="stat-icon yellow">★</span><small>Prioritárias</small><strong data-count="${prioritarias.length}">0</strong><em>exigem atenção</em></button>
       <button class="stat-card clickable ${atrasadas.length ? 'danger-card' : ''}" data-central-filter="atrasada" data-tip="Entregas abertas há mais de 60 minutos. Clique para ver as ocorrências."><span class="stat-icon red">!</span><small>Atrasadas (&gt;60min)</small><strong data-count="${atrasadas.length}">0</strong><em>${atrasadas.length ? 'agir agora' : 'tudo em ordem'}</em></button>
     </div>
@@ -124,7 +124,7 @@ async function miniList(rows) {
       <td><strong>#${r.purchaseNumber}</strong></td>
       <td>${escapeHtml(r.clientName || 'Sem nome')}<br><span style="color:var(--text-muted);font-size:11px">${escapeHtml(r.street || '')}</span></td>
       <td><strong>${escapeHtml(r.coupon || '—')}</strong><br><span style="color:var(--text-muted);font-size:11px">PDV ${escapeHtml(r.pdv || '—')} · DOC ${escapeHtml(r.doc || '—')}</span></td>
-      <td>${badge(r.status)}</td>
+      <td>${badge(r.status)}<br><span class="delivery-times">Chegou: ${timeBR(r.clientArrivalAt)} · Final: ${timeBR(r.deliveredAt)}</span></td>
       <td>${r.priority === 'alta' ? '<span class="badge problema">Alta</span>' : '—'}</td>
       <td>${money(r.deliveryFee)}</td>
     </tr>`).join('');
@@ -251,6 +251,7 @@ function applyCentralFilter(value) {
     const matches = !q
       || (q === 'atrasada' && row.dataset.late === 'true')
       || (q === 'alta' && row.dataset.priority === 'alta')
+      || (q === 'em_andamento' && ['em_rota', 'no_cliente'].includes(row.dataset.status))
       || row.dataset.status === q
       || (row.dataset.search || '').includes(q);
     row.classList.toggle('hidden', !matches);
@@ -290,6 +291,27 @@ async function openKmPicker(logs) {
 /* =========================================================
    MODAL — CADASTRO / EDIÇÃO DE ENTREGA (seção 7 e 8)
    ========================================================= */
+function localDateTimeValue(value = new Date()) {
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  const local = new Date(d.getTime() - (d.getTimezoneOffset() * 60000));
+  return local.toISOString().slice(0, 16);
+}
+
+function operationalTimeFields(record) {
+  if (!record) return '';
+  return `
+    <fieldset class="operational-times-card">
+      <legend>Horários da entrega</legend>
+      <p>Todos podem ser corrigidos depois. As alterações ficam registradas na auditoria.</p>
+      <label>Saída da loja<input type="datetime-local" name="leftStoreAt" value="${localDateTimeValue(record.leftStoreAt)}" /></label>
+      <div class="field-row">
+        <label>Chegada na casa do cliente<input type="datetime-local" name="clientArrivalAt" value="${localDateTimeValue(record.clientArrivalAt)}" /></label>
+        <label>Finalizada na casa do cliente<input type="datetime-local" name="deliveredAt" value="${localDateTimeValue(record.deliveredAt)}" /></label>
+      </div>
+    </fieldset>`;
+}
+
 export async function openDeliveryModal(record = null) {
   const isEdit = !!record;
   const env = getEnv();
@@ -377,6 +399,7 @@ export async function openDeliveryModal(record = null) {
           </select>
         </label>
       </div>
+      ${operationalTimeFields(record)}
       <label>Observações<textarea name="notes" rows="2">${escapeHtml(record?.notes || '')}</textarea></label>
     </form>
   `;
@@ -413,11 +436,14 @@ function deliveryStatusActionsHtml(record) {
   const buttons = [];
   if (record.status === 'na_loja') buttons.push('<button type="button" class="btn-ghost btn-small" data-action="em_rota">Marcar Em rota</button>');
   if (record.status === 'em_rota') {
-    buttons.push('<button type="button" class="btn-ghost btn-small" data-action="finalizada">Marcar Finalizada</button>');
+    buttons.push('<button type="button" class="btn-ghost btn-small" data-action="chegou_cliente">Chegou ao cliente</button>');
+    buttons.push('<button type="button" class="btn-primary btn-small" data-action="finalizada">Finalizar na casa do cliente</button>');
     buttons.push('<button type="button" class="btn-ghost btn-small" data-action="retirada">Retirada na loja</button>');
   }
+  if (record.status === 'no_cliente') buttons.push('<button type="button" class="btn-primary btn-small" data-action="finalizada">Finalizar na casa do cliente</button>');
   if (record.status === 'na_loja') buttons.push('<button type="button" class="btn-ghost btn-small" data-action="retirada">Retirada na loja</button>');
   if (record.status === 'finalizada') {
+    buttons.push('<button type="button" class="btn-ghost btn-small" data-action="editar_horarios">Editar horários</button>');
     buttons.push('<button type="button" class="btn-ghost btn-small" data-action="retorno">Registrar retorno</button>');
   }
   if (record.type === 'agendada' || record.status === 'programada') {
@@ -440,11 +466,76 @@ function wireDeliveryStatusActions(record) {
     guardClick(btn, async () => {
       const action = btn.dataset.action;
       if (action === 'em_rota') { await Deliveries.changeStatus(record.id, 'em_rota'); toast('Entrega em rota.', 'success'); closeModal(); refreshApp(); }
-      if (action === 'finalizada') { await Deliveries.changeStatus(record.id, 'finalizada'); toast('Entrega finalizada.', 'success'); closeModal(); refreshApp(); }
+      if (action === 'chegou_cliente') openClientArrivalFlow(record);
+      if (action === 'finalizada') openDeliveryCompletionFlow(record);
+      if (action === 'editar_horarios') openDeliveryCompletionFlow(record, { editing: true });
       if (action === 'retirada') openRetiradaFlow(record);
       if (action === 'retorno') openRetornoFlow(record);
       if (action === 'reagendar') openReagendarFlow(record);
     });
+  });
+}
+
+function openClientArrivalFlow(record) {
+  openModal({
+    title: 'Chegada na casa do cliente',
+    subtitle: `Entrega #${record.purchaseNumber} · registre o horário real da chegada.`,
+    body: `
+      <form id="clientArrivalForm">
+        <label>Data e hora da chegada *<input type="datetime-local" name="clientArrivalAt" required value="${localDateTimeValue(record.clientArrivalAt || new Date())}" /></label>
+      </form>`,
+    actions: [
+      { label: 'Cancelar', kind: 'ghost', onClick: closeModal },
+      { label: 'Confirmar chegada', kind: 'primary', onClick: async () => {
+        const form = $('#clientArrivalForm');
+        if (!form.reportValidity()) return;
+        const fd = Object.fromEntries(new FormData(form).entries());
+        const clientArrivalAt = new Date(fd.clientArrivalAt).toISOString();
+        if (record.leftStoreAt && new Date(clientArrivalAt) < new Date(record.leftStoreAt)) return toast('A chegada não pode ser anterior à saída da loja.', 'error');
+        await Deliveries.changeStatus(record.id, 'no_cliente', { clientArrivalAt, arrivalRegisteredBy: getOperatorName(), note: 'Chegada registrada na casa do cliente.' });
+        toast(`Chegada registrada às ${timeBR(clientArrivalAt)}.`, 'success');
+        closeModal();
+        refreshApp();
+      }},
+    ],
+  });
+}
+
+function openDeliveryCompletionFlow(record, { cycle = null, editing = false } = {}) {
+  const arrivalDefault = record.clientArrivalAt || new Date();
+  const deliveredDefault = record.deliveredAt || new Date();
+  openModal({
+    title: editing ? 'Editar horários da entrega' : 'Finalizar na casa do cliente',
+    subtitle: `Entrega #${record.purchaseNumber} · a finalização exige os dois horários.`,
+    body: `
+      <form id="deliveryCompletionForm">
+        <label>Chegada na casa do cliente *<input type="datetime-local" name="clientArrivalAt" required value="${localDateTimeValue(arrivalDefault)}" /></label>
+        <label>Finalizada na casa do cliente *<input type="datetime-local" name="deliveredAt" required value="${localDateTimeValue(deliveredDefault)}" /></label>
+        <label>Observação da conclusão<textarea name="completionNote" rows="2" placeholder="Opcional"></textarea></label>
+      </form>`,
+    actions: [
+      { label: 'Cancelar', kind: 'ghost', onClick: closeModal },
+      { label: editing ? 'Salvar horários' : 'Confirmar finalização', kind: 'primary', onClick: async () => {
+        const form = $('#deliveryCompletionForm');
+        if (!form.reportValidity()) return;
+        const fd = Object.fromEntries(new FormData(form).entries());
+        const clientArrivalAt = new Date(fd.clientArrivalAt).toISOString();
+        const deliveredAt = new Date(fd.deliveredAt).toISOString();
+        if (record.leftStoreAt && new Date(clientArrivalAt) < new Date(record.leftStoreAt)) return toast('A chegada não pode ser anterior à saída da loja.', 'error');
+        if (new Date(deliveredAt) < new Date(clientArrivalAt)) return toast('A hora de finalização não pode ser anterior à chegada.', 'error');
+        await Deliveries.changeStatus(record.id, 'finalizada', {
+          clientArrivalAt, deliveredAt,
+          arrivalRegisteredBy: record.arrivalRegisteredBy || getOperatorName(),
+          completionRegisteredBy: getOperatorName(),
+          completionUpdatedAt: new Date().toISOString(),
+          note: fd.completionNote?.trim() || (editing ? 'Horários de conclusão corrigidos.' : `Finalizada na casa do cliente às ${timeBR(deliveredAt)}.`),
+        });
+        toast(`Entrega finalizada às ${timeBR(deliveredAt)}.`, 'success');
+        if (cycle) return advanceCloseCycle(cycle);
+        closeModal();
+        refreshApp();
+      }},
+    ],
   });
 }
 
@@ -487,7 +578,7 @@ async function saveDeliveryForm(record) {
     deliveryFee: fee,
     size: fd.size,
     tripCount: fd.size === 'grande' ? Number(fd.tripCount || 1) : 1,
-    trips: fd.size === 'grande' ? Array.from({ length: Number(fd.tripCount || 1) }, (_, i) => ({ tripIndex: i + 1, leftStoreAt: null, arrivedAt: null })) : [],
+    trips: fd.size === 'grande' ? Array.from({ length: Number(fd.tripCount || 1) }, (_, i) => record?.trips?.[i] || ({ tripIndex: i + 1, leftStoreAt: null, arrivedAt: null })) : [],
     priority: fd.priority,
     type: fd.type,
     scheduledAt: fd.type === 'agendada' ? new Date(fd.scheduledAt).toISOString() : null,
@@ -496,9 +587,20 @@ async function saveDeliveryForm(record) {
     notes: fd.notes?.trim() || '',
   };
 
+  if (record) {
+    payload.leftStoreAt = fd.leftStoreAt ? new Date(fd.leftStoreAt).toISOString() : null;
+    payload.clientArrivalAt = fd.clientArrivalAt ? new Date(fd.clientArrivalAt).toISOString() : null;
+    payload.deliveredAt = fd.deliveredAt ? new Date(fd.deliveredAt).toISOString() : null;
+    if (payload.deliveredAt && !payload.clientArrivalAt) return toast('Informe também a hora de chegada na casa do cliente.', 'error');
+    if (payload.clientArrivalAt && payload.deliveredAt && new Date(payload.deliveredAt) < new Date(payload.clientArrivalAt)) return toast('A finalização não pode ser anterior à chegada no cliente.', 'error');
+    if (record.status === 'finalizada' && !payload.deliveredAt) return toast('Uma entrega finalizada precisa ter a hora de finalização na casa do cliente.', 'error');
+  }
+
   try {
     if (record) {
       await Deliveries.update(record.id, payload);
+      const targetStatus = payload.deliveredAt ? 'finalizada' : (payload.clientArrivalAt && record.status === 'em_rota' ? 'no_cliente' : null);
+      if (targetStatus && targetStatus !== record.status) await Deliveries.changeStatus(record.id, targetStatus, { note: 'Horários operacionais informados na edição.' });
       toast('Entrega atualizada.', 'success');
     } else {
       payload.purchaseNumber = await Counters.next(env, 'compra');
@@ -615,7 +717,7 @@ export async function renderCycles() {
 
   const rows = await Promise.all(cycles.map(async (c) => {
     const items = await Promise.all((c.deliveryIds || []).map((id) => Deliveries.get(id)));
-    const pending = items.filter((i) => i && ['em_rota'].includes(i.status)).length;
+    const pending = items.filter((i) => i && (['em_rota', 'no_cliente'].includes(i.status) || (i.status === 'finalizada' && !i.deliveredAt))).length;
     return `<tr data-id="${c.id}" class="row-click-cycle">
       <td>${dateTimeBR(c.startedAt)}</td>
       <td>${escapeHtml(vName(c.vehicleId))}</td>
@@ -707,8 +809,9 @@ export async function openStartCycleModal() {
           status: 'aberto', startedAt: new Date().toISOString(), closedAt: null,
           deliveryIds: checked, deletedAt: null,
         });
+        const leftStoreAt = cycle.startedAt;
         for (const id of checked) {
-          await Deliveries.update(id, { status: 'em_rota', cycleId: cycle.id, vehicleId: fd.vehicleId, driverId: fd.driverId });
+          await Deliveries.changeStatus(id, 'em_rota', { cycleId: cycle.id, vehicleId: fd.vehicleId, driverId: fd.driverId, leftStoreAt, note: `Saída da loja registrada às ${timeBR(leftStoreAt)}.` });
         }
         toast('Ciclo iniciado.', 'success');
         closeModal();
@@ -732,7 +835,7 @@ export async function openStartCycleModal() {
 /* ---------- finalizar ciclo: uma pendência por vez (seção 9) ---------- */
 export async function openCloseCycleModal(cycle) {
   const items = await Promise.all((cycle.deliveryIds || []).map((id) => Deliveries.get(id)));
-  const pending = items.filter((i) => i && i.status === 'em_rota');
+  const pending = items.filter((i) => i && (['em_rota', 'no_cliente'].includes(i.status) || (i.status === 'finalizada' && !i.deliveredAt)));
 
   if (!pending.length) {
     await Cycles.update(cycle.id, { status: 'fechado', closedAt: new Date().toISOString() });
@@ -782,8 +885,7 @@ function showPendingOne(cycle, delivery, remainingCount) {
         });
       }},
       { label: 'Não, foi entregue', kind: 'primary', onClick: async () => {
-        await Deliveries.changeStatus(delivery.id, 'finalizada');
-        await advanceCloseCycle(cycle);
+        openDeliveryCompletionFlow(delivery, { cycle });
       }},
     ],
   });
@@ -791,7 +893,7 @@ function showPendingOne(cycle, delivery, remainingCount) {
 
 async function advanceCloseCycle(cycle) {
   const items = await Promise.all((cycle.deliveryIds || []).map((id) => Deliveries.get(id)));
-  const pending = items.filter((i) => i && i.status === 'em_rota');
+  const pending = items.filter((i) => i && (['em_rota', 'no_cliente'].includes(i.status) || (i.status === 'finalizada' && !i.deliveredAt)));
   if (pending.length) {
     showPendingOne(cycle, pending[0], pending.length);
   } else {
@@ -1214,8 +1316,8 @@ async function buildExport(kind, env, period = null) {
 
   if (kind === 'deliveries') {
     const rows = (await Deliveries.active(env)).filter((r) => inReportPeriod(r.entryTime, period));
-    const header = ['Compra','Chegada','Data entrada','PDV','DOC','Cupom','Cliente','Telefone','Endereço','Nº','Complemento','Referência','Bairro','Taxa','Tamanho','Viagens','Prioridade','Tipo','Agendado para','Status','Veículo','Entregador','Reembolsado','Observações'];
-    const lines = rows.map((r) => [r.purchaseNumber, r.arrivalNumber, dateTimeBR(r.entryTime), r.pdv, r.doc, r.coupon, r.clientName, r.phone, r.street, r.houseNumber, r.complement, r.reference, nName(r.neighborhoodId), r.deliveryFee, r.size, r.tripCount, r.priority, r.type, r.scheduledAt ? dateTimeBR(r.scheduledAt) : '', STATUS_META[r.status]?.label, vName(r.vehicleId), dName(r.driverId), r.refunded ? 'Sim' : 'Não', r.notes]);
+    const header = ['Compra','Chegada','Data entrada','PDV','DOC','Cupom','Cliente','Telefone','Endereço','Nº','Complemento','Referência','Bairro','Taxa','Tamanho','Viagens','Prioridade','Tipo','Agendado para','Status','Saída da loja','Chegada na casa do cliente','Finalizada na casa do cliente','Veículo','Entregador','Reembolsado','Observações'];
+    const lines = rows.map((r) => [r.purchaseNumber, r.arrivalNumber, dateTimeBR(r.entryTime), r.pdv, r.doc, r.coupon, r.clientName, r.phone, r.street, r.houseNumber, r.complement, r.reference, nName(r.neighborhoodId), r.deliveryFee, r.size, r.tripCount, r.priority, r.type, r.scheduledAt ? dateTimeBR(r.scheduledAt) : '', STATUS_META[r.status]?.label, r.leftStoreAt ? dateTimeBR(r.leftStoreAt) : '', r.clientArrivalAt ? dateTimeBR(r.clientArrivalAt) : '', r.deliveredAt ? dateTimeBR(r.deliveredAt) : '', vName(r.vehicleId), dName(r.driverId), r.refunded ? 'Sim' : 'Não', r.notes]);
     return { name: 'entregas', header, lines };
   }
   if (kind === 'cycles') {
@@ -1412,6 +1514,11 @@ export function wireReportsEvents() {
       <table border="1" cellpadding="6" style="border-collapse:collapse;width:100%">
         <tr><th>Entregador</th><th>Entregas finalizadas</th></tr>
         ${rankingRows || '<tr><td colspan="2">Sem dados suficientes</td></tr>'}
+      </table>
+      <h3>Horários das entregas finalizadas</h3>
+      <table border="1" cellpadding="6" style="border-collapse:collapse;width:100%">
+        <tr><th>Compra</th><th>Cliente</th><th>Saída</th><th>Chegada no cliente</th><th>Finalizada no cliente</th></tr>
+        ${finalized.length ? finalized.map((r) => `<tr><td>#${r.purchaseNumber}</td><td>${escapeHtml(r.clientName || r.street || '—')}</td><td>${timeBR(r.leftStoreAt)}</td><td>${timeBR(r.clientArrivalAt)}</td><td>${timeBR(r.deliveredAt)}</td></tr>`).join('') : '<tr><td colspan="5">Nenhuma entrega finalizada no período</td></tr>'}
       </table>`;    area.classList.remove('hidden');
     window.addEventListener('afterprint', () => area.classList.add('hidden'), { once: true });
     window.print();

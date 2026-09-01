@@ -4,6 +4,7 @@ export const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel
 export const money = (n) => (Number(n) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 export const dateBR = (iso) => (iso ? new Date(iso).toLocaleDateString('pt-BR') : '—');
 export const dateTimeBR = (iso) => (iso ? new Date(iso).toLocaleString('pt-BR') : '—');
+export const timeBR = (iso) => (iso ? new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '—');
 
 export function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -22,6 +23,7 @@ export function toast(msg, kind = '') {
 export const STATUS_META = {
   na_loja: { label: 'Na loja', color: 'var(--status-pendente)', cls: 'pendente' },
   em_rota: { label: 'Em rota', color: 'var(--status-transito)', cls: 'transito' },
+  no_cliente: { label: 'Na casa do cliente', color: 'var(--status-transito)', cls: 'transito' },
   finalizada: { label: 'Finalizada', color: 'var(--status-entregue)', cls: 'entregue' },
   retorno: { label: 'Retorno', color: 'var(--status-problema)', cls: 'problema' },
   reentrega: { label: 'Reentrega', color: 'var(--status-transito)', cls: 'transito' },

@@ -245,6 +245,8 @@ tr:last-child td { border-bottom: none; }
   font-size: 10.5px; font-style: italic; color: var(--accent);
   text-align: center; margin-top: 6px; line-height: 1.35; opacity: .92;
 }
+.release-side { margin-top:8px; color:rgba(255,255,255,.62); text-align:center; font-size:8.5px; font-weight:900; letter-spacing:.11em; }
+.release-badge { display:inline-flex; align-items:center; height:24px; padding:0 8px; border-radius:999px; background:#e3f3e9; color:#246b40; border:1px solid #bfe2cc; font-size:10px; font-weight:900; }
 .dev-footer {
   display: flex; align-items: center; gap: 7px; justify-content: center;
   background: rgba(255,255,255,.9); border-radius: 8px; padding: 6px 8px;
@@ -383,11 +385,15 @@ tr:last-child td { border-bottom: none; }
 .central-search input { width:100%; border:0; outline:0; background:transparent; padding:9px 0; font-size:11.5px; }
 .central-queue tr { transition:background .15s ease; }
 .central-queue .row-click:hover { background:#f7fafc; cursor:pointer; }
+.delivery-times { display:inline-block; color:var(--text-muted); font-size:9.5px; margin-top:4px; white-space:nowrap; }
 .queue-no-result { padding:28px; text-align:center; color:var(--text-muted); font-size:12px; }
 .picker-list { display:grid; gap:8px; }
 .picker-row { width:100%; display:grid; gap:3px; text-align:left; padding:12px; background:var(--paper); color:var(--text); border:1px solid var(--line); }
 .picker-row:hover { border-color:var(--ink-2); transform:translateX(2px); }
 .picker-row strong { font-size:12.5px; }.picker-row span { color:var(--text-muted); font-size:11px; }
+.operational-times-card { margin:4px 0; padding:13px; border:1px solid #b8d0e2; border-radius:10px; background:linear-gradient(135deg,#f4f9fc,#fff); }
+.operational-times-card legend { padding:0 6px; color:var(--ink-2); font-size:12px; font-weight:900; }
+.operational-times-card p { margin:0 0 10px; color:var(--text-muted); font-size:10.5px; line-height:1.4; }
 .registry-actions { display:flex; justify-content:flex-end; gap:6px; }
 
 .report-period-card { display:flex; align-items:center; gap:10px; padding:13px 14px; background:linear-gradient(110deg,var(--ink),var(--ink-2)); color:#fff; border-radius:var(--radius); margin-bottom:16px; box-shadow:0 6px 16px rgba(11,42,74,.12); }
