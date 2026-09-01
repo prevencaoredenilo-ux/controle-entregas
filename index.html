@@ -6,8 +6,8 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <meta name="theme-color" content="#0B2A4A" />
 <meta name="description" content="Órbita — controle de entregas completo, offline-first e instalável." />
-<link rel="manifest" href="manifest.webmanifest?v=2.8" />
-<link rel="stylesheet" href="styles.css?v=2.8" />
+<link rel="manifest" href="manifest.webmanifest?v=2.9" />
+<link rel="stylesheet" href="styles.css?v=2.9" />
 <title>Órbita • Controle de Entregas</title>
 </head>
 <body>
@@ -26,7 +26,7 @@
       <div>
         <div class="brand-logo-chip"><img src="assets/brand/nilo-logo.png" alt="Nilo Supermercado" onerror="this.replaceWith(Object.assign(document.createElement('strong'),{textContent:'NILO',style:'font-size:20px;color:#0B2A4A'}))" /></div>
         <div class="brand-slogan">"No quieto, no quieto,<br>o Nilo vende mais barato"</div>
-        <div class="release-side">VERSÃO 2.8 · RETORNO VISÍVEL</div>
+        <div class="release-side">VERSÃO 2.9 · INTELIGÊNCIA + EXCEL</div>
       </div>
 
       <button class="conn-pill" id="envToggleBtn" style="border:none;cursor:pointer;text-align:left">
@@ -45,7 +45,7 @@
       <nav class="main-nav">
         <p class="nav-group-label">Operação</p>
         <button class="nav-item active" data-view="central"><span class="ico">⌂</span><span>Central Operacional</span><span class="badge" id="pendingBadge">0</span></button>
-        <button class="nav-item" data-view="dashboard"><span class="ico">▦</span><span>Centro de Inteligência</span></button>
+        <button class="nav-item" data-view="dashboard"><span class="ico">▦</span><span>Central de Inteligência</span></button>
         <button class="nav-item" data-view="search"><span class="ico">⌕</span><span>Busca geral</span></button>
         <button class="nav-item" data-view="cycles"><span class="ico">↻</span><span>Ciclos</span><span class="badge" id="cyclesBadge">0</span></button>
         <button class="nav-item" data-view="km"><span class="ico">⌁</span><span>Quilometragem</span></button>
@@ -77,9 +77,9 @@
           </div>
         </div>
         <div class="topbar-actions">
-          <button class="fun-break-btn" id="funBreakBtn" type="button" data-tip="Minijogo independente da operação: encontre onde o mascote se escondeu."><span>🐾</span><span class="fun-button-copy"><strong>Cadê o Nilo?</strong><small>Encontre o mascote</small></span></button>
+          <button class="fun-break-btn prevention-focus-btn" id="funBreakBtn" type="button" data-tip="Perguntas rápidas de Prevenção de Perdas e curiosidades gerais."><span>🛡️</span><span class="fun-button-copy"><strong>Prevenção em Foco</strong><small>Quiz & curiosidades</small></span></button>
           <div class="live-clock" id="liveClock"><span class="pulse-dot"></span><span id="liveClockText">--:--:--</span></div>
-          <span class="release-badge">v2.8</span>
+          <span class="release-badge">v2.9</span>
           <button class="btn-primary" id="newDeliveryBtn">＋ Registrar entrega</button>
         </div>
       </header>
@@ -100,6 +100,6 @@
 
   <div class="toast-stack" id="toastStack"></div>
 
-  <script type="module" src="app.js?v=2.8"></script>
+  <script type="module" src="app.js?v=2.9"></script>
 </body>
 </html>

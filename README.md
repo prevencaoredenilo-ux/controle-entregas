@@ -1,3 +1,11 @@
+# Órbita v2.9 — Inteligência + Excel
+
+## Atualizações desta versão
+- Excel completo em um único arquivo `.xls` com 31 abas analíticas inspiradas no relatório de referência enviado.
+- KM final pode ser corrigido depois de registrado; a alteração fica rastreada na auditoria e guarda histórico de correções.
+- Central de Inteligência recebeu uma camada visual mais moderna, com faixa executiva de saúde, alertas, ocorrências e resultado.
+- “Cadê o Nilo?” foi substituído por “Prevenção em Foco”, com quiz de Prevenção de Perdas e Curiosidades Gerais.
+
 # Órbita — Controle de Entregas (v2 completo, client-side)
 
 ## Correção v2.8 — retorno visível, cache corrigido e Cadê o Nilo?

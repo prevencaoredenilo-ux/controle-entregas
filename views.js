@@ -1,6 +1,7 @@
-import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters } from './db.js?v=2.8';
-import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=2.8';
-import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=2.8';
+import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters } from './db.js?v=2.9';
+import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=2.9';
+import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=2.9';
+import { exportFullExcelReport } from './excel-report.js?v=2.9';
 
 const DEFAULT_OPERATIONAL_TARGETS = { startMinutes:120, arrivalMinutes:210, warningMinutes:30, successTarget:90 };
 
@@ -1392,7 +1393,7 @@ export async function renderKm() {
       <td>${l.kmStart ?? '—'}</td>
       <td>${l.kmEnd ?? '—'}</td>
       <td>${l.kmEnd != null && l.kmStart != null ? (l.kmEnd - l.kmStart).toFixed(1) : '—'}</td>
-      <td>${l.kmEnd == null ? '<button class="btn-ghost btn-small km-close-btn">Registrar KM final</button>' : ''}</td>
+      <td><button class="btn-ghost btn-small km-close-btn">${l.kmEnd == null ? 'Registrar KM final' : 'Editar KM final'}</button></td>
     </tr>`).join('');
 
   return `
@@ -1451,22 +1452,36 @@ async function openKmStartModal() {
 
 function openKmEndModal(log) {
   if(!canPerform('km'))return toast('Seu perfil não pode registrar quilometragem.','error');
+  const editing = log.kmEnd != null;
   openModal({
-    title: 'Registrar KM final',
-    subtitle: `KM inicial: ${log.kmStart}`,
-    body: `<form id="kmEndForm"><label>KM final *<input name="kmEnd" type="number" step="0.1" min="0" required /></label></form>`,
+    title: editing ? 'Editar KM final' : 'Registrar KM final',
+    subtitle: editing ? `KM inicial: ${log.kmStart} · KM final atual: ${log.kmEnd}` : `KM inicial: ${log.kmStart}`,
+    body: `<form id="kmEndForm">
+      <label>KM final *<input name="kmEnd" type="number" step="0.1" min="0" required value="${editing ? log.kmEnd : ''}" /></label>
+      ${editing ? `<label>Motivo da correção (opcional)<textarea name="correctionReason" rows="2" placeholder="Ex.: KM final foi informado antes do encerramento real do expediente"></textarea></label><div class="km-edit-note"><span>↺</span><div><strong>Correção rastreável</strong><small>O valor anterior continuará preservado na auditoria do sistema.</small></div></div>` : ''}
+    </form>`,
     actions: [
       { label: 'Cancelar', kind: 'ghost', onClick: closeModal },
-      { label: 'Salvar', kind: 'primary', onClick: async () => {
+      { label: editing ? 'Salvar correção' : 'Salvar', kind: 'primary', onClick: async () => {
         const form = $('#kmEndForm');
         if (!form.reportValidity()) return;
         const fd = Object.fromEntries(new FormData(form).entries());
         const kmEnd = Number(fd.kmEnd);
         if (kmEnd < log.kmStart) return toast('KM final não pode ser menor que o KM inicial.', 'error');
-        const activeCycle = (await Cycles.all()).find((c) => c.environment === getEnv() && c.vehicleId === log.vehicleId && c.status === 'aberto' && !c.deletedAt);
-        if (activeCycle) return toast('KM final bloqueado: finalize primeiro o ciclo ativo deste veículo.', 'error');
-        await OdometerLogs.update(log.id, { kmEnd, endedBy: getOperatorName(), endedAt: new Date().toISOString() });
-        toast('KM final registrado.', 'success');
+        if (!editing) {
+          const activeCycle = (await Cycles.all()).find((c) => c.environment === getEnv() && c.vehicleId === log.vehicleId && c.status === 'aberto' && !c.deletedAt);
+          if (activeCycle) return toast('KM final bloqueado: finalize primeiro o ciclo ativo deste veículo.', 'error');
+        }
+        const now = new Date().toISOString();
+        const corrections = editing && kmEnd !== Number(log.kmEnd) ? [...(log.kmEndCorrections || []), {
+          from: Number(log.kmEnd), to: kmEnd, reason: (fd.correctionReason || '').trim(), by: getOperatorName(), at: now,
+        }] : (log.kmEndCorrections || []);
+        await OdometerLogs.update(log.id, {
+          kmEnd, endedBy: editing ? (log.endedBy || getOperatorName()) : getOperatorName(), endedAt: editing ? (log.endedAt || now) : now,
+          kmEndCorrections: corrections,
+          ...(editing ? { lastKmEndEditedBy: getOperatorName(), lastKmEndEditedAt: now } : {}),
+        });
+        toast(editing ? 'KM final corrigido e registrado na auditoria.' : 'KM final registrado.', 'success');
         closeModal(); refreshApp();
       }},
     ],
@@ -1841,6 +1856,16 @@ export async function renderDashboard() {
 
     ${!rows.length ? `<div class="dashboard-empty-notice">Não existem entregas neste período. Troque o filtro para visualizar outros dados.</div>` : ''}
 
+    <section class="intel-command-banner">
+      <div class="intel-command-copy"><span>INTELIGÊNCIA OPERACIONAL · AO VIVO</span><h2>Decisões mais rápidas, em uma leitura.</h2><p>O painel cruza volume, SLA, ocorrências, frota, custos e qualidade para destacar o que merece ação.</p></div>
+      <div class="intel-command-signals">
+        <article><small>SAÚDE</small><strong>${successRate}/100</strong><span>${performanceProfile(successRate).label}</span></article>
+        <article class="${late.length?'signal-alert':''}"><small>ALERTAS</small><strong>${late.length}</strong><span>SLA vencido</span></article>
+        <article class="${problems.length?'signal-warning':''}"><small>OCORRÊNCIAS</small><strong>${problems.length}</strong><span>exigem leitura</span></article>
+        <article class="${balance<0?'signal-alert':'signal-good'}"><small>RESULTADO</small><strong>${money(balance)}</strong><span>${range.label}</span></article>
+      </div>
+    </section>
+
     <section class="intel-hero">
       <article class="intel-score" data-tip="Desempenho: finalizadas com horário dividido pelo total registrado."><div class="score-ring" style="--score:${successRate};--score-color:${performanceProfile(successRate).color}"><strong>${successRate}</strong><small>/100</small></div><div><span>DESEMPENHO</span><h2>${performanceProfile(successRate).label}</h2><p>${motivationalPhrase(successRate)}</p></div></article>
       <article class="intel-hero-metric"><small>Volume</small><strong>${rows.length}</strong>${delta(volumeChange)}</article>
@@ -2096,7 +2121,7 @@ export async function renderReports() {
       </div>
       <div class="stat-card">
         <small>Relatório analítico</small>
-        <p style="font-size:12.5px;color:var(--text-muted);margin:8px 0">Um arquivo CSV por área — todos abrem direto no Excel.</p>
+        <p style="font-size:12.5px;color:var(--text-muted);margin:8px 0">Excel completo no mesmo padrão do relatório de referência: um único arquivo com múltiplas abas analíticas. Os CSVs avulsos continuam disponíveis abaixo.</p>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
           <button class="btn-ghost btn-small export-btn" data-kind="resumo">Resumo executivo</button>
           <button class="btn-ghost btn-small export-btn" data-kind="deliveries">Entregas</button>
@@ -2111,7 +2136,7 @@ export async function renderReports() {
           <button class="btn-ghost btn-small export-btn" data-kind="vehicles">Veículos</button>
           <button class="btn-ghost btn-small export-btn" data-kind="collaborators">Colaboradores</button>
           <button class="btn-ghost btn-small export-btn" data-kind="neighborhoods">Bairros</button>
-          <button class="btn-primary btn-small" id="exportAllBtn">⇩ Exportar tudo (13 arquivos)</button>
+          <button class="btn-primary btn-small" id="exportAllBtn">⇩ Excel completo · 31 abas</button>
         </div>
       </div>
     </div>
@@ -2277,15 +2302,22 @@ export function wireReportsEvents() {
     toast('Arquivo CSV gerado.', 'success');
   }));
 
-  $('#exportAllBtn')?.addEventListener('click', async () => {
+  $('#exportAllBtn')?.addEventListener('click', async (e) => {
     const env = getEnv();
     const period = readReportPeriod();
-    for (const kind of ['resumo', 'deliveries', 'cycles', 'km', 'costs', 'audit', 'clients', 'dias_semana', 'horarios_pico', 'status', 'vehicles', 'collaborators', 'neighborhoods']) {
-      const { name, header, lines } = await buildExport(kind, env, period);
-      downloadCSV(`orbita-${name}-${env}-${new Date().toISOString().slice(0,10)}.csv`, [header, ...lines]);
-      await new Promise((r) => setTimeout(r, 250)); // evita o navegador bloquear downloads múltiplos
+    if (period.start && period.end && period.start > period.end) return toast('A data inicial não pode ser maior que a final.', 'error');
+    const btn = e.currentTarget;
+    const original = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Gerando Excel…';
+    try {
+      const result = await exportFullExcelReport(env, period);
+      toast(`Excel completo gerado com ${result.sheetCount} abas.`, 'success');
+    } catch (err) {
+      console.error(err);
+      toast('Não foi possível gerar o Excel completo.', 'error');
+    } finally {
+      if (btn.isConnected) { btn.disabled = false; btn.textContent = original; }
     }
-    toast('13 arquivos CSV gerados.', 'success');
   });
 
   $('#printReportBtn')?.addEventListener('click', async () => {
@@ -2592,7 +2624,7 @@ function openVehicleAddModal(record = null) {
    ========================================================= */
 export async function renderSettings() {
   const cfg = JSON.parse(localStorage.getItem('orbita_settings') || '{}');
-  const { listAutoBackups } = await import('./db.js?v=2.8');
+  const { listAutoBackups } = await import('./db.js?v=2.9');
   const autoBackups = await listAutoBackups();
   const autoList = autoBackups.length
     ? autoBackups.map((b) => `
@@ -2629,13 +2661,13 @@ export async function renderSettings() {
 export function wireSettingsEvents() {
   $$('.auto-restore-btn').forEach((btn) => btn.addEventListener('click', async () => {
     if (!confirm('Restaurar esse backup automático vai substituir os dados atuais. Continuar?')) return;
-    const { restoreAutoBackup } = await import('./db.js?v=2.8');
+    const { restoreAutoBackup } = await import('./db.js?v=2.9');
     await restoreAutoBackup(btn.dataset.id);
     toast('Backup automático restaurado.', 'success');
     refreshApp();
   }));
   $('#settingsBackupBtn')?.addEventListener('click', async () => {
-    const data = await (await import('./db.js?v=2.8')).exportAll();
+    const data = await (await import('./db.js?v=2.9')).exportAll();
     downloadJSON(`orbita-backup-completo-${new Date().toISOString().slice(0,10)}.json`, data);
     toast('Backup completo gerado.', 'success');
   });
@@ -2643,12 +2675,12 @@ export function wireSettingsEvents() {
     const file = e.target.files[0];
     if (!file) return;
     if (!confirm('Isso vai substituir os dados atuais pelo conteúdo do backup. Um backup de segurança dos dados atuais será baixado antes. Continuar?')) { e.target.value = ''; return; }
-    const currentBackup = await (await import('./db.js?v=2.8')).exportAll();
+    const currentBackup = await (await import('./db.js?v=2.9')).exportAll();
     downloadJSON(`orbita-backup-seguranca-antes-restauracao-${Date.now()}.json`, currentBackup);
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      await (await import('./db.js?v=2.8')).importAll(data);
+      await (await import('./db.js?v=2.9')).importAll(data);
       toast('Backup restaurado.', 'success');
       refreshApp();
     } catch { toast('Arquivo de backup inválido.', 'error'); }

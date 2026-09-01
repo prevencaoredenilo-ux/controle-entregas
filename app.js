@@ -1,6 +1,6 @@
-import { ensureSeed, saveAutoBackup } from './db.js?v=2.8';
-import { $, $$, toast, initTooltips, animateStatCards, performanceProfile } from './helpers.js?v=2.8';
-import * as V from './views.js?v=2.8';
+import { ensureSeed, saveAutoBackup } from './db.js?v=2.9';
+import { $, $$, toast, initTooltips, animateStatCards, performanceProfile } from './helpers.js?v=2.9';
+import * as V from './views.js?v=2.9';
 
 let currentView = 'central';
 let currentRegistryTab = 'vehicles';
@@ -110,7 +110,7 @@ function wireNav() {
 }
 
 async function openOperatorPicker() {
-  const { Collaborators } = await import('./db.js?v=2.8');
+  const { Collaborators } = await import('./db.js?v=2.9');
   const list = (await Collaborators.all()).filter((c) => c.active !== false);
   openModal({
     title: 'Quem está operando agora?',
@@ -149,45 +149,81 @@ function wireGlobalActions() {
   $('#funBreakBtn')?.addEventListener('click', openFunBreak);
 }
 
-/* ---------- Cadê o Nilo?: minijogo sem qualquer dado operacional ---------- */
+/* ---------- Prevenção em Foco: conhecimento rápido + curiosidades ---------- */
+const PREVENTION_QUESTIONS = [
+  { q:'Ao identificar divergência entre o cupom e a mercadoria que está saindo, qual é a melhor primeira ação?', options:['Liberar a saída e conferir depois','Pausar a saída, conferir os itens e seguir o procedimento de divergência','Pedir ao cliente para resolver no caixa','Ignorar se a diferença for pequena'], correct:1, note:'Divergências devem ser tratadas antes da saída. A conferência e o registro evitam perda financeira e retrabalho.' },
+  { q:'Um produto avariado é encontrado na área de venda. O que fazer?', options:['Deixar no local até o fim do turno','Descartar imediatamente sem registro','Segregar o item, identificar a ocorrência e encaminhar conforme o procedimento','Colocar em promoção sem autorização'], correct:2, note:'Segregar e registrar preserva rastreabilidade e evita que um item impróprio volte à venda.' },
+  { q:'Qual atitude é mais adequada diante de um comportamento suspeito na loja?', options:['Confrontar a pessoa imediatamente','Observar com discrição e acionar o protocolo/responsável de Prevenção','Filmar com o celular pessoal','Comentar com outros clientes'], correct:1, note:'A atuação deve ser discreta, segura e baseada no procedimento interno, evitando confronto desnecessário.' },
+  { q:'Por que a saída de emergência precisa permanecer livre?', options:['Apenas por estética','Para facilitar reposição','Para permitir evacuação rápida e segura em uma emergência','Somente durante auditorias'], correct:2, note:'Rotas de fuga desobstruídas são essenciais para a segurança de clientes e colaboradores.' },
+  { q:'Ao perceber diferença de estoque, qual prática é mais segura?', options:['Ajustar a quantidade sem registrar','Registrar a divergência e investigar a causa antes do ajuste definitivo','Aguardar o próximo inventário','Apagar o histórico antigo'], correct:1, note:'Rastreabilidade é central em Prevenção de Perdas: registrar, investigar e só então corrigir.' },
+  { q:'Na liberação de uma entrega, o que ajuda a prevenir perdas?', options:['Conferir documento/cupom, volumes e destino antes da saída','Liberar primeiro e preencher depois','Conferir apenas o valor da taxa','Usar somente a memória do entregador'], correct:0, note:'A conferência de documentos, volumes e destino reduz trocas, faltas, sobras e retornos.' },
+  { q:'Um prestador desconhecido pede acesso a uma área restrita. Qual conduta é adequada?', options:['Liberar se ele estiver uniformizado','Direcionar à recepção/responsável e validar autorização','Entregar a chave para agilizar','Pedir que entre por outra porta'], correct:1, note:'Acesso restrito exige validação de identidade e autorização, mesmo quando a pessoa aparenta pertencer a uma empresa conhecida.' },
+  { q:'Uma diferença de caixa é identificada. O que deve ser priorizado?', options:['Esconder a diferença para evitar conflito','Preservar informações, conferir os registros e comunicar o responsável','Dividir o valor entre a equipe','Alterar o fechamento para zerar'], correct:1, note:'Preservar evidências e registros permite identificar a origem da divergência e corrigi-la de forma justa.' },
+  { q:'Qual é um objetivo amplo da Prevenção de Perdas?', options:['Somente impedir furtos','Proteger pessoas, processos, mercadorias e reduzir perdas operacionais','Apenas controlar o caixa','Substituir a liderança da loja'], correct:1, note:'Prevenção de Perdas vai além de furtos: envolve segurança, processos, estoque, avarias, fraudes, erros e eficiência.' },
+  { q:'Ao encontrar mercadoria fora da validade, qual ação é correta?', options:['Esconder atrás de produtos novos','Retirar da venda e seguir o processo de segregação/registro','Vender com desconto automaticamente','Manter até o fim do dia'], correct:1, note:'Produto vencido deve ser retirado de exposição e tratado conforme o procedimento interno, com registro quando aplicável.' },
+  { q:'Por que registrar ocorrências de forma detalhada é importante?', options:['Apenas para preencher relatório','Para criar histórico, identificar padrões e apoiar ações preventivas','Para aumentar o número de tarefas','Somente quando houver prejuízo alto'], correct:1, note:'Dados bem registrados permitem encontrar causas recorrentes e agir antes que a perda se repita.' },
+  { q:'Qual atitude ajuda a reduzir perdas por erro operacional?', options:['Padronizar conferências e seguir etapas críticas','Mudar o processo todos os dias','Evitar registrar pequenos erros','Depender de uma única pessoa'], correct:0, note:'Processos padronizados e conferências em pontos críticos reduzem falhas e tornam a operação mais previsível.' },
+];
+const GENERAL_CURIOSITIES = [
+  { q:'Qual planeta é conhecido como Planeta Vermelho?', options:['Vênus','Marte','Júpiter','Mercúrio'], correct:1, note:'Marte tem aparência avermelhada por causa de óxidos de ferro presentes em sua superfície.' },
+  { q:'Qual é o maior oceano da Terra?', options:['Atlântico','Índico','Pacífico','Ártico'], correct:2, note:'O Oceano Pacífico é o maior e também o mais profundo do planeta.' },
+  { q:'Quantos lados tem um hexágono?', options:['5','6','7','8'], correct:1, note:'“Hexa” indica seis; por isso, um hexágono tem seis lados.' },
+  { q:'Qual gás as plantas absorvem principalmente durante a fotossíntese?', options:['Oxigênio','Nitrogênio','Dióxido de carbono','Hidrogênio'], correct:2, note:'Na fotossíntese, as plantas utilizam dióxido de carbono, água e luz para produzir energia química.' },
+  { q:'Em qual continente fica o Egito?', options:['África','Ásia','Europa','América'], correct:0, note:'A maior parte do território egípcio fica no nordeste da África; a Península do Sinai fica na Ásia.' },
+  { q:'Qual é o animal terrestre mais rápido em curtas distâncias?', options:['Leão','Guepardo','Antílope','Cavalo'], correct:1, note:'O guepardo pode atingir velocidades acima de 90 km/h em acelerações curtas.' },
+  { q:'Qual instrumento mede a temperatura?', options:['Barômetro','Termômetro','Higrômetro','Anemômetro'], correct:1, note:'O termômetro mede temperatura; barômetro mede pressão e anemômetro mede velocidade do vento.' },
+  { q:'Qual é a capital do Brasil?', options:['Rio de Janeiro','São Paulo','Brasília','Salvador'], correct:2, note:'Brasília é a capital federal desde 21 de abril de 1960.' },
+  { q:'Qual é o maior órgão do corpo humano?', options:['Fígado','Pulmão','Pele','Cérebro'], correct:2, note:'A pele é o maior órgão do corpo humano e atua como barreira de proteção.' },
+  { q:'Quantos minutos há em duas horas e meia?', options:['120','130','150','180'], correct:2, note:'Duas horas = 120 minutos; mais 30 minutos = 150.' },
+];
+
 function openFunBreak() {
   openModal({
-    title: '🐾 Cadê o Nilo?',
-    subtitle: 'O mascote se escondeu em uma das caixas. Você tem uma tentativa!',
-    body: `<div class="nilo-hunt-head"><div class="hunt-mascot-peek"><img src="assets/brand/mascote.png" alt="Mascote Nilo" /></div><div><strong>Encontre o mascote</strong><p>As caixas vão embaralhar. Depois, escolha uma delas.</p></div></div><div class="nilo-hunt-stage" id="niloHuntStage"></div>`,
-    actions: [{ label: 'Fechar brincadeira', kind: 'ghost', onClick: closeModal }],
+    title: '🛡️ Prevenção em Foco',
+    subtitle: 'Treino rápido de Prevenção de Perdas e curiosidades gerais — escolha uma resposta e veja a explicação.',
+    body: `<div class="knowledge-quiz" id="knowledgeQuiz">
+      <div class="quiz-mode-row">
+        <button type="button" class="quiz-mode-btn active" data-quiz-mode="prevencao"><span>🛡️</span><strong>Prevenção de Perdas</strong><small>Situações do dia a dia</small></button>
+        <button type="button" class="quiz-mode-btn" data-quiz-mode="geral"><span>💡</span><strong>Curiosidades gerais</strong><small>Conhecimento rápido</small></button>
+      </div>
+      <div class="quiz-card" id="quizCard"></div>
+    </div>`,
+    actions: [{ label: 'Fechar', kind: 'ghost', onClick: closeModal }],
   });
-  startNiloHunt();
+  startKnowledgeQuiz('prevencao');
+  $$('.quiz-mode-btn').forEach((btn)=>btn.addEventListener('click',()=>{
+    $$('.quiz-mode-btn').forEach((b)=>b.classList.toggle('active',b===btn));
+    startKnowledgeQuiz(btn.dataset.quizMode);
+  }));
 }
 
-function startNiloHunt() {
-  const stage = $('#niloHuntStage');
-  if (!stage) return;
-  const hidingPlace = Math.floor(Math.random() * 3);
-  stage.innerHTML = `<div class="hunt-message" id="huntMessage"><span>👀</span><strong>Olhe bem… embaralhando!</strong></div><div class="hunt-boxes">${[0,1,2].map((index) => `<button type="button" class="hunt-box shuffling" data-hunt-box="${index}" disabled><span class="hunt-gift">🎁</span><small>Caixa ${index + 1}</small></button>`).join('')}</div><div class="hunt-replay hidden" id="huntReplay"><button type="button" class="btn-primary">Jogar outra vez</button></div>`;
-  setTimeout(() => {
-    $$('#niloHuntStage .hunt-box').forEach((box) => { box.disabled = false; box.classList.remove('shuffling'); box.classList.add('ready'); });
-    const message = $('#huntMessage');
-    if (message) message.innerHTML = '<span>👇</span><strong>Agora escolha uma caixa!</strong>';
-  }, 850);
-  $$('#niloHuntStage [data-hunt-box]').forEach((box) => box.addEventListener('click', () => {
-    if (stage.dataset.finished === '1') return;
-    stage.dataset.finished = '1';
-    const selected = Number(box.dataset.huntBox);
-    $$('#niloHuntStage .hunt-box').forEach((item) => {
-      item.disabled = true;
-      const index = Number(item.dataset.huntBox);
-      item.classList.remove('ready');
-      item.classList.add('revealed', index === hidingPlace ? 'winner' : 'empty-box');
-      item.querySelector('.hunt-gift').innerHTML = index === hidingPlace ? '<img src="assets/brand/mascote.png" alt="Nilo encontrado" />' : '✨';
-    });
-    const won = selected === hidingPlace;
-    const message = $('#huntMessage');
-    if (message) message.innerHTML = won ? '<span>🏆</span><strong>Você encontrou o Nilo!</strong><small>Boa memória! O mascote não escapou desta vez.</small>' : `<span>😄</span><strong>Quase! Ele estava na caixa ${hidingPlace + 1}.</strong><small>O Nilo foi mais rápido nesta rodada.</small>`;
-    if (won) stage.insertAdjacentHTML('beforeend', `<div class="hunt-confetti" aria-hidden="true">${new Array(18).fill('<i></i>').join('')}</div>`);
-    $('#huntReplay')?.classList.remove('hidden');
-    $('#huntReplay button')?.addEventListener('click', () => { stage.dataset.finished = '0'; startNiloHunt(); });
-  }));
+let quizState = { mode:'prevencao', index:0, score:0, answered:false, order:[] };
+function startKnowledgeQuiz(mode='prevencao') {
+  const bank = mode === 'geral' ? GENERAL_CURIOSITIES : PREVENTION_QUESTIONS;
+  const order = bank.map((_,i)=>i).sort(()=>Math.random()-.5);
+  quizState = { mode, index:0, score:0, answered:false, order };
+  renderKnowledgeQuestion();
+}
+function renderKnowledgeQuestion() {
+  const card=$('#quizCard'); if(!card)return;
+  const bank=quizState.mode==='geral'?GENERAL_CURIOSITIES:PREVENTION_QUESTIONS;
+  const q=bank[quizState.order[quizState.index % quizState.order.length]];
+  card.innerHTML=`<div class="quiz-progress"><span>${quizState.mode==='geral'?'CURIOSIDADE GERAL':'PREVENÇÃO DE PERDAS'}</span><strong>${quizState.index+1}/${Math.min(quizState.order.length,10)}</strong></div>
+    <h3>${escapeAttr(q.q)}</h3>
+    <div class="quiz-options">${q.options.map((opt,i)=>`<button type="button" class="quiz-option" data-answer="${i}"><i>${String.fromCharCode(65+i)}</i><span>${escapeAttr(opt)}</span></button>`).join('')}</div>
+    <div class="quiz-feedback hidden" id="quizFeedback"></div>
+    <div class="quiz-footer"><span>Acertos: <strong id="quizScore">${quizState.score}</strong></span><button type="button" class="btn-primary btn-small hidden" id="quizNextBtn">Próxima pergunta ›</button></div>`;
+  $$('.quiz-option').forEach((btn)=>btn.addEventListener('click',()=>answerKnowledgeQuestion(Number(btn.dataset.answer),q)));
+}
+function answerKnowledgeQuestion(selected,q){
+  if(quizState.answered)return; quizState.answered=true;
+  const correct=selected===q.correct; if(correct)quizState.score++;
+  $$('.quiz-option').forEach((btn)=>{const i=Number(btn.dataset.answer);btn.disabled=true;if(i===q.correct)btn.classList.add('correct');else if(i===selected)btn.classList.add('wrong');});
+  const feedback=$('#quizFeedback'); feedback?.classList.remove('hidden');
+  if(feedback)feedback.innerHTML=`<div class="${correct?'quiz-hit':'quiz-miss'}"><span>${correct?'✓':'!'}</span><div><strong>${correct?'Resposta correta!':'Quase — veja a resposta certa.'}</strong><p>${escapeAttr(q.note)}</p></div></div>`;
+  if($('#quizScore'))$('#quizScore').textContent=quizState.score;
+  const next=$('#quizNextBtn'); next?.classList.remove('hidden');
+  next?.addEventListener('click',()=>{quizState.index=(quizState.index+1)%Math.min(quizState.order.length,10);quizState.answered=false;renderKnowledgeQuestion();});
 }
 
 /* ---------- modal genérico ---------- */
@@ -238,7 +274,7 @@ async function render() {
 
   const routes = {
     central: ['Central Operacional', 'Sala de controle: SLAs, ciclos, retornos assistidos, KM e fechamento do dia.', V.renderCentral, V.wireCentralEvents],
-    dashboard: ['Centro de Inteligência', 'Operação, SLA de saída e chegada, ciclos, frota, financeiro, qualidade e previsões.', V.renderDashboard, V.wireDashboardEvents],
+    dashboard: ['Central de Inteligência', 'Operação, SLA de saída e chegada, ciclos, frota, financeiro, qualidade e previsões.', V.renderDashboard, V.wireDashboardEvents],
     search: ['Busca geral', 'Pesquise por qualquer campo da entrega.', V.renderSearch, V.wireSearchEvents],
     cycles: ['Ciclos', 'Saídas em andamento e finalizadas.', V.renderCycles, V.wireCyclesEvents],
     km: ['Quilometragem', 'Controle de KM por veículo e expediente.', V.renderKm, V.wireKmEvents],
@@ -262,7 +298,7 @@ async function render() {
 }
 
 async function updateBadges() {
-  const { Deliveries, Cycles } = await import('./db.js?v=2.8');
+  const { Deliveries, Cycles } = await import('./db.js?v=2.9');
   const rows = await Deliveries.active(environment);
   $('#pendingBadge').textContent = rows.filter((r) => r.status === 'na_loja').length;
   const trashed = await Deliveries.trashed(environment);
@@ -285,7 +321,7 @@ if ('serviceWorker' in navigator) {
     refreshingForUpdate = true;
     window.location.reload();
   });
-  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js?v=2.8', { updateViaCache: 'none' }).then((registration) => registration.update()).catch(() => {}));
+  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js?v=2.9', { updateViaCache: 'none' }).then((registration) => registration.update()).catch(() => {}));
 }
 
 boot();
