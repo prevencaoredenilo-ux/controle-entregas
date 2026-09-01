@@ -1201,3 +1201,151 @@ tr:last-child td { border-bottom: none; }
     font-size:13px;
   }
 }
+
+/* v3.8 — faixa mais viva, fina e elegante */
+.knowledge-smartline{
+  position:relative;
+  width:100%;
+  max-width:none !important;
+  min-width:0 !important;
+  display:grid;
+  grid-template-columns:auto auto minmax(0,1fr) auto;
+  align-items:center;
+  gap:12px;
+  padding:11px 16px;
+  border-radius:16px;
+  border:1px solid rgba(126,185,226,.22) !important;
+  background:
+    radial-gradient(circle at 12% 50%, rgba(255,214,61,.10), transparent 18%),
+    linear-gradient(135deg, #0d3350 0%, #123d5c 48%, #154864 100%) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.05),
+    0 12px 30px rgba(10,39,66,.14) !important;
+  overflow:hidden;
+}
+.knowledge-smartline::before{
+  content:'';
+  position:absolute;
+  inset:0 auto 0 0;
+  width:4px;
+  background:linear-gradient(180deg,#ffd54a,#ffb300);
+  box-shadow:0 0 16px rgba(255,213,74,.35);
+}
+.knowledge-smartline::after{
+  content:'';
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  background:linear-gradient(90deg, rgba(255,255,255,.04), transparent 28%, transparent 72%, rgba(255,255,255,.03));
+}
+.knowledge-smartline:hover{
+  transform:translateY(-1px);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.05), 0 16px 34px rgba(10,39,66,.18) !important;
+}
+.knowledge-smartline-kicker{
+  position:relative;
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:6px 12px;
+  margin-left:4px;
+  border-radius:999px;
+  background:rgba(255,255,255,.08);
+  color:#d7e9f8;
+  border:1px solid rgba(255,255,255,.08);
+  font-size:8.5px;
+  font-weight:900;
+  letter-spacing:.14em;
+  white-space:nowrap;
+  text-transform:uppercase;
+  backdrop-filter:blur(8px);
+}
+.knowledge-smartline-kicker::before{
+  content:'';
+  width:7px;
+  height:7px;
+  border-radius:50%;
+  background:#67d08a;
+  box-shadow:0 0 0 5px rgba(103,208,138,.12), 0 0 12px rgba(103,208,138,.35);
+  animation:knowledge-live-pulse 2s ease-in-out infinite;
+}
+@keyframes knowledge-live-pulse{
+  0%,100%{transform:scale(1); box-shadow:0 0 0 4px rgba(103,208,138,.10), 0 0 10px rgba(103,208,138,.30)}
+  50%{transform:scale(1.08); box-shadow:0 0 0 7px rgba(103,208,138,.04), 0 0 16px rgba(103,208,138,.44)}
+}
+.knowledge-smartline-sep{
+  color:rgba(255,255,255,.18);
+  font-size:15px;
+  line-height:1;
+}
+.knowledge-smartline-question{
+  min-width:0;
+  margin:0;
+  color:#ffd84d;
+  font-size:14px;
+  font-weight:900;
+  line-height:1.35;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  letter-spacing:-.01em;
+}
+.knowledge-smartline-hint{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:0 0 0 10px;
+  color:rgba(230,240,247,.82);
+  font-size:10px;
+  font-weight:800;
+  white-space:nowrap;
+}
+.knowledge-smartline-hint::before{
+  content:'↗';
+  color:#ffd84d;
+  font-size:12px;
+  line-height:1;
+}
+.knowledge-smartline.ticker-pulse .knowledge-smartline-question{
+  animation:knowledge-fade-clean .5s ease both;
+}
+.knowledge-ticker[data-group="geral"].knowledge-smartline{
+  border-color:rgba(198,160,59,.22) !important;
+  background:
+    radial-gradient(circle at 12% 50%, rgba(255,214,61,.08), transparent 18%),
+    linear-gradient(135deg, #113853 0%, #1a4760 48%, #1e5165 100%) !important;
+}
+.knowledge-ticker[data-group="geral"] .knowledge-smartline-kicker{
+  background:rgba(255,216,77,.11);
+  color:#ffe59a;
+  border-color:rgba(255,216,77,.14);
+}
+.knowledge-ticker[data-group="geral"] .knowledge-smartline-kicker::before{
+  background:#ffd84d;
+  box-shadow:0 0 0 5px rgba(255,216,77,.10), 0 0 12px rgba(255,216,77,.28);
+}
+.knowledge-ticker[data-group="geral"] .knowledge-smartline-question{color:#ffe06b}
+@media (max-width:980px){
+  .knowledge-smartline{
+    grid-template-columns:auto minmax(0,1fr) auto;
+    gap:9px;
+    padding:10px 14px;
+  }
+  .knowledge-smartline-sep{display:none}
+}
+@media (max-width:760px){
+  .knowledge-smartline{
+    grid-template-columns:1fr;
+    align-items:flex-start;
+    gap:5px;
+    padding:10px 12px 11px;
+  }
+  .knowledge-smartline-kicker{margin-left:4px}
+  .knowledge-smartline-question{
+    white-space:normal;
+    overflow:visible;
+    text-overflow:initial;
+    font-size:13px;
+  }
+  .knowledge-smartline-hint{padding-left:0}
+}
