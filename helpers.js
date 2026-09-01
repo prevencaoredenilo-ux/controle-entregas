@@ -108,7 +108,7 @@ export function countUp(el, target, duration = 600) {
   requestAnimationFrame(tick);
 }
 export function animateStatCards(root = document) {
-  $$('.stat-card, .day-performance-card', root).forEach((card, i) => {
+  $$('.stat-card, .day-performance-card, .intel-metric, .attention-card, .flow-stages button', root).forEach((card, i) => {
     card.style.animationDelay = `${i * 45}ms`;
     card.classList.add('stat-anim');
     const counter = card.querySelector('[data-count]');
@@ -145,20 +145,52 @@ export function motivationalPhrase(value) {
   return list[Math.floor(Math.random() * list.length)];
 }
 
-// gráfico de barras simples em SVG puro (sem libs externas — funciona 100% offline)
-export function barChartSVG({ labels, values, height = 160, color = 'var(--ink)', unit = '' }) {
-  const max = Math.max(1, ...values);
-  const barW = 100 / values.length;
-  const bars = values.map((v, i) => {
-    const h = (v / max) * (height - 24);
-    const x = i * barW;
-    return `
-      <g class="chart-bar-g" data-tip="${escapeHtml(labels[i])}: ${v}${unit}">
-        <rect x="${x + barW * 0.15}%" y="${height - h - 18}" width="${barW * 0.7}%" height="${h}" rx="3" fill="${color}" />
-        <text x="${x + barW / 2}%" y="${height - 4}" text-anchor="middle" font-size="9" fill="var(--text-muted)">${escapeHtml(labels[i])}</text>
-      </g>`;
+let chartSequence = 0;
+
+// Gráfico offline, responsivo e diretamente legível — eixos, valores e tooltips reais.
+export function barChartSVG({ labels, values, height = 210, color = 'var(--ink-2)', unit = '' }) {
+  const id = `bar-gradient-${++chartSequence}`;
+  const width = 640, left = 42, right = 14, top = 24, bottom = 38;
+  const plotW = width - left - right, plotH = height - top - bottom;
+  const safeValues = values.map((v) => Number(v) || 0);
+  const max = Math.max(1, ...safeValues);
+  const step = plotW / Math.max(1, safeValues.length);
+  const barW = Math.min(52, step * .62);
+  const grid = [0,.25,.5,.75,1].map((p) => {
+    const y = top + plotH - plotH*p;
+    return `<line x1="${left}" y1="${y}" x2="${width-right}" y2="${y}" class="chart-grid-line"/><text x="${left-7}" y="${y+4}" text-anchor="end" class="chart-axis-label">${Math.round(max*p)}</text>`;
   }).join('');
-  return `<svg viewBox="0 0 100 ${height}" preserveAspectRatio="none" style="width:100%;height:${height}px" class="chart-svg">${bars}</svg>`;
+  const bars = safeValues.map((v, i) => {
+    const h = Math.max(v ? 3 : 0, (v / max) * plotH);
+    const x = left + i*step + (step-barW)/2;
+    const y = top + plotH - h;
+    const label = String(labels[i] ?? '').length > 11 ? `${String(labels[i]).slice(0,10)}…` : labels[i];
+    return `<g class="chart-bar-g" data-tip="${escapeHtml(labels[i])}: ${v}${unit}">
+      <rect x="${x}" y="${y}" width="${barW}" height="${h}" rx="7" fill="url(#${id})"/>
+      <text x="${x+barW/2}" y="${Math.max(14,y-7)}" text-anchor="middle" class="chart-value-label">${v}</text>
+      <text x="${x+barW/2}" y="${height-12}" text-anchor="middle" class="chart-axis-label">${escapeHtml(label)}</text>
+    </g>`;
+  }).join('');
+  return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Gráfico de ${escapeHtml(labels.join(', '))}" class="chart-svg modern-chart"><defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${color}"/><stop offset="1" stop-color="${color}" stop-opacity=".42"/></linearGradient></defs>${grid}<line x1="${left}" y1="${top+plotH}" x2="${width-right}" y2="${top+plotH}" class="chart-axis-line"/>${bars}</svg>`;
+}
+
+export function lineChartSVG({ labels, values, height = 210, color = 'var(--ink-2)', unit = '' }) {
+  const id = `line-gradient-${++chartSequence}`;
+  const width = 640, left = 42, right = 18, top = 26, bottom = 38;
+  const plotW = width-left-right, plotH = height-top-bottom;
+  const safeValues = values.map((v) => Number(v) || 0);
+  const max = Math.max(1, ...safeValues);
+  const x = (i) => left + (safeValues.length <= 1 ? plotW/2 : (i/(safeValues.length-1))*plotW);
+  const y = (v) => top + plotH - (v/max)*plotH;
+  const points = safeValues.map((v,i) => `${x(i)},${y(v)}`).join(' ');
+  const area = `${left},${top+plotH} ${points} ${left+plotW},${top+plotH}`;
+  const grid = [0,.25,.5,.75,1].map((p) => { const gy=top+plotH-plotH*p; return `<line x1="${left}" y1="${gy}" x2="${width-right}" y2="${gy}" class="chart-grid-line"/><text x="${left-7}" y="${gy+4}" text-anchor="end" class="chart-axis-label">${Math.round(max*p)}</text>`; }).join('');
+  const marks = safeValues.map((v,i) => {
+    const label = String(labels[i] ?? '').length > 11 ? `${String(labels[i]).slice(0,10)}…` : labels[i];
+    const showLabel = safeValues.length <= 8 || i === 0 || i === safeValues.length-1 || i % Math.ceil(safeValues.length/7) === 0;
+    return `<g data-tip="${escapeHtml(labels[i])}: ${v}${unit}"><circle cx="${x(i)}" cy="${y(v)}" r="5" class="chart-point"/><circle cx="${x(i)}" cy="${y(v)}" r="14" fill="transparent"/>${showLabel ? `<text x="${x(i)}" y="${height-12}" text-anchor="middle" class="chart-axis-label">${escapeHtml(label)}</text>` : ''}</g>`;
+  }).join('');
+  return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Evolução de ${escapeHtml(labels.join(', '))}" class="chart-svg modern-chart line-chart"><defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${color}" stop-opacity=".28"/><stop offset="1" stop-color="${color}" stop-opacity="0"/></linearGradient></defs>${grid}<polygon points="${area}" fill="url(#${id})"/><polyline points="${points}" fill="none" stroke="${color}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>${marks}</svg>`;
 }
 
 // termômetro de desempenho — cor muda de vermelho a verde conforme a taxa

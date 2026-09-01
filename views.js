@@ -1,5 +1,5 @@
 import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, AuditLog, Counters } from './db.js';
-import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, barChartSVG, thermometerHTML } from './helpers.js';
+import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js';
 import { getEnv, getOperatorName, closeModal, openModal, refreshApp } from './app.js';
 
 /* =========================================================
@@ -8,8 +8,8 @@ import { getEnv, getOperatorName, closeModal, openModal, refreshApp } from './ap
 export async function renderCentral() {
   const env = getEnv();
   const rows = await Deliveries.active(env);
-  const [cycles, vehicles, drivers, collaborators, kmLogs] = await Promise.all([
-    Cycles.all(), Vehicles.all(), Drivers.all(), Collaborators.all(), OdometerLogs.all(),
+  const [cycles, vehicles, drivers, collaborators, kmLogs, costs] = await Promise.all([
+    Cycles.all(), Vehicles.all(), Drivers.all(), Collaborators.all(), OdometerLogs.all(), Costs.all(),
   ]);
   const openCycles = cycles.filter((c) => c.environment === env && c.status === 'aberto' && !c.deletedAt);
   const vName = (id) => vehicles.find((v) => v.id === id)?.label || 'Veículo';
@@ -30,7 +30,7 @@ export async function renderCentral() {
 
   const now = new Date();
   const isToday = (value) => {
-    const d = new Date(value);
+    const d = new Date(/^\d{4}-\d{2}-\d{2}$/.test(String(value)) ? `${value}T12:00:00` : value);
     return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
   };
   const todayRows = rows.filter((r) => isToday(r.entryTime));
@@ -60,6 +60,21 @@ export async function renderCentral() {
   if (kmPendente) alerts.push({ text: `⌁ ${kmPendente} veículo(s) sem KM final registrado`, query: '' });
   if (reentrega.length) alerts.push({ text: `↻ ${reentrega.length} entrega(s) aguardando reentrega`, query: 'reentrega' });
 
+  const finalizedToday = todayRows.filter((r) => r.status === 'finalizada' && r.deliveredAt);
+  const todayFees = todayRows.filter((r) => r.status === 'finalizada' || (r.status === 'retirada_loja' && !r.refunded)).reduce((s,r) => s + Number(r.deliveryFee || 0), 0);
+  const todayRefunds = todayRows.filter((r) => r.refunded).reduce((s,r) => s + Number(r.deliveryFee || 0), 0);
+  const todayCosts = costs.filter((c) => c.environment === env && !c.deletedAt && isToday(c.date)).reduce((s,c) => s + Number(c.amount || 0), 0);
+  const todayResult = todayFees - todayRefunds - todayCosts;
+  const todayKm = kmLogs.filter((l) => l.environment === env && l.kmEnd != null && isToday(l.shiftDate)).reduce((s,l) => s + Math.max(0, Number(l.kmEnd) - Number(l.kmStart)), 0);
+  const avgTodayTotal = averageMinutes(finalizedToday, 'entryTime', 'deliveredAt');
+  const avgTodayRoute = averageMinutes(finalizedToday, 'leftStoreAt', 'clientArrivalAt');
+  const noCliente = rows.filter((r) => r.status === 'no_cliente');
+  const liveLaneCard = (r) => `<article class="live-delivery-card" data-tip="Compra #${r.purchaseNumber} · ${escapeHtml(r.clientName || 'Sem nome')} · Entrada ${timeBR(r.entryTime)} · Saída ${timeBR(r.leftStoreAt)} · Chegada ${timeBR(r.clientArrivalAt)} · Finalização ${timeBR(r.deliveredAt)}">
+    <div><strong>#${r.purchaseNumber}</strong>${r.priority === 'alta' ? '<span>ALTA</span>' : ''}</div>
+    <p>${escapeHtml(r.clientName || r.street || 'Cliente sem nome')}</p>
+    <small>${timeBR(r.entryTime)} · ${escapeHtml(STATUS_META[r.status]?.label || r.status)}</small>
+  </article>`;
+
   return `
     <div class="central-hero" style="--performance-color:${profile.color}">
       <div class="orbit-decor" aria-hidden="true"><i></i><i></i><i></i></div>
@@ -79,51 +94,70 @@ export async function renderCentral() {
 
     ${alerts.length ? `<div class="alert-strip">${alerts.map((a) => `<button type="button" class="alert-chip" data-query="${escapeHtml(a.query)}">${a.text}</button>`).join('')}</div>` : ''}
 
-    <div class="day-performance-head"><div><span>DESEMPENHO DO DIA</span><h2>Progresso de hoje</h2></div><strong>${completionPctToday}% concluído</strong></div>
-    <div class="day-performance-grid">
-      <div class="day-performance-card" data-tip="Total de entregas registradas hoje."><small>Registradas</small><strong data-count="${totalToday}">0</strong></div>
-      <div class="day-performance-card good" data-tip="Finalizadas hoje com hora de conclusão na casa do cliente, mais retiradas na loja."><small>Finalizadas</small><strong data-count="${completedToday}">0</strong></div>
-      <div class="day-performance-card" data-tip="Entregas de hoje que ainda precisam de alguma ação operacional."><small>Pendentes</small><strong data-count="${pendingToday}">0</strong></div>
-      <div class="day-performance-card ${lateToday ? 'bad' : 'good'}" data-tip="Entregas de hoje abertas há mais de 60 minutos."><small>Atrasadas</small><strong data-count="${lateToday}">0</strong></div>
-      <div class="day-performance-card ${problemsToday ? 'warning' : ''}" data-tip="Retornos, reentregas e cancelamentos registrados hoje."><small>Ocorrências</small><strong data-count="${problemsToday}">0</strong></div>
-      <div class="day-performance-card score" data-tip="Percentual de entregas de hoje já concluídas com registro correto."><small>Conclusão</small><strong>${completionPctToday}%</strong><i><b style="width:${completionPctToday}%"></b></i></div>
-    </div>
+    <section class="control-room-grid">
+      <article class="ops-score-console" data-tip="O índice combina conclusão (65%), pontualidade (20%) e ausência de ocorrências (15%).">
+        <div class="score-ring" style="--score:${score};--score-color:${profile.color}"><strong>${score}</strong><small>/100</small></div>
+        <div><span>PULSO DA OPERAÇÃO</span><h2>${profile.label}</h2><p>${phrase}</p></div>
+      </article>
+      <article class="ops-flow-console">
+        <div class="console-title"><span>FLUXO AO VIVO</span><strong>${pendingToday} exigem ação</strong></div>
+        <div class="flow-stages">
+          ${[['na_loja','Na loja',naLoja.length],['em_andamento','Em rota',rows.filter(r=>r.status==='em_rota').length],['no_cliente','No cliente',noCliente.length],['finalizada','Finalizadas hoje',completedToday]].map(([key,label,value]) => `<button data-central-filter="${key}" data-tip="Clique para filtrar a fila por ${label.toLowerCase()}."><i></i><strong data-count="${value}">0</strong><small>${label}</small></button>`).join('')}
+        </div>
+      </article>
+      <article class="ops-pulse-console">
+        <div class="console-title"><span>VELOCIDADE E SLA</span><strong>hoje</strong></div>
+        <div class="pulse-metrics">
+          <div data-tip="Tempo médio da entrada até a finalização no cliente."><small>Ciclo completo</small><strong>${formatDuration(avgTodayTotal)}</strong></div>
+          <div data-tip="Tempo médio entre a saída da loja e a chegada ao cliente."><small>Em rota</small><strong>${formatDuration(avgTodayRoute)}</strong></div>
+          <div data-tip="Quilômetros registrados em expedientes encerrados hoje."><small>Rodagem</small><strong>${todayKm.toFixed(1)} km</strong></div>
+          <div data-tip="Entregas finalizadas divididas pelas registradas hoje."><small>Conclusão</small><strong>${completionPctToday}%</strong></div>
+        </div>
+      </article>
+      <article class="ops-finance-console" data-tip="Visão financeira operacional somente com lançamentos reais de hoje.">
+        <div class="console-title"><span>RESULTADO DO DIA</span><strong class="${todayResult < 0 ? 'negative' : ''}">${money(todayResult)}</strong></div>
+        <div class="finance-line"><span>Taxas</span><b>${money(todayFees)}</b></div>
+        <div class="finance-line"><span>Reembolsos</span><b>− ${money(todayRefunds)}</b></div>
+        <div class="finance-line"><span>Custos</span><b>− ${money(todayCosts)}</b></div>
+      </article>
+    </section>
 
-    <div class="stat-row">
-      <button class="stat-card clickable" data-central-filter="na_loja" data-tip="Compras lançadas aguardando um ciclo. Clique para filtrar a fila."><span class="stat-icon blue">⌂</span><small>Na loja</small><strong data-count="${naLoja.length}">0</strong><em>aguardando saída</em></button>
-      <button class="stat-card clickable" data-central-filter="em_andamento" data-tip="Entregas em rota ou já na casa do cliente. Clique para filtrar."><span class="stat-icon cyan">➜</span><small>Em andamento</small><strong data-count="${emRota.length}">0</strong><em>rota ou cliente</em></button>
-      <button class="stat-card clickable" data-central-filter="alta" data-tip="Prioridades altas na loja ou em rota. Clique para filtrar."><span class="stat-icon yellow">★</span><small>Prioritárias</small><strong data-count="${prioritarias.length}">0</strong><em>exigem atenção</em></button>
-      <button class="stat-card clickable ${atrasadas.length ? 'danger-card' : ''}" data-central-filter="atrasada" data-tip="Entregas abertas há mais de 60 minutos. Clique para ver as ocorrências."><span class="stat-icon red">!</span><small>Atrasadas (&gt;60min)</small><strong data-count="${atrasadas.length}">0</strong><em>${atrasadas.length ? 'agir agora' : 'tudo em ordem'}</em></button>
-    </div>
-    <div class="stat-row">
-      <button class="stat-card clickable" data-central-action="close-cycle" data-tip="Ciclos abertos agora. Clique para finalizar um ciclo."><span class="stat-icon violet">↻</span><small>Ciclos ativos</small><strong data-count="${openCycles.length}">0</strong><em>veículos ocupados</em></button>
-      <button class="stat-card clickable" data-central-filter="reentrega" data-tip="Entregas que voltaram e precisam de nova tentativa."><span class="stat-icon orange">↺</span><small>Para reentrega</small><strong data-count="${reentrega.length}">0</strong><em>nova tentativa</em></button>
-      <button class="stat-card clickable" data-central-filter="programada" data-tip="Entregas programadas para uma data e hora futura."><span class="stat-icon green">◷</span><small>Agendadas</small><strong data-count="${agendadas.length}">0</strong><em>programadas</em></button>
-      <button class="stat-card clickable" data-central-action="km" data-tip="Expedientes sem KM final. Clique para registrar."><span class="stat-icon navy">⌁</span><small>KM pendente</small><strong data-count="${kmPendente}">0</strong><em>fechar expediente</em></button>
+    <div class="attention-grid">
+      <button data-central-filter="atrasada" class="attention-card ${lateToday ? 'critical' : ''}" data-tip="Entregas abertas há mais de 60 minutos."><span>!</span><div><small>ATRASADAS</small><strong data-count="${atrasadas.length}">0</strong><em>${atrasadas.length ? 'agir agora' : 'nenhuma ocorrência'}</em></div></button>
+      <button data-central-filter="alta" class="attention-card" data-tip="Prioridades altas ainda abertas."><span>★</span><div><small>PRIORIDADE ALTA</small><strong data-count="${prioritarias.length}">0</strong><em>na fila operacional</em></div></button>
+      <button data-central-action="close-cycle" class="attention-card" data-tip="Ciclos atualmente em andamento."><span>↻</span><div><small>CICLOS ATIVOS</small><strong data-count="${openCycles.length}">0</strong><em>recursos ocupados</em></div></button>
+      <button data-central-action="km" class="attention-card" data-tip="Expedientes sem KM final."><span>⌁</span><div><small>KM PENDENTE</small><strong data-count="${kmPendente}">0</strong><em>fechar expediente</em></div></button>
     </div>
 
     <section class="operation-launcher">
       <div class="section-heading"><div><span>COMANDOS RÁPIDOS</span><h2>Toda a operação em um só lugar</h2></div><div class="heading-signal"><i></i>Atualização automática</div></div>
-      <div class="action-grid">
-        <button class="action-card primary-action" id="qaNewDelivery" data-tip="Abra o cadastro completo de uma nova entrega."><span>＋</span><strong>Nova entrega</strong><small>Cadastrar uma compra</small></button>
-        <button class="action-card arrival-action" id="qaArrival" data-tip="Selecione uma entrega em rota e registre imediatamente a hora em que chegou na casa do cliente."><span>⌂</span><strong>Chegou no cliente</strong><small>Registrar hora da chegada</small></button>
-        <button class="action-card" id="qaStartCycle" data-tip="Selecione veículo, entregador e as compras que sairão neste ciclo."><span>▶</span><strong>Iniciar ciclo</strong><small>Selecionar rota e equipe</small></button>
-        <button class="action-card" id="qaCloseCycle" data-tip="Finalize um ciclo resolvendo uma entrega pendente por vez e informando os horários obrigatórios."><span>■</span><strong>Finalizar ciclo</strong><small>Resolver pendências</small></button>
-        <button class="action-card" id="qaKm" data-tip="Registre o KM inicial ou feche um expediente com o KM final."><span>⌁</span><strong>Registrar KM</strong><small>Início ou fechamento</small></button>
-        <button class="action-card" id="qaCost" data-tip="Lance combustível, manutenção e outras despesas da operação."><span>R$</span><strong>Lançar custo</strong><small>Despesa da operação</small></button>
+      <div class="command-dock">
+        <button class="primary-command" id="qaNewDelivery" data-tip="Cadastrar uma nova compra e colocá-la na fila."><span>＋</span><strong>Nova entrega</strong></button>
+        <button id="qaStartCycle" data-tip="Pergunta a hora exata de saída antes de confirmar o início."><span>↗</span><strong>Iniciar ciclo</strong></button>
+        <button id="qaArrival" data-tip="Registrar a hora exata em que chegou na casa do cliente."><span>⌂</span><strong>Chegou no cliente</strong></button>
+        <button id="qaCloseCycle" data-tip="Resolve pendências e pergunta a hora exata antes de confirmar o fim."><span>✓</span><strong>Finalizar ciclo</strong></button>
+        <button id="qaKm" data-tip="Registrar KM inicial ou final."><span>⌁</span><strong>KM</strong></button>
+        <button id="qaCost" data-tip="Lançar custo operacional."><span>R$</span><strong>Custo</strong></button>
       </div>
     </section>
 
     <div class="operation-panels">
       <section class="ops-panel">
         <div class="panel-head"><div><span class="live-mini"></span><strong>Ciclos em andamento</strong></div><button class="text-action" id="panelStartCycle">＋ Novo ciclo</button></div>
-        ${openCycles.length ? openCycles.map((c) => `<div class="ops-line"><div><strong>${escapeHtml(vName(c.vehicleId))}</strong><small>${escapeHtml(dName(c.driverId))} · ${(c.deliveryIds || []).length} entrega(s)</small></div><button class="btn-ghost btn-small central-cycle-close" data-id="${c.id}">Finalizar</button></div>`).join('') : '<div class="panel-empty">Nenhum ciclo aberto agora.</div>'}
+        ${openCycles.length ? openCycles.map((c) => `<div class="ops-line cycle-live-line" data-tip="Saída confirmada às ${timeBR(c.startedAt)} · duração até agora ${formatDuration((Date.now()-new Date(c.startedAt))/60000)}"><div><strong>${escapeHtml(vName(c.vehicleId))}</strong><small>${escapeHtml(dName(c.driverId))} · saída ${timeBR(c.startedAt)} · ${formatDuration((Date.now()-new Date(c.startedAt))/60000)}</small></div><button class="btn-ghost btn-small central-cycle-close" data-id="${c.id}">Finalizar</button></div>`).join('') : '<div class="panel-empty">Nenhum ciclo aberto agora.</div>'}
       </section>
       <section class="ops-panel">
         <div class="panel-head"><div><span class="live-mini ${kmPendente ? 'warning' : ''}"></span><strong>Expedientes de KM</strong></div><button class="text-action" id="panelKmStart">＋ Iniciar</button></div>
         ${pendingKmLogs.length ? pendingKmLogs.map((l) => `<div class="ops-line"><div><strong>${escapeHtml(vName(l.vehicleId))}</strong><small>KM inicial ${l.kmStart} · ${dateBR(l.shiftDate)}</small></div><button class="btn-ghost btn-small central-km-close" data-id="${l.id}">KM final</button></div>`).join('') : '<div class="panel-empty">Todos os expedientes estão fechados.</div>'}
       </section>
     </div>
+
+    <section class="live-board-section">
+      <div class="section-heading"><div><span>MAPA OPERACIONAL</span><h2>Onde cada entrega está agora</h2></div><div class="heading-signal"><i></i>dados reais</div></div>
+      <div class="live-board">
+        ${[['Na loja',naLoja],['Em rota',rows.filter(r=>r.status==='em_rota')],['No cliente',noCliente],['Ocorrências',rows.filter(r=>['retorno','reentrega','cancelada'].includes(r.status))]].map(([label,list]) => `<div class="live-lane"><header><strong>${label}</strong><span>${list.length}</span></header><div>${list.slice(0,5).map(liveLaneCard).join('') || '<p class="lane-empty">Nenhuma entrega</p>'}</div></div>`).join('')}
+      </div>
+    </section>
 
     <div class="queue-heading"><div><span>FILA OPERACIONAL</span><h2>Entregas que exigem acompanhamento</h2></div><label class="central-search">⌕<input id="centralQueueSearch" placeholder="Buscar compra, cupom, PDV, DOC ou cliente" /></label></div>
     ${await miniList([...naLoja, ...emRota])}
@@ -764,11 +798,11 @@ export async function renderCycles() {
       <td>${escapeHtml(dName(c.driverId))}</td>
       <td>${items.length}</td>
       <td>${c.status === 'aberto' ? `<span class="badge transito">Aberto · ${pending} pendente(s)</span>` : `<span class="badge entregue">Fechado</span>`}</td>
-      <td>${c.status === 'aberto' ? '<button class="btn-ghost btn-small cycle-close-btn">Finalizar</button>' : dateTimeBR(c.closedAt)}</td>
+      <td>${c.status === 'aberto' ? `<button class="btn-ghost btn-small cycle-close-btn">Finalizar</button><small class="delivery-times">${formatDuration((Date.now()-new Date(c.startedAt))/60000)}</small>` : `${dateTimeBR(c.closedAt)}<small class="delivery-times">${formatDuration((new Date(c.closedAt)-new Date(c.startedAt))/60000)}</small>`}</td>
     </tr>`;
   }));
 
-  return `<div class="table-wrap"><table><thead><tr><th>Início</th><th>Veículo</th><th>Entregador</th><th>Entregas</th><th>Status</th><th></th></tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
+  return `<div class="table-wrap"><table><thead><tr><th>Início exato</th><th>Veículo</th><th>Entregador</th><th>Entregas</th><th>Status</th><th>Fim exato / duração</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
 }
 
 export function wireCyclesEvents() {
@@ -801,6 +835,16 @@ export async function openStartCycleModal() {
 
   const body = `
     <form id="startCycleForm">
+      <div class="cycle-time-confirm">
+        <div class="cycle-time-icon">↗</div>
+        <div>
+          <strong>Qual foi a hora exata da saída?</strong>
+          <small>Este horário inicia o ciclo e será aplicado como saída da loja em todas as entregas selecionadas.</small>
+        </div>
+        <label>Início do ciclo *
+          <input type="datetime-local" name="startedAt" required value="${localDateTimeValue(new Date())}" />
+        </label>
+      </div>
       <div class="field-row">
         <label>Veículo *
           <select name="vehicleId" required>
@@ -843,17 +887,21 @@ export async function openStartCycleModal() {
         const order = $$('.cycle-item').map((el) => el.dataset.id);
         const checked = order.filter((id) => $(`.cycle-item[data-id="${id}"] input[type=checkbox]`).checked);
         if (!checked.length) return toast('Selecione ao menos uma entrega.', 'error');
+        const startedAt = new Date(fd.startedAt).toISOString();
+        const latestEntry = Math.max(...checked.map((id) => new Date(candidates.find((d) => d.id === id)?.entryTime || 0).getTime()));
+        if (new Date(startedAt).getTime() < latestEntry) return toast('O início do ciclo não pode ser anterior à entrada de uma entrega selecionada.', 'error');
 
         const cycle = await Cycles.add({
           environment: env, vehicleId: fd.vehicleId, driverId: fd.driverId,
-          status: 'aberto', startedAt: new Date().toISOString(), closedAt: null,
+          status: 'aberto', startedAt, closedAt: null,
+          startedAtRegisteredBy: getOperatorName(), startedAtRecordedAt: new Date().toISOString(),
           deliveryIds: checked, deletedAt: null,
         });
         const leftStoreAt = cycle.startedAt;
         for (const id of checked) {
           await Deliveries.changeStatus(id, 'em_rota', { cycleId: cycle.id, vehicleId: fd.vehicleId, driverId: fd.driverId, leftStoreAt, note: `Saída da loja registrada às ${timeBR(leftStoreAt)}.` });
         }
-        toast('Ciclo iniciado.', 'success');
+        toast(`Ciclo iniciado às ${timeBR(startedAt)}.`, 'success');
         closeModal();
         refreshApp();
       }},
@@ -878,10 +926,7 @@ export async function openCloseCycleModal(cycle) {
   const pending = items.filter((i) => i && (['em_rota', 'no_cliente'].includes(i.status) || (i.status === 'finalizada' && !i.deliveredAt)));
 
   if (!pending.length) {
-    await Cycles.update(cycle.id, { status: 'fechado', closedAt: new Date().toISOString() });
-    toast('Ciclo finalizado — todas as entregas já estavam resolvidas.', 'success');
-    refreshApp();
-    return;
+    return openCycleEndTimeModal(cycle);
   }
 
   showPendingOne(cycle, pending[0], pending.length);
@@ -937,11 +982,53 @@ async function advanceCloseCycle(cycle) {
   if (pending.length) {
     showPendingOne(cycle, pending[0], pending.length);
   } else {
-    await Cycles.update(cycle.id, { status: 'fechado', closedAt: new Date().toISOString() });
-    toast('Ciclo finalizado. Veículo e entregador liberados.', 'success');
-    closeModal();
-    refreshApp();
+    openCycleEndTimeModal(cycle);
   }
+}
+
+async function openCycleEndTimeModal(cycle) {
+  const items = await Promise.all((cycle.deliveryIds || []).map((id) => Deliveries.get(id)));
+  const latestOperationalAt = items.reduce((latest, item) => {
+    const value = item?.deliveredAt || item?.clientArrivalAt || item?.leftStoreAt;
+    return value && new Date(value) > new Date(latest) ? value : latest;
+  }, cycle.startedAt);
+  openModal({
+    title: 'Confirmar fim do ciclo',
+    subtitle: 'A hora exata é obrigatória antes de liberar o veículo e o entregador.',
+    body: `
+      <form id="cycleEndTimeForm">
+        <div class="cycle-time-confirm end-cycle">
+          <div class="cycle-time-icon">✓</div>
+          <div>
+            <strong>Qual foi a hora exata do fim do ciclo?</strong>
+            <small>Início registrado: ${dateTimeBR(cycle.startedAt)} · ${items.length} entrega(s) no ciclo.</small>
+          </div>
+          <label>Fim do ciclo *
+            <input type="datetime-local" name="closedAt" required value="${localDateTimeValue(new Date())}" />
+          </label>
+        </div>
+        <label>Observação do encerramento<textarea name="closeNote" rows="2" placeholder="Opcional"></textarea></label>
+      </form>`,
+    actions: [
+      { label: 'Voltar', kind: 'ghost', onClick: () => openCloseCycleModal(cycle) },
+      { label: 'Confirmar fim do ciclo', kind: 'primary', onClick: async () => {
+        const form = $('#cycleEndTimeForm');
+        if (!form.reportValidity()) return;
+        const fd = Object.fromEntries(new FormData(form).entries());
+        const closedAt = new Date(fd.closedAt).toISOString();
+        if (new Date(closedAt) < new Date(cycle.startedAt)) return toast('O fim do ciclo não pode ser anterior ao início.', 'error');
+        if (latestOperationalAt && new Date(closedAt) < new Date(latestOperationalAt)) return toast(`O fim do ciclo não pode ser anterior ao último evento, às ${timeBR(latestOperationalAt)}.`, 'error');
+        await Cycles.update(cycle.id, {
+          status: 'fechado', closedAt,
+          closedAtRegisteredBy: getOperatorName(), closedAtRecordedAt: new Date().toISOString(),
+          closeNote: fd.closeNote?.trim() || '',
+        });
+        toast(`Ciclo encerrado às ${timeBR(closedAt)}. Veículo e entregador liberados.`, 'success');
+        closeModal();
+        refreshApp();
+      }},
+    ],
+  });
 }
 
 /* =========================================================
@@ -1123,6 +1210,7 @@ function byWeekdayCountOccurrences(rows, weekday) {
    DASHBOARD (seção 14) — métricas, rankings e gráficos
    ========================================================= */
 let dashboardPeriod = { mode: 'mes', start: '', end: '' };
+let dashboardSection = 'tudo';
 
 function dashboardDayKey(value) {
   const d = value instanceof Date ? value : new Date(/^\d{4}-\d{2}-\d{2}$/.test(String(value)) ? `${value}T12:00:00` : value);
@@ -1159,6 +1247,14 @@ function dashboardInRange(value, range) {
   return (!range.start || d >= range.start) && (!range.end || d <= range.end);
 }
 
+function previousDashboardRange(range) {
+  if (!range.start || !range.end) return null;
+  const duration = range.end.getTime() - range.start.getTime() + 1;
+  const end = new Date(range.start.getTime() - 1);
+  const start = new Date(end.getTime() - duration + 1);
+  return { start, end };
+}
+
 function averageMinutes(rows, fromField, toField) {
   const values = rows.map((r) => r[fromField] && r[toField] ? (new Date(r[toField]) - new Date(r[fromField])) / 60000 : null).filter((v) => v != null && v >= 0);
   return values.length ? values.reduce((s,v) => s + v, 0) / values.length : null;
@@ -1169,6 +1265,20 @@ function formatDuration(minutes) {
   if (minutes < 60) return `${Math.round(minutes)} min`;
   const h = Math.floor(minutes / 60), m = Math.round(minutes % 60);
   return `${h}h ${m}min`;
+}
+
+function durationValues(rows, fromField, toField) {
+  return rows.map((r) => r[fromField] && r[toField] ? (new Date(r[toField]) - new Date(r[fromField])) / 60000 : null).filter((v) => Number.isFinite(v) && v >= 0).sort((a,b) => a-b);
+}
+
+function percentile(values, pct) {
+  if (!values.length) return null;
+  return values[Math.min(values.length-1, Math.max(0, Math.ceil(values.length*pct)-1))];
+}
+
+function changePercent(current, previous) {
+  if (!previous) return null;
+  return ((current-previous)/Math.abs(previous))*100;
 }
 
 function meanGroupForecast(rows, keyFn) {
@@ -1197,8 +1307,8 @@ function dashboardTrend(rows, range) {
 
 export async function renderDashboard() {
   const env = getEnv();
-  const [allRows, allCycles, allCosts, allKm, drivers, vehicles, neighborhoods] = await Promise.all([
-    Deliveries.active(env), Cycles.all(), Costs.all(), OdometerLogs.all(), Drivers.all(), Vehicles.all(), Neighborhoods.all(),
+  const [allRows, allCycles, allCosts, allKm, drivers, vehicles, neighborhoods, costCategories] = await Promise.all([
+    Deliveries.active(env), Cycles.all(), Costs.all(), OdometerLogs.all(), Drivers.all(), Vehicles.all(), Neighborhoods.all(), CostCategories.all(),
   ]);
   const range = dashboardRange();
   const rows = allRows.filter((r) => dashboardInRange(r.entryTime, range));
@@ -1229,12 +1339,49 @@ export async function renderDashboard() {
   const avgRoute = averageMinutes(rows, 'leftStoreAt', 'clientArrivalAt');
   const avgAtClient = averageMinutes(rows, 'clientArrivalAt', 'deliveredAt');
   const avgTotal = averageMinutes(rows, 'entryTime', 'deliveredAt');
+  const totalDurations = durationValues(rows, 'entryTime', 'deliveredAt');
+  const medianTotal = percentile(totalDurations, .5);
+  const p90Total = percentile(totalDurations, .9);
+  const maxTotal = totalDurations.length ? totalDurations[totalDurations.length-1] : null;
+  const avgCycleDuration = averageMinutes(closedCycles, 'startedAt', 'closedAt');
+  const cycleDurations = durationValues(closedCycles, 'startedAt', 'closedAt');
+  const maxCycleDuration = cycleDurations.length ? cycleDurations[cycleDurations.length-1] : null;
+  const arrivedClient = rows.filter((r) => r.clientArrivalAt).length;
+  const leftStore = rows.filter((r) => r.leftStoreAt).length;
+  const withdrawn = rows.filter((r) => r.status === 'retirada_loja').length;
+  const largeDeliveries = rows.filter((r) => r.size === 'grande').length;
+  const firstAttempt = finalized.filter((r) => !(r.statusHistory || []).some((h) => ['retorno','reentrega'].includes(h.to))).length;
+  const firstAttemptRate = finalized.length ? Math.round(firstAttempt/finalized.length*100) : 0;
+  const returnRate = rows.length ? problems.length/rows.length*100 : 0;
+  const onTime60 = totalDurations.length ? Math.round(totalDurations.filter((v)=>v<=60).length/totalDurations.length*100) : 0;
+  const marginRate = netRevenue ? (balance/netRevenue)*100 : 0;
+  const avgFee = feeRows.length ? grossFees/feeRows.length : 0;
+  const deliveriesPerKm = kmTotal ? finalized.length/kmTotal : null;
+  const kmPerCycle = closedCycles.length ? kmTotal/closedCycles.length : null;
+
+  const previousRange = previousDashboardRange(range);
+  const previousRows = previousRange ? allRows.filter((r) => dashboardInRange(r.entryTime, previousRange)) : [];
+  const previousFinalized = previousRows.filter((r) => r.status === 'finalizada' && r.deliveredAt);
+  const previousCosts = previousRange ? allCosts.filter((c) => c.environment === env && !c.deletedAt && dashboardInRange(c.date, previousRange)) : [];
+  const previousGross = previousRows.filter((r) => r.status === 'finalizada' || (r.status === 'retirada_loja' && !r.refunded)).reduce((s,r)=>s+Number(r.deliveryFee||0),0);
+  const previousRefunds = previousRows.filter((r)=>r.refunded).reduce((s,r)=>s+Number(r.deliveryFee||0),0);
+  const previousBalance = previousGross-previousRefunds-previousCosts.reduce((s,c)=>s+Number(c.amount||0),0);
+  const volumeChange = changePercent(rows.length, previousRows.length);
+  const resultChange = changePercent(balance, previousBalance);
+  const previousAvgTotal = averageMinutes(previousFinalized, 'entryTime', 'deliveredAt');
+  const timeChange = previousAvgTotal == null || avgTotal == null ? null : changePercent(avgTotal, previousAvgTotal);
 
   // qualidade dos dados
   const missingPhone = rows.filter((r) => !r.phone).length;
   const missingClient = rows.filter((r) => !r.clientName).length;
   const missingVehicleOrDriver = rows.filter((r) => !r.vehicleId || !r.driverId).length;
   const missingCompletionTime = rows.filter((r) => r.status === 'finalizada' && !r.deliveredAt).length;
+  const missingStartTime = cycles.filter((c) => !c.startedAt).length;
+  const missingEndTime = closedCycles.filter((c) => !c.closedAt).length;
+  const missingArrivalTime = finalized.filter((r) => !r.clientArrivalAt).length;
+  const dataCompletenessBase = rows.length*4 + cycles.length*2;
+  const dataIssues = missingPhone + missingClient + missingVehicleOrDriver + missingCompletionTime + missingArrivalTime + missingStartTime + missingEndTime;
+  const dataCompleteness = dataCompletenessBase ? Math.max(0,Math.round((1-dataIssues/dataCompletenessBase)*100)) : 100;
 
   // rankings
   const rank = (items, keyFn, nameFn) => {
@@ -1245,6 +1392,15 @@ export async function renderDashboard() {
   const rankingDriver = rank(finalized, (d) => d.driverId, (id) => drivers.find((d) => d.id === id)?.name || 'Sem entregador');
   const rankingVehicle = rank(finalized, (d) => d.vehicleId, (id) => vehicles.find((v) => v.id === id)?.label || 'Sem veículo');
   const rankingNeighborhood = rank(rows, (d) => d.neighborhoodId, (id) => neighborhoods.find((n) => n.id === id)?.name || 'Sem bairro');
+  const driverPerformance = drivers.map((driver) => {
+    const driverRows = rows.filter((r) => r.driverId === driver.id);
+    const done = driverRows.filter((r) => r.status === 'finalizada' && r.deliveredAt);
+    return {
+      name: driver.name, total: driverRows.length, done: done.length,
+      success: driverRows.length ? Math.round(done.length/driverRows.length*100) : 0,
+      avg: averageMinutes(done, 'leftStoreAt', 'deliveredAt'),
+    };
+  }).filter((r)=>r.total).sort((a,b)=>b.done-a.done).slice(0,8);
 
   // entregas por dia da semana
   const weekdayNames = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
@@ -1272,6 +1428,12 @@ export async function renderDashboard() {
   const byHour = new Array(24).fill(0);
   rows.forEach((r) => { byHour[new Date(r.entryTime).getHours()]++; });
   const peakHour = byHour.indexOf(Math.max(...byHour));
+  const hourWindows = [
+    ['00–05h',byHour.slice(0,6).reduce((s,v)=>s+v,0)],['06–08h',byHour.slice(6,9).reduce((s,v)=>s+v,0)],
+    ['09–11h',byHour.slice(9,12).reduce((s,v)=>s+v,0)],['12–14h',byHour.slice(12,15).reduce((s,v)=>s+v,0)],
+    ['15–17h',byHour.slice(15,18).reduce((s,v)=>s+v,0)],['18–23h',byHour.slice(18).reduce((s,v)=>s+v,0)],
+  ];
+  const costByCategory = costCategories.map((category) => [category.name, costs.filter((c)=>c.categoryId===category.id).reduce((s,c)=>s+Number(c.amount||0),0)]).filter(([,value])=>value>0).sort((a,b)=>b[1]-a[1]).slice(0,7);
 
   // previsões estatísticas simples baseadas exclusivamente no histórico real
   const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
@@ -1284,15 +1446,9 @@ export async function renderDashboard() {
   const forecastMonth = meanGroupForecast(allRows, monthKey);
   const trend = dashboardTrend(rows, range);
 
-  const rankTable = (title, data, tip) => `
-    <div class="stat-card" data-tip="${tip}">
-      <small>${title}</small>
-      <table style="width:100%;margin-top:8px;font-size:12.5px">
-        ${data.length ? data.map(([name, count]) => `<tr><td style="padding:3px 0">${escapeHtml(name)}</td><td style="text-align:right;font-weight:800">${count}</td></tr>`).join('') : '<tr><td style="color:var(--text-muted)">Sem dados suficientes</td></tr>'}
-      </table>
-    </div>`;
-
-  const metric = (title, value, tip, tone = '') => `<div class="stat-card dashboard-metric ${tone}" data-tip="${escapeHtml(tip)}"><small>${title}</small><strong>${value}</strong></div>`;
+  const metric = (title, value, tip, tone = '', context = '') => `<article class="intel-metric ${tone}" data-tip="${escapeHtml(tip)}"><small>${title}</small><strong>${value}</strong>${context ? `<span>${context}</span>` : ''}</article>`;
+  const delta = (value, inverse = false) => value == null ? '<span>sem período anterior comparável</span>' : `<span class="metric-delta ${(inverse ? value<=0 : value>=0) ? 'up' : 'down'}">${value>=0?'↑':'↓'} ${Math.abs(value).toFixed(1)}% vs. período anterior</span>`;
+  const rankingPanel = (title, data, unit = '') => `<article class="ranking-panel"><header><strong>${title}</strong><small>TOP ${data.length || 0}</small></header>${data.length ? data.map(([name,value],index)=>`<div class="ranking-line"><i>${index+1}</i><span>${escapeHtml(name)}</span><b>${typeof value==='number' ? value.toLocaleString('pt-BR') : value}${unit}</b></div>`).join('') : '<p class="panel-empty">Sem dados suficientes.</p>'}</article>`;
   const currentStart = range.start ? dashboardDayKey(range.start) : '';
   const currentEnd = range.end ? dashboardDayKey(range.end) : '';
 
@@ -1312,81 +1468,138 @@ export async function renderDashboard() {
 
     ${!rows.length ? `<div class="dashboard-empty-notice">Não existem entregas neste período. Troque o filtro para visualizar outros dados.</div>` : ''}
 
-    <div class="dashboard-thermo-card" data-tip="Desempenho do período: percentual de entregas finalizadas com hora de conclusão registrada.">${thermometerHTML(successRate, 'Desempenho do período', true)}</div>
+    <section class="intel-hero">
+      <article class="intel-score" data-tip="Desempenho: finalizadas com horário dividido pelo total registrado."><div class="score-ring" style="--score:${successRate};--score-color:${performanceProfile(successRate).color}"><strong>${successRate}</strong><small>/100</small></div><div><span>DESEMPENHO</span><h2>${performanceProfile(successRate).label}</h2><p>${motivationalPhrase(successRate)}</p></div></article>
+      <article class="intel-hero-metric"><small>Volume</small><strong>${rows.length}</strong>${delta(volumeChange)}</article>
+      <article class="intel-hero-metric"><small>Tempo completo médio</small><strong>${formatDuration(avgTotal)}</strong>${delta(timeChange,true)}</article>
+      <article class="intel-hero-metric ${balance<0?'negative':''}"><small>Resultado operacional</small><strong>${money(balance)}</strong>${delta(resultChange)}</article>
+    </section>
 
-    <div class="dashboard-section-title"><span>OPERAÇÃO</span><h2>Indicadores operacionais</h2></div>
-    <div class="dashboard-kpi-grid">
-      ${metric('Total previsto/registrado', `<span data-count="${rows.length}">0</span>`, 'Todas as entregas registradas no período selecionado.')}
-      ${metric('Finalizadas com horário', `<span data-count="${finalized.length}">0</span>`, 'Entregas finalizadas que possuem hora de conclusão na casa do cliente.', 'good')}
-      ${metric('Pendentes', `<span data-count="${pending.length}">0</span>`, 'Na loja, em rota, na casa do cliente, programadas ou aguardando reentrega.')}
-      ${metric('Atrasadas', `<span data-count="${late.length}">0</span>`, 'Entregas abertas há mais de 60 minutos.', late.length ? 'bad' : 'good')}
-      ${metric('Retornos/Problemas', `<span data-count="${problems.length}">0</span>`, 'Retornos, reentregas e cancelamentos registrados no período.', problems.length ? 'warning' : '')}
-      ${metric('Prioridade alta', `<span data-count="${priority.length}">0</span>`, 'Entregas classificadas como prioridade alta.')}
-      ${metric('Agendadas', `<span data-count="${scheduled.length}">0</span>`, 'Entregas agendadas ou programadas no período.')}
-      ${metric('Taxa de sucesso', `${successRate}%`, 'Finalizadas com horário dividido pelo total registrado.', 'good')}
-      ${metric('Ciclos', `<span data-count="${cycles.length}">0</span>`, 'Total de ciclos iniciados no período.')}
-      ${metric('Produtividade/ciclo', avgPerCycle, 'Média de entregas finalizadas por ciclo fechado.')}
-      ${metric('KM rodado', `${kmTotal.toFixed(1)} km`, 'Soma do KM final menos KM inicial dos expedientes fechados.')}
-      ${metric('Tempo total médio', formatDuration(avgTotal), 'Tempo médio entre a entrada da compra e a finalização na casa do cliente.')}
-    </div>
+    <nav class="dashboard-scope" aria-label="Áreas do dashboard">
+      ${[['tudo','Tudo'],['geral','Visão geral'],['fluxo','Fluxo'],['tempos','Tempos / SLA'],['ciclos','Ciclos / Frota'],['financeiro','Financeiro'],['qualidade','Qualidade']].map(([key,label])=>`<button data-dashboard-section="${key}" class="${dashboardSection===key?'active':''}">${label}</button>`).join('')}
+    </nav>
 
-    <div class="dashboard-section-title"><span>TEMPOS</span><h2>Eficiência do fluxo</h2></div>
-    <div class="dashboard-kpi-grid compact">
-      ${metric('Espera na loja', formatDuration(avgStoreWait), 'Tempo médio da entrada da compra até a saída da loja.')}
-      ${metric('Tempo em rota', formatDuration(avgRoute), 'Tempo médio da saída da loja até a chegada na casa do cliente.')}
-      ${metric('Tempo no cliente', formatDuration(avgAtClient), 'Tempo médio entre a chegada e a finalização na casa do cliente.')}
-      ${metric('Sem hora final', `<span data-count="${missingCompletionTime}">0</span>`, 'Entregas marcadas como finalizadas que ainda não têm hora de conclusão.', missingCompletionTime ? 'bad' : 'good')}
-    </div>
+    <section class="intel-section" data-dashboard-group="geral">
+      <div class="intel-section-head"><div><span>VISÃO GERAL</span><h2>Demanda e andamento</h2></div><small>${range.label}</small></div>
+      <div class="intel-metric-grid">
+        ${metric('Registradas', rows.length, 'Todas as entregas que entraram no período.', '', 'demanda total')}
+        ${metric('Finalizadas', finalized.length, 'Finalizadas com hora exata no cliente.', 'good', `${successRate}% do volume`)}
+        ${metric('Pendentes', pending.length, 'Na loja, em rota, no cliente, programadas ou em reentrega.', pending.length?'warning':'good')}
+        ${metric('Atrasadas +60 min', late.length, 'Entregas abertas há mais de 60 minutos.', late.length?'bad':'good')}
+        ${metric('Saíram da loja', leftStore, 'Entregas com hora de saída registrada.')}
+        ${metric('Chegaram no cliente', arrivedClient, 'Entregas com hora de chegada na casa do cliente.')}
+        ${metric('Prioridade alta', priority.length, 'Entregas de prioridade alta no período.')}
+        ${metric('Agendadas', scheduled.length, 'Entregas agendadas ou programadas.')}
+      </div>
+      <div class="forecast-strip">
+        <article data-tip="Média real do mesmo dia da semana."><span>AMANHÃ</span><strong>${forecastTomorrow??'—'}</strong><small>entregas previstas</small></article>
+        <article data-tip="Média semanal do histórico real."><span>PRÓXIMA SEMANA</span><strong>${forecastWeek??'—'}</strong><small>entregas previstas</small></article>
+        <article data-tip="Média mensal do histórico real."><span>PRÓXIMO MÊS</span><strong>${forecastMonth??'—'}</strong><small>entregas previstas</small></article>
+        <article data-tip="Hora com mais entradas no período."><span>PICO</span><strong>${rows.length?String(peakHour).padStart(2,'0')+'h':'—'}</strong><small>maior movimento</small></article>
+      </div>
+      <div class="dashboard-chart-grid">
+        <article class="chart-card featured-chart"><div class="chart-title"><div><span>VOLUME</span><strong>Evolução das entradas</strong></div><small>${range.label}</small></div>${lineChartSVG({labels:trend.labels,values:trend.values})}</article>
+        <article class="chart-card"><div class="chart-title"><div><span>STATUS</span><strong>Distribuição operacional</strong></div><small>agora</small></div>${barChartSVG({labels:statusLabels,values:statusCounts,color:'var(--accent)'})}</article>
+      </div>
+    </section>
 
-    <div class="dashboard-section-title"><span>FINANCEIRO</span><h2>Resultado do período</h2></div>
-    <div class="dashboard-kpi-grid financial-grid">
-      ${metric('Taxas brutas', money(grossFees), 'Soma das taxas das entregas contabilizadas.')}
-      ${metric('Reembolsos', money(refunds), 'Taxas devolvidas em retiradas na loja.', refunds ? 'warning' : '')}
-      ${metric('Receita líquida', money(netRevenue), 'Taxas brutas menos reembolsos.', 'good')}
-      ${metric('Custos operacionais', money(costTotal), 'Soma de combustível, manutenção e demais custos do período.')}
-      ${metric('Resultado', money(balance), 'Receita líquida menos custos: lucro ou prejuízo operacional.', balance >= 0 ? 'good' : 'bad')}
-      ${metric('Custo por entrega', finalized.length ? money(costTotal/finalized.length) : '—', 'Custos divididos pelas entregas finalizadas com horário.')}
-      ${metric('Receita por entrega', finalized.length ? money(netRevenue/finalized.length) : '—', 'Receita líquida dividida pelas entregas finalizadas com horário.')}
-      ${metric('Custo por KM', kmTotal ? money(costTotal/kmTotal) : '—', 'Custos operacionais divididos pelo KM rodado.')}
-    </div>
+    <section class="intel-section" data-dashboard-group="fluxo">
+      <div class="intel-section-head"><div><span>FLUXO OPERACIONAL</span><h2>Volume, perfil e exceções</h2></div><small>todos os movimentos</small></div>
+      <div class="intel-metric-grid">
+        ${metric('Ocorrências', problems.length, 'Retornos, reentregas e cancelamentos.', problems.length?'bad':'good')}
+        ${metric('Taxa de retorno', `${returnRate.toFixed(1)}%`, 'Ocorrências divididas pelo total.')}
+        ${metric('Primeira tentativa', `${firstAttemptRate}%`, 'Finalizações sem retorno ou reentrega no histórico.', 'good')}
+        ${metric('Retiradas na loja', withdrawn, 'Entregas retiradas diretamente na loja.')}
+        ${metric('Entregas grandes', largeDeliveries, 'Entregas classificadas como grandes.')}
+        ${metric('Média por ciclo', avgPerCycle, 'Finalizadas divididas pelos ciclos fechados.')}
+        ${metric('Média por dia', rows.length ? (rows.length/Math.max(1,new Set(rows.map(r=>dashboardDayKey(r.entryTime))).size)).toFixed(1) : '—', 'Volume médio nos dias que tiveram entrada.')}
+        ${metric('Até 60 minutos', `${onTime60}%`, 'Percentual concluído em até 60 min da entrada até a finalização.')}
+      </div>
+      <div class="dashboard-chart-grid">
+        <article class="chart-card"><div class="chart-title"><div><span>SEMANA</span><strong>Demanda por dia</strong></div><small>volume</small></div>${barChartSVG({labels:weekdayNames,values:byWeekday,color:'var(--status-entregue)'})}</article>
+        <article class="chart-card"><div class="chart-title"><div><span>HORÁRIOS</span><strong>Faixas de entrada</strong></div><small>volume</small></div>${barChartSVG({labels:hourWindows.map(x=>x[0]),values:hourWindows.map(x=>x[1]),color:'var(--ink-2)'})}</article>
+      </div>
+    </section>
 
-    <div class="dashboard-section-title"><span>PREVISÕES</span><h2>Estimativa de movimento futuro</h2></div>
-    <div class="forecast-grid">
-      <div class="forecast-card" data-tip="Média histórica do mesmo dia da semana de amanhã. É uma estimativa estatística baseada nos registros existentes."><span>PRÓXIMO DIA</span><strong>${forecastTomorrow ?? '—'}</strong><small>entregas previstas</small></div>
-      <div class="forecast-card" data-tip="Média de entregas por semana registrada no histórico. Não é uma garantia de demanda."><span>PRÓXIMA SEMANA</span><strong>${forecastWeek ?? '—'}</strong><small>entregas previstas</small></div>
-      <div class="forecast-card" data-tip="Média de entregas por mês registrado no histórico. A precisão melhora conforme novos meses são acumulados."><span>PRÓXIMO MÊS</span><strong>${forecastMonth ?? '—'}</strong><small>entregas previstas</small></div>
-      <div class="forecast-card peak" data-tip="Faixa horária com maior quantidade de entradas no período selecionado."><span>PICO OPERACIONAL</span><strong>${rows.length ? String(peakHour).padStart(2,'0')+'h' : '—'}</strong><small>horário mais movimentado</small></div>
-    </div>
+    <section class="intel-section" data-dashboard-group="tempos">
+      <div class="intel-section-head"><div><span>TEMPOS E SLA</span><h2>Onde o tempo está sendo gasto</h2></div><small>compra → retorno</small></div>
+      <div class="intel-metric-grid">
+        ${metric('Espera na loja', formatDuration(avgStoreWait), 'Entrada da compra até saída da loja.')}
+        ${metric('Tempo em rota', formatDuration(avgRoute), 'Saída da loja até chegada ao cliente.')}
+        ${metric('Tempo no cliente', formatDuration(avgAtClient), 'Chegada até finalização no cliente.')}
+        ${metric('Tempo completo médio', formatDuration(avgTotal), 'Entrada até finalização.')}
+        ${metric('Mediana completa', formatDuration(medianTotal), 'Metade das entregas levou até este tempo.')}
+        ${metric('P90 completo', formatDuration(p90Total), '90% das entregas levou até este tempo.')}
+        ${metric('Maior tempo', formatDuration(maxTotal), 'Maior duração completa registrada.', maxTotal>120?'bad':'')}
+        ${metric('Dentro de 60 min', `${onTime60}%`, 'Percentual concluído em até 60 minutos.', onTime60>=80?'good':'warning')}
+      </div>
+      <article class="chart-card full-chart"><div class="chart-title"><div><span>GARGALOS</span><strong>Tempo médio por etapa</strong></div><small>minutos</small></div>${barChartSVG({labels:['Espera loja','Em rota','No cliente','Total'],values:[avgStoreWait,avgRoute,avgAtClient,avgTotal].map(v=>Math.round(v||0)),color:'var(--status-transito)',unit:' min'})}</article>
+    </section>
 
-    <div class="dashboard-section-title"><span>GRÁFICOS VIVOS</span><h2>Movimento, horários e situação</h2></div>
-    <div class="dashboard-chart-grid">
-      <div class="chart-card" data-tip="Evolução do volume de entregas dentro do período selecionado. Passe o mouse sobre cada barra para ver o valor."><div class="chart-title"><strong>Evolução das entregas</strong><small>${range.label}</small></div>${barChartSVG({ labels: trend.labels, values: trend.values, color: 'var(--ink-2)' })}</div>
-      <div class="chart-card" data-tip="Distribuição atual das entregas do período por status operacional."><div class="chart-title"><strong>Distribuição por status</strong><small>situação atual</small></div>${barChartSVG({ labels: statusLabels, values: statusCounts, color: 'var(--accent)' })}</div>
-      <div class="chart-card" data-tip="Quantidade de entregas registrada em cada dia da semana dentro do período."><div class="chart-title"><strong>Entregas por dia da semana</strong><small>volume semanal</small></div>${barChartSVG({ labels: weekdayNames, values: byWeekday, color: '#2f9e5b' })}</div>
-      <div class="chart-card" data-tip="Comparação entre taxas brutas, reembolsos, custos e resultado positivo do período."><div class="chart-title"><strong>Composição financeira</strong><small>valores em reais</small></div>${barChartSVG({ labels: ['Taxas','Reemb.','Custos','Resultado'], values: [grossFees,refunds,costTotal,Math.max(0,balance)].map((v)=>Number(v.toFixed(2))), color: '#e8a33d', unit: ' R$' })}</div>
-    </div>
+    <section class="intel-section" data-dashboard-group="ciclos">
+      <div class="intel-section-head"><div><span>CICLOS E FROTA</span><h2>Uso dos recursos</h2></div><small>saída e retorno exatos</small></div>
+      <div class="intel-metric-grid">
+        ${metric('Ciclos iniciados', cycles.length, 'Todos os ciclos iniciados no período.')}
+        ${metric('Ciclos fechados', closedCycles.length, 'Ciclos com hora exata de fim.')}
+        ${metric('Ciclos abertos', cycles.filter(c=>c.status==='aberto').length, 'Ciclos ainda em andamento.', cycles.some(c=>c.status==='aberto')?'warning':'good')}
+        ${metric('Duração média', formatDuration(avgCycleDuration), 'Média entre início e fim dos ciclos.')}
+        ${metric('Ciclo mais longo', formatDuration(maxCycleDuration), 'Maior duração de ciclo registrada.')}
+        ${metric('Produtividade/ciclo', avgPerCycle, 'Entregas finalizadas por ciclo fechado.')}
+        ${metric('KM rodado', `${kmTotal.toFixed(1)} km`, 'KM final menos KM inicial.')}
+        ${metric('KM por ciclo', kmPerCycle==null?'—':`${kmPerCycle.toFixed(1)} km`, 'Quilômetros divididos pelos ciclos fechados.')}
+        ${metric('Entregas por KM', deliveriesPerKm==null?'—':deliveriesPerKm.toFixed(2), 'Finalizadas divididas pelo KM rodado.')}
+        ${metric('Expedientes de KM', kmLogs.length, 'Registros de odômetro no período.')}
+        ${metric('KM ainda aberto', kmLogs.filter(k=>k.kmEnd==null).length, 'Expedientes sem KM final.', kmLogs.some(k=>k.kmEnd==null)?'warning':'good')}
+        ${metric('Recursos vinculados', rows.filter(r=>r.vehicleId&&r.driverId).length, 'Entregas com veículo e entregador informados.')}
+      </div>
+      <article class="driver-table-panel"><header><div><span>DESEMPENHO POR ENTREGADOR</span><strong>Volume, sucesso e velocidade</strong></div></header><div class="table-wrap"><table><thead><tr><th>Entregador</th><th>Entregas</th><th>Finalizadas</th><th>Sucesso</th><th>Tempo médio</th></tr></thead><tbody>${driverPerformance.length?driverPerformance.map(d=>`<tr><td><strong>${escapeHtml(d.name)}</strong></td><td>${d.total}</td><td>${d.done}</td><td>${d.success}%</td><td>${formatDuration(d.avg)}</td></tr>`).join(''):'<tr><td colspan="5">Sem dados suficientes.</td></tr>'}</tbody></table></div></article>
+    </section>
 
-    <div class="dashboard-section-title"><span>CLIENTES E RANKINGS</span><h2>Recorrência e produtividade</h2></div>
-    <div class="dashboard-kpi-grid compact">
-      ${metric('Clientes recorrentes', `<span data-count="${recurringClients}">0</span>`, 'Clientes identificados por telefone ou nome com mais de uma entrega.')}
-      ${metric('Clientes únicos', `<span data-count="${uniqueClients}">0</span>`, 'Quantidade de clientes diferentes identificados no período.')}
-      ${metric('Sem telefone', `<span data-count="${missingPhone}">0</span>`, 'Entregas sem telefone do cliente preenchido.', missingPhone ? 'warning' : 'good')}
-      ${metric('Sem cliente', `<span data-count="${missingClient}">0</span>`, 'Entregas sem nome de cliente preenchido.', missingClient ? 'warning' : 'good')}
-    </div>
-    <div class="stat-card" style="margin-bottom:16px" data-tip="Clientes com mais entregas registradas">
-      <small>Clientes mais recorrentes</small>
-      <table style="width:100%;margin-top:8px;font-size:12.5px">
-        ${topClients.length ? topClients.map(([name, count]) => `<tr><td style="padding:3px 0">${escapeHtml(name)}</td><td style="text-align:right;font-weight:800">${count}x</td></tr>`).join('') : '<tr><td style="color:var(--text-muted)">Sem dados suficientes</td></tr>'}
-      </table>
-    </div>
+    <section class="intel-section" data-dashboard-group="financeiro">
+      <div class="intel-section-head"><div><span>FINANCEIRO</span><h2>Receita, custo e eficiência</h2></div><small>lançamentos reais</small></div>
+      <div class="intel-metric-grid">
+        ${metric('Taxas brutas', money(grossFees), 'Soma das taxas contabilizadas.')}
+        ${metric('Reembolsos', money(refunds), 'Taxas reembolsadas.', refunds?'warning':'')}
+        ${metric('Receita líquida', money(netRevenue), 'Taxas menos reembolsos.', 'good')}
+        ${metric('Custos operacionais', money(costTotal), 'Custos lançados no período.')}
+        ${metric('Resultado', money(balance), 'Receita líquida menos custos.', balance>=0?'good':'bad')}
+        ${metric('Margem operacional', netRevenue?`${marginRate.toFixed(1)}%`:'—', 'Resultado dividido pela receita líquida.', marginRate>=0?'good':'bad')}
+        ${metric('Taxa média', feeRows.length?money(avgFee):'—', 'Valor médio de taxa por entrega contabilizada.')}
+        ${metric('Custo/entrega', finalized.length?money(costTotal/finalized.length):'—', 'Custos divididos pelas finalizadas.')}
+        ${metric('Receita/entrega', finalized.length?money(netRevenue/finalized.length):'—', 'Receita líquida dividida pelas finalizadas.')}
+        ${metric('Resultado/entrega', finalized.length?money(balance/finalized.length):'—', 'Resultado dividido pelas finalizadas.')}
+        ${metric('Custo/KM', kmTotal?money(costTotal/kmTotal):'—', 'Custos divididos pelo KM.')}
+        ${metric('Receita/KM', kmTotal?money(netRevenue/kmTotal):'—', 'Receita líquida dividida pelo KM.')}
+      </div>
+      <div class="dashboard-chart-grid">
+        <article class="chart-card"><div class="chart-title"><div><span>COMPOSIÇÃO</span><strong>Receita e custos</strong></div><small>R$</small></div>${barChartSVG({labels:['Taxas','Reembolsos','Custos','Resultado +'],values:[grossFees,refunds,costTotal,Math.max(0,balance)].map(v=>Number(v.toFixed(2))),color:'var(--accent)',unit:' R$'})}</article>
+        <article class="chart-card"><div class="chart-title"><div><span>CUSTOS</span><strong>Por categoria</strong></div><small>R$</small></div>${barChartSVG({labels:costByCategory.length?costByCategory.map(x=>x[0]):['Sem custos'],values:costByCategory.length?costByCategory.map(x=>Number(x[1].toFixed(2))):[0],color:'var(--status-problema)',unit:' R$'})}</article>
+      </div>
+    </section>
 
-    <div class="stat-row" style="grid-template-columns:repeat(3,1fr)">
-      ${rankTable('Por entregador (finalizadas)', rankingDriver, 'Quem mais finalizou entregas')}
-      ${rankTable('Por veículo (finalizadas)', rankingVehicle, 'Qual veículo mais rodou entregas finalizadas')}
-      ${rankTable('Por bairro (volume)', rankingNeighborhood, 'Bairros com mais entregas registradas')}
-    </div>
-
-    <div class="dashboard-quality-note ${missingVehicleOrDriver || missingCompletionTime ? 'has-warning' : ''}" data-tip="Verificação automática de dados necessários para relatórios e indicadores confiáveis.">Qualidade dos dados: ${missingVehicleOrDriver} sem veículo/entregador · ${missingCompletionTime} finalizada(s) sem hora de conclusão.</div>
+    <section class="intel-section" data-dashboard-group="qualidade">
+      <div class="intel-section-head"><div><span>QUALIDADE E CLIENTES</span><h2>Confiabilidade dos dados e recorrência</h2></div><small>${dataCompleteness}% completo</small></div>
+      <div class="intel-metric-grid">
+        ${metric('Completude dos dados', `${dataCompleteness}%`, 'Proporção estimada dos campos críticos preenchidos.', dataCompleteness>=95?'good':'warning')}
+        ${metric('Sem telefone', missingPhone, 'Entregas sem telefone.', missingPhone?'warning':'good')}
+        ${metric('Sem nome', missingClient, 'Entregas sem nome do cliente.', missingClient?'warning':'good')}
+        ${metric('Sem veículo/entregador', missingVehicleOrDriver, 'Entregas sem recurso vinculado.', missingVehicleOrDriver?'warning':'good')}
+        ${metric('Sem chegada', missingArrivalTime, 'Finalizadas sem hora de chegada.', missingArrivalTime?'bad':'good')}
+        ${metric('Sem finalização', missingCompletionTime, 'Finalizadas sem hora final.', missingCompletionTime?'bad':'good')}
+        ${metric('Ciclo sem início/fim', missingStartTime+missingEndTime, 'Ciclos sem horários obrigatórios.', missingStartTime+missingEndTime?'bad':'good')}
+        ${metric('Clientes únicos', uniqueClients, 'Clientes distintos por telefone ou nome.')}
+        ${metric('Clientes recorrentes', recurringClients, 'Clientes com mais de uma entrega.')}
+        ${metric('Primeira tentativa', `${firstAttemptRate}%`, 'Finalizações sem retorno ou reentrega.', 'good')}
+        ${metric('Ocorrências', problems.length, 'Retornos, reentregas e cancelamentos.', problems.length?'warning':'good')}
+        ${metric('Reembolsos', refunded.length, 'Entregas com reembolso.')}
+      </div>
+      <div class="ranking-grid">
+        ${rankingPanel('Entregadores',rankingDriver)}
+        ${rankingPanel('Veículos',rankingVehicle)}
+        ${rankingPanel('Bairros',rankingNeighborhood)}
+        ${rankingPanel('Clientes recorrentes',topClients,'x')}
+      </div>
+    </section>
   `;
 }
 
@@ -1402,6 +1615,12 @@ export function wireDashboardEvents() {
     dashboardPeriod = { mode: 'personalizado', start, end };
     refreshApp();
   });
+  $$('[data-dashboard-section]').forEach((btn) => btn.addEventListener('click', () => {
+    dashboardSection = btn.dataset.dashboardSection;
+    $$('[data-dashboard-section]').forEach((item)=>item.classList.toggle('active',item===btn));
+    $$('[data-dashboard-group]').forEach((section)=>section.classList.toggle('dashboard-section-hidden',dashboardSection!=='tudo'&&section.dataset.dashboardGroup!==dashboardSection));
+  }));
+  $$('[data-dashboard-group]').forEach((section)=>section.classList.toggle('dashboard-section-hidden',dashboardSection!=='tudo'&&section.dataset.dashboardGroup!==dashboardSection));
 }
 
 /* =========================================================
@@ -1511,8 +1730,8 @@ async function buildExport(kind, env, period = null) {
   }
   if (kind === 'cycles') {
     const rows = (await Cycles.all()).filter((c) => c.environment === env && !c.deletedAt && inReportPeriod(c.startedAt, period));
-    const header = ['Início', 'Fim', 'Veículo', 'Entregador', 'Status', 'Qtd. entregas'];
-    const lines = rows.map((c) => [dateTimeBR(c.startedAt), c.closedAt ? dateTimeBR(c.closedAt) : '', vName(c.vehicleId), dName(c.driverId), c.status, (c.deliveryIds || []).length]);
+    const header = ['Início exato', 'Fim exato', 'Duração', 'Início registrado por', 'Fim registrado por', 'Veículo', 'Entregador', 'Status', 'Qtd. entregas'];
+    const lines = rows.map((c) => [dateTimeBR(c.startedAt), c.closedAt ? dateTimeBR(c.closedAt) : '', c.closedAt ? formatDuration((new Date(c.closedAt)-new Date(c.startedAt))/60000) : '', c.startedAtRegisteredBy || '', c.closedAtRegisteredBy || '', vName(c.vehicleId), dName(c.driverId), c.status, (c.deliveryIds || []).length]);
     return { name: 'ciclos', header, lines };
   }
   if (kind === 'km') {

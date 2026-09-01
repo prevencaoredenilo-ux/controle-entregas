@@ -1,4 +1,4 @@
-const CACHE = 'orbita-v2-cache-6';
+const CACHE = 'orbita-v2-cache-7';
 const ASSETS = [
   './', './index.html', './styles.css', './app.js', './db.js', './helpers.js', './views.js', './manifest.webmanifest',
   './assets/brand/nilo-logo.png', './assets/brand/mascote.png', './assets/brand/triela-logo.png',

@@ -1,5 +1,13 @@
 # Órbita — Controle de Entregas (v2 completo, client-side)
 
+## Atualização v2.4 — sala de controle e inteligência completa
+
+- O início do ciclo exige confirmação da **hora exata da saída** antes de iniciar; esse horário alimenta a saída de todas as entregas do ciclo.
+- O fim do ciclo exige confirmação da **hora exata do encerramento** antes de liberar veículo e entregador, com validação contra o último evento operacional.
+- Central Operacional refeita como sala de controle: pulso, fluxo ao vivo, SLA, resultado do dia, alertas, ciclos com duração, comandos e mapa operacional.
+- Dashboard reorganizado em Visão geral, Fluxo, Tempos/SLA, Ciclos/Frota, Financeiro e Qualidade, com comparação ao período anterior e previsões baseadas somente no histórico real.
+- Gráficos redesenhados com eixos, valores, movimento, tooltips e adaptação para celular.
+
 ## Atualização v2.3 — chegada visível e Dashboard completo
 
 - A ação **Chegou no cliente** passou para os comandos rápidos da Central Operacional.
@@ -20,7 +28,7 @@
 - Novo fluxo real: **Em rota → Na casa do cliente → Finalizada**.
 - A ação **Chegou ao cliente** exige a data/hora da chegada na casa.
 - A ação **Finalizar na casa do cliente** exige a chegada e a hora de conclusão; não permite conclusão anterior à chegada.
-- Ao iniciar um ciclo, a saída da loja passa a ser registrada automaticamente em cada entrega.
+- Ao iniciar um ciclo, a hora exata informada na confirmação é aplicada como saída da loja em cada entrega.
 - No fechamento assistido, responder **Não, foi entregue** abre obrigatoriamente os dois horários; não existe mais finalização direta sem hora.
 - Um ciclo não fecha se houver entrega em rota, na casa do cliente ou marcada como finalizada sem hora de conclusão.
 - Saída, chegada e finalização podem ser editadas posteriormente na ficha da entrega e cada alteração gera auditoria.
