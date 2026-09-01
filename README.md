@@ -1,5 +1,17 @@
 # Órbita — Controle de Entregas (v2 completo, client-side)
 
+## Atualização v2.5 — bloqueio por KM e prontidão operacional
+
+- Nenhum ciclo pode ser iniciado sem **KM inicial registrado no mesmo dia, ambiente e veículo**, com o expediente ainda aberto.
+- Veículos sem KM, em ciclo ou com expediente já encerrado aparecem indisponíveis na seleção do ciclo.
+- Removido o atalho que permitia marcar uma entrega “Em rota” fora de um ciclo.
+- Não é possível lançar manualmente uma nova hora de saída em uma entrega que nunca participou de ciclo.
+- Não é permitido duplicar expediente de KM para o mesmo veículo e dia.
+- O KM final fica bloqueado enquanto existir ciclo aberto no veículo.
+- O cabeçalho da Central agora mostra prontidão do turno, veículos liberados, fila e ciclos, com explicação interativa do termômetro.
+- Cards de SLA, financeiro e entregas do mapa operacional agora abrem os detalhes correspondentes.
+- O Centro de Inteligência ganhou uma leitura automática clicável de atrasos, gargalo, resultado e confiabilidade dos dados.
+
 ## Atualização v2.4 — sala de controle e inteligência completa
 
 - O início do ciclo exige confirmação da **hora exata da saída** antes de iniciar; esse horário alimenta a saída de todas as entregas do ciclo.

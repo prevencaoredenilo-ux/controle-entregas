@@ -54,10 +54,18 @@ export async function renderCentral() {
   const selectedName = getOperatorName();
   const firstName = activeCollaborators.find((c) => c.name === selectedName)?.name || activeCollaborators[0]?.name || '';
 
+  const activeVehicles = vehicles.filter((v) => v.active);
+  const todayKmLogs = kmLogs.filter((l) => l.environment === env && isToday(l.shiftDate));
+  const readyKmLogs = todayKmLogs.filter((l) => l.kmStart != null && l.kmEnd == null);
+  const readyVehicleIds = new Set(readyKmLogs.map((l) => l.vehicleId));
+  const vehiclesMissingInitial = activeVehicles.filter((v) => !todayKmLogs.some((l) => l.vehicleId === v.id));
+  const vehiclesClosedToday = activeVehicles.filter((v) => todayKmLogs.some((l) => l.vehicleId === v.id && l.kmEnd != null));
+
   const alerts = [];
   if (atrasadas.length) alerts.push({ text: `⚠️ ${atrasadas.length} entrega(s) atrasada(s) há mais de 60 min`, query: 'na_loja' });
   if (prioritarias.length) alerts.push({ text: `⭐ ${prioritarias.length} entrega(s) prioritária(s) aguardando`, query: 'alta' });
   if (kmPendente) alerts.push({ text: `⌁ ${kmPendente} veículo(s) sem KM final registrado`, query: '' });
+  if (vehiclesMissingInitial.length) alerts.push({ text: `🚫 ${vehiclesMissingInitial.length} veículo(s) sem KM inicial hoje — ciclo bloqueado`, query: '' });
   if (reentrega.length) alerts.push({ text: `↻ ${reentrega.length} entrega(s) aguardando reentrega`, query: 'reentrega' });
 
   const finalizedToday = todayRows.filter((r) => r.status === 'finalizada' && r.deliveredAt);
@@ -69,7 +77,7 @@ export async function renderCentral() {
   const avgTodayTotal = averageMinutes(finalizedToday, 'entryTime', 'deliveredAt');
   const avgTodayRoute = averageMinutes(finalizedToday, 'leftStoreAt', 'clientArrivalAt');
   const noCliente = rows.filter((r) => r.status === 'no_cliente');
-  const liveLaneCard = (r) => `<article class="live-delivery-card" data-tip="Compra #${r.purchaseNumber} · ${escapeHtml(r.clientName || 'Sem nome')} · Entrada ${timeBR(r.entryTime)} · Saída ${timeBR(r.leftStoreAt)} · Chegada ${timeBR(r.clientArrivalAt)} · Finalização ${timeBR(r.deliveredAt)}">
+  const liveLaneCard = (r) => `<article class="live-delivery-card" role="button" tabindex="0" data-delivery-id="${r.id}" data-tip="Compra #${r.purchaseNumber} · ${escapeHtml(r.clientName || 'Sem nome')} · Entrada ${timeBR(r.entryTime)} · Saída ${timeBR(r.leftStoreAt)} · Chegada ${timeBR(r.clientArrivalAt)} · Finalização ${timeBR(r.deliveredAt)} · Clique para abrir.">
     <div><strong>#${r.purchaseNumber}</strong>${r.priority === 'alta' ? '<span>ALTA</span>' : ''}</div>
     <p>${escapeHtml(r.clientName || r.street || 'Cliente sem nome')}</p>
     <small>${timeBR(r.entryTime)} · ${escapeHtml(STATUS_META[r.status]?.label || r.status)}</small>
@@ -89,13 +97,22 @@ export async function renderCentral() {
         <div class="greeting-phrase">${phrase}</div>
         <div style="color:var(--text-muted);font-size:12px;margin-top:2px">${env === 'treino' ? '🎓 Modo Treinamento — nada aqui entra no histórico oficial.' : 'Operação Real'}</div>
       </div>
-      <div class="greeting-thermo">${thermometerHTML(score, 'Termômetro de desempenho')}</div>
+      <aside class="shift-readiness-panel">
+        <div class="readiness-title"><div><span>PRONTIDÃO DO TURNO</span><strong>${readyKmLogs.length ? 'Operação liberada por veículo' : 'Ação necessária antes da saída'}</strong></div><button id="performanceExplainBtn" data-completion="${completionPctToday}" data-punctuality="${Math.round(punctuality*100)}" data-quality="${Math.round(quality*100)}" data-tip="Veja como o desempenho é calculado e o que fazer para melhorá-lo.">Como melhorar?</button></div>
+        <div class="readiness-actions">
+          <button id="heroKmAction" data-missing="${vehiclesMissingInitial.length}" class="${readyKmLogs.length ? 'ready' : 'blocked'}" data-tip="${readyKmLogs.length} de ${activeVehicles.length} veículo(s) com KM inicial aberto hoje. Veículos sem KM ou com expediente encerrado não iniciam ciclo."><i>⌁</i><span><small>KM PARA CICLO</small><strong>${readyKmLogs.length}/${activeVehicles.length} prontos</strong></span><b>${readyKmLogs.length ? '✓' : '!'}</b></button>
+          <button id="heroQueueAction" data-tip="${naLoja.length} entrega(s) aguardando formação de ciclo."><i>▤</i><span><small>FILA AGORA</small><strong>${naLoja.length} na loja</strong></span><b>↓</b></button>
+          <button id="heroCycleAction" data-tip="${openCycles.length} ciclo(s) ativo(s). Iniciar ciclo exige KM inicial, veículo, entregador e hora de saída."><i>↗</i><span><small>CICLOS</small><strong>${openCycles.length} ativos</strong></span><b>›</b></button>
+        </div>
+        <div class="greeting-thermo compact-thermo">${thermometerHTML(score, 'Desempenho')}</div>
+        ${vehiclesClosedToday.length ? `<small class="readiness-note">${vehiclesClosedToday.length} veículo(s) com expediente já encerrado hoje.</small>` : ''}
+      </aside>
     </div>
 
     ${alerts.length ? `<div class="alert-strip">${alerts.map((a) => `<button type="button" class="alert-chip" data-query="${escapeHtml(a.query)}">${a.text}</button>`).join('')}</div>` : ''}
 
     <section class="control-room-grid">
-      <article class="ops-score-console" data-tip="O índice combina conclusão (65%), pontualidade (20%) e ausência de ocorrências (15%).">
+      <article class="ops-score-console" id="opsScoreConsole" role="button" tabindex="0" data-tip="O índice combina conclusão (65%), pontualidade (20%) e ausência de ocorrências (15%). Clique para ver os detalhes.">
         <div class="score-ring" style="--score:${score};--score-color:${profile.color}"><strong>${score}</strong><small>/100</small></div>
         <div><span>PULSO DA OPERAÇÃO</span><h2>${profile.label}</h2><p>${phrase}</p></div>
       </article>
@@ -105,7 +122,7 @@ export async function renderCentral() {
           ${[['na_loja','Na loja',naLoja.length],['em_andamento','Em rota',rows.filter(r=>r.status==='em_rota').length],['no_cliente','No cliente',noCliente.length],['finalizada','Finalizadas hoje',completedToday]].map(([key,label,value]) => `<button data-central-filter="${key}" data-tip="Clique para filtrar a fila por ${label.toLowerCase()}."><i></i><strong data-count="${value}">0</strong><small>${label}</small></button>`).join('')}
         </div>
       </article>
-      <article class="ops-pulse-console">
+      <article class="ops-pulse-console" id="opsSlaConsole" role="button" tabindex="0" data-tip="Clique para abrir Tempos / SLA no Centro de Inteligência.">
         <div class="console-title"><span>VELOCIDADE E SLA</span><strong>hoje</strong></div>
         <div class="pulse-metrics">
           <div data-tip="Tempo médio da entrada até a finalização no cliente."><small>Ciclo completo</small><strong>${formatDuration(avgTodayTotal)}</strong></div>
@@ -114,7 +131,7 @@ export async function renderCentral() {
           <div data-tip="Entregas finalizadas divididas pelas registradas hoje."><small>Conclusão</small><strong>${completionPctToday}%</strong></div>
         </div>
       </article>
-      <article class="ops-finance-console" data-tip="Visão financeira operacional somente com lançamentos reais de hoje.">
+      <article class="ops-finance-console" id="opsFinanceConsole" role="button" tabindex="0" data-tip="Visão financeira operacional somente com lançamentos reais de hoje. Clique para abrir custos e financeiro.">
         <div class="console-title"><span>RESULTADO DO DIA</span><strong class="${todayResult < 0 ? 'negative' : ''}">${money(todayResult)}</strong></div>
         <div class="finance-line"><span>Taxas</span><b>${money(todayFees)}</b></div>
         <div class="finance-line"><span>Reembolsos</span><b>− ${money(todayRefunds)}</b></div>
@@ -126,7 +143,7 @@ export async function renderCentral() {
       <button data-central-filter="atrasada" class="attention-card ${lateToday ? 'critical' : ''}" data-tip="Entregas abertas há mais de 60 minutos."><span>!</span><div><small>ATRASADAS</small><strong data-count="${atrasadas.length}">0</strong><em>${atrasadas.length ? 'agir agora' : 'nenhuma ocorrência'}</em></div></button>
       <button data-central-filter="alta" class="attention-card" data-tip="Prioridades altas ainda abertas."><span>★</span><div><small>PRIORIDADE ALTA</small><strong data-count="${prioritarias.length}">0</strong><em>na fila operacional</em></div></button>
       <button data-central-action="close-cycle" class="attention-card" data-tip="Ciclos atualmente em andamento."><span>↻</span><div><small>CICLOS ATIVOS</small><strong data-count="${openCycles.length}">0</strong><em>recursos ocupados</em></div></button>
-      <button data-central-action="km" class="attention-card" data-tip="Expedientes sem KM final."><span>⌁</span><div><small>KM PENDENTE</small><strong data-count="${kmPendente}">0</strong><em>fechar expediente</em></div></button>
+      <button data-central-action="km" class="attention-card" data-tip="Expedientes abertos que ainda precisam do KM final."><span>⌁</span><div><small>KM FINAL PENDENTE</small><strong data-count="${kmPendente}">0</strong><em>fechar expediente</em></div></button>
     </div>
 
     <section class="operation-launcher">
@@ -188,11 +205,47 @@ export function wireCentralEvents() {
     const rec = await Deliveries.get(tr.dataset.id);
     if (rec) openDeliveryModal(rec);
   }));
+  $$('.live-delivery-card').forEach((card) => {
+    const open = async () => { const record = await Deliveries.get(card.dataset.deliveryId); if (record) openDeliveryModal(record); };
+    card.addEventListener('click', open);
+    card.addEventListener('keydown', (e) => { if (e.key==='Enter'||e.key===' ') { e.preventDefault(); open(); } });
+  });
   $('#qaNewDelivery')?.addEventListener('click', () => openDeliveryModal());
   $('#qaStartCycle')?.addEventListener('click', () => openStartCycleModal());
   $('#qaArrival')?.addEventListener('click', () => openArrivalPicker());
   $('#qaKm')?.addEventListener('click', () => openKmStartModal());
   $('#qaCost')?.addEventListener('click', () => openCostModal());
+  $('#heroKmAction')?.addEventListener('click', async (e) => {
+    if (Number(e.currentTarget.dataset.missing || 0) > 0) return openKmStartModal();
+    const today = localDateKey();
+    const openLogs = (await OdometerLogs.all()).filter((l) => l.environment === getEnv() && l.shiftDate === today && l.kmStart != null && l.kmEnd == null);
+    if (openLogs.length) return openKmPicker(openLogs);
+    toast('Não há veículo liberado: os expedientes de hoje já foram encerrados.', 'error');
+  });
+  $('#heroQueueAction')?.addEventListener('click', () => $('.queue-heading')?.scrollIntoView({ behavior:'smooth', block:'start' }));
+  $('#heroCycleAction')?.addEventListener('click', () => openStartCycleModal());
+  $('#performanceExplainBtn')?.addEventListener('click', (e) => {
+    const btn = e.currentTarget;
+    const completion = Number(btn.dataset.completion || 0), punctualityScore = Number(btn.dataset.punctuality || 0), qualityScore = Number(btn.dataset.quality || 0);
+    openModal({
+      title:'Como o desempenho é calculado?',
+      subtitle:'O termômetro transforma os dados reais do dia em prioridades de ação.',
+      body:`<div class="performance-breakdown">
+        <div><span>Conclusão · peso 65%</span><strong>${completion}%</strong><i><b style="width:${completion}%"></b></i><small>Finalizar as entregas com os horários corretos tem o maior impacto.</small></div>
+        <div><span>Pontualidade · peso 20%</span><strong>${punctualityScore}%</strong><i><b style="width:${punctualityScore}%"></b></i><small>Resolver primeiro as entregas abertas há mais de 60 minutos.</small></div>
+        <div><span>Qualidade · peso 15%</span><strong>${qualityScore}%</strong><i><b style="width:${qualityScore}%"></b></i><small>Reduzir retornos, reentregas e cancelamentos melhora este componente.</small></div>
+      </div>`,
+      actions:[{label:'Entendi',kind:'primary',onClick:closeModal}],
+    });
+  });
+  const activateCard = (selector, action) => {
+    const card = $(selector); if (!card) return;
+    card.addEventListener('click', action);
+    card.addEventListener('keydown', (e) => { if (e.key==='Enter'||e.key===' ') { e.preventDefault(); action(); } });
+  };
+  activateCard('#opsScoreConsole', () => $('#performanceExplainBtn')?.click());
+  activateCard('#opsSlaConsole', () => document.querySelector('[data-view="dashboard"]')?.click());
+  activateCard('#opsFinanceConsole', () => document.querySelector('[data-view="costs"]')?.click());
   $('#panelStartCycle')?.addEventListener('click', () => openStartCycleModal());
   $('#panelKmStart')?.addEventListener('click', () => openKmStartModal());
   $('#qaCloseCycle')?.addEventListener('click', async () => {
@@ -241,6 +294,7 @@ export function wireCentralEvents() {
     const active = card.classList.contains('filter-active');
     $$('[data-central-filter]').forEach((item) => item.classList.remove('filter-active'));
     const value = active ? '' : card.dataset.centralFilter;
+    if (value === 'finalizada') return window.__orbitaGoToSearch?.('finalizada');
     if (!active) card.classList.add('filter-active');
     if (queueSearch) queueSearch.value = '';
     applyCentralFilter(value);
@@ -370,6 +424,12 @@ function localDateTimeValue(value = new Date()) {
   if (Number.isNaN(d.getTime())) return '';
   const local = new Date(d.getTime() - (d.getTimezoneOffset() * 60000));
   return local.toISOString().slice(0, 16);
+}
+
+function localDateKey(value = new Date()) {
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 
 function operationalTimeFields(record) {
@@ -508,7 +568,7 @@ export async function openDeliveryModal(record = null) {
 
 function deliveryStatusActionsHtml(record) {
   const buttons = [];
-  if (record.status === 'na_loja') buttons.push('<button type="button" class="btn-ghost btn-small" data-action="em_rota">Marcar Em rota</button>');
+  if (record.status === 'na_loja') buttons.push('<button type="button" class="btn-ghost btn-small" data-action="formar_ciclo">Adicionar em um ciclo</button>');
   if (record.status === 'em_rota') {
     buttons.push('<button type="button" class="btn-ghost btn-small" data-action="chegou_cliente">Chegou ao cliente</button>');
     buttons.push('<button type="button" class="btn-primary btn-small" data-action="finalizada">Finalizar na casa do cliente</button>');
@@ -539,7 +599,7 @@ function wireDeliveryStatusActions(record) {
   $$('#modalBody [data-action]').forEach((btn) => {
     guardClick(btn, async () => {
       const action = btn.dataset.action;
-      if (action === 'em_rota') { await Deliveries.changeStatus(record.id, 'em_rota'); toast('Entrega em rota.', 'success'); closeModal(); refreshApp(); }
+      if (action === 'formar_ciclo') { closeModal(); openStartCycleModal(); }
       if (action === 'chegou_cliente') openClientArrivalFlow(record);
       if (action === 'finalizada') openDeliveryCompletionFlow(record);
       if (action === 'editar_horarios') openDeliveryCompletionFlow(record, { editing: true });
@@ -666,6 +726,7 @@ async function saveDeliveryForm(record) {
     payload.clientArrivalAt = fd.clientArrivalAt ? new Date(fd.clientArrivalAt).toISOString() : null;
     payload.deliveredAt = fd.deliveredAt ? new Date(fd.deliveredAt).toISOString() : null;
     if (payload.deliveredAt && !payload.clientArrivalAt) return toast('Informe também a hora de chegada na casa do cliente.', 'error');
+    if (payload.leftStoreAt && !record.leftStoreAt && !record.cycleId) return toast('A saída da loja só pode ser criada ao iniciar um ciclo com KM inicial liberado.', 'error');
     if (payload.clientArrivalAt && payload.deliveredAt && new Date(payload.deliveredAt) < new Date(payload.clientArrivalAt)) return toast('A finalização não pode ser anterior à chegada no cliente.', 'error');
     if (record.status === 'finalizada' && !payload.deliveredAt) return toast('Uma entrega finalizada precisa ter a hora de finalização na casa do cliente.', 'error');
   }
@@ -815,12 +876,15 @@ export function wireCyclesEvents() {
 
 export async function openStartCycleModal() {
   const env = getEnv();
+  const todayKey = localDateKey();
   const openCycles = (await Cycles.all()).filter((c) => c.environment === env && c.status === 'aberto' && !c.deletedAt);
   const busyVehicles = new Set(openCycles.map((c) => c.vehicleId));
   const busyDrivers = new Set(openCycles.map((c) => c.driverId));
 
   const vehicles = (await Vehicles.all()).filter((v) => v.active);
   const drivers = (await Drivers.all()).filter((d) => d.active);
+  const kmLogs = (await OdometerLogs.all()).filter((l) => l.environment === env && l.shiftDate === todayKey);
+  const activeKmByVehicle = new Map(kmLogs.filter((l) => l.kmStart != null && l.kmEnd == null).map((l) => [l.vehicleId, l]));
   const neighborhoods = await Neighborhoods.all();
   const neighOrder = Object.fromEntries(neighborhoods.map((n) => [n.id, n.routeOrder ?? 0]));
 
@@ -847,9 +911,14 @@ export async function openStartCycleModal() {
       </div>
       <div class="field-row">
         <label>Veículo *
-          <select name="vehicleId" required>
+          <select name="vehicleId" id="cycleVehicleSelect" required>
             <option value="">Selecione…</option>
-            ${vehicles.map((v) => `<option value="${v.id}" ${busyVehicles.has(v.id) ? 'disabled' : ''}>${escapeHtml(v.label)}${busyVehicles.has(v.id) ? ' (em uso)' : ''}</option>`).join('')}
+            ${vehicles.map((v) => {
+              const kmReady = activeKmByVehicle.has(v.id);
+              const disabled = busyVehicles.has(v.id) || !kmReady;
+              const reason = busyVehicles.has(v.id) ? 'em uso' : kmReady ? `KM ${activeKmByVehicle.get(v.id).kmStart} pronto` : kmLogs.some((l)=>l.vehicleId===v.id&&l.kmEnd!=null) ? 'expediente encerrado' : 'KM inicial obrigatório';
+              return `<option value="${v.id}" ${disabled ? 'disabled' : ''}>${escapeHtml(v.label)} · ${escapeHtml(reason)}</option>`;
+            }).join('')}
           </select>
         </label>
         <label>Entregador *
@@ -858,6 +927,11 @@ export async function openStartCycleModal() {
             ${drivers.map((d) => `<option value="${d.id}" ${busyDrivers.has(d.id) ? 'disabled' : ''}>${escapeHtml(d.name)}${busyDrivers.has(d.id) ? ' (em uso)' : ''}</option>`).join('')}
           </select>
         </label>
+      </div>
+      <div class="cycle-km-gate ${activeKmByVehicle.size ? 'ready' : 'blocked'}" id="cycleKmGate">
+        <span>${activeKmByVehicle.size ? '✓' : '!'}</span>
+        <div><strong>${activeKmByVehicle.size ? 'Há veículo com KM inicial liberado' : 'Nenhum veículo pode sair ainda'}</strong><small>O ciclo só será confirmado para um veículo com KM inicial registrado hoje e expediente ainda aberto.</small></div>
+        <button type="button" class="btn-ghost btn-small" id="cycleRegisterKmBtn">Registrar KM inicial</button>
       </div>
       <label>Entregas do ciclo (ordem sugerida: prioridade e bairro — arraste com os botões)</label>
       <div id="cycleItemsList" style="display:grid;gap:6px">
@@ -887,6 +961,9 @@ export async function openStartCycleModal() {
         const order = $$('.cycle-item').map((el) => el.dataset.id);
         const checked = order.filter((id) => $(`.cycle-item[data-id="${id}"] input[type=checkbox]`).checked);
         if (!checked.length) return toast('Selecione ao menos uma entrega.', 'error');
+        const currentKmLogs = (await OdometerLogs.all()).filter((l) => l.environment === env && l.shiftDate === todayKey && l.vehicleId === fd.vehicleId && l.kmStart != null && l.kmEnd == null);
+        if (!currentKmLogs.length) return toast('Ciclo bloqueado: registre primeiro o KM inicial de hoje para este veículo.', 'error');
+        const odometerLog = currentKmLogs[0];
         const startedAt = new Date(fd.startedAt).toISOString();
         const latestEntry = Math.max(...checked.map((id) => new Date(candidates.find((d) => d.id === id)?.entryTime || 0).getTime()));
         if (new Date(startedAt).getTime() < latestEntry) return toast('O início do ciclo não pode ser anterior à entrada de uma entrega selecionada.', 'error');
@@ -895,6 +972,7 @@ export async function openStartCycleModal() {
           environment: env, vehicleId: fd.vehicleId, driverId: fd.driverId,
           status: 'aberto', startedAt, closedAt: null,
           startedAtRegisteredBy: getOperatorName(), startedAtRecordedAt: new Date().toISOString(),
+          odometerLogId: odometerLog.id, shiftKmStart: odometerLog.kmStart,
           deliveryIds: checked, deletedAt: null,
         });
         const leftStoreAt = cycle.startedAt;
@@ -907,6 +985,8 @@ export async function openStartCycleModal() {
       }},
     ],
   });
+
+  $('#cycleRegisterKmBtn')?.addEventListener('click', () => openKmStartModal());
 
   $$('.move-up').forEach((b) => b.addEventListener('click', (e) => {
     const item = e.target.closest('.cycle-item');
@@ -1068,12 +1148,22 @@ export function wireKmEvents() {
 
 async function openKmStartModal() {
   const vehicles = (await Vehicles.all()).filter((v) => v.active);
+  const todayKey = localDateKey();
+  const todayLogs = (await OdometerLogs.all()).filter((l) => l.environment === getEnv() && l.shiftDate === todayKey);
+  const alreadyLogged = new Set(todayLogs.map((l) => l.vehicleId));
+  const availableVehicles = vehicles.filter((v) => !alreadyLogged.has(v.id));
+  if (!availableVehicles.length) {
+    const openLogs = todayLogs.filter((l) => l.kmStart != null && l.kmEnd == null);
+    if (openLogs.length) return toast('Todos os veículos disponíveis já têm KM inicial registrado hoje.', 'success');
+    return toast('Os expedientes de KM de hoje já foram encerrados. Não é permitido abrir outro no mesmo veículo e data.', 'error');
+  }
   openModal({
-    title: 'Iniciar expediente',
+    title: 'Registrar KM inicial do dia',
+    subtitle: 'Este registro libera o veículo para iniciar ciclos. Só pode existir um expediente por veículo e dia.',
     body: `
       <form id="kmStartForm">
         <label>Veículo *
-          <select name="vehicleId" required>${vehicles.map((v) => `<option value="${v.id}">${escapeHtml(v.label)}</option>`).join('')}</select>
+          <select name="vehicleId" required>${availableVehicles.map((v) => `<option value="${v.id}">${escapeHtml(v.label)}</option>`).join('')}</select>
         </label>
         <label>KM inicial *<input name="kmStart" type="number" step="0.1" min="0" required /></label>
       </form>`,
@@ -1083,8 +1173,10 @@ async function openKmStartModal() {
         const form = $('#kmStartForm');
         if (!form.reportValidity()) return;
         const fd = Object.fromEntries(new FormData(form).entries());
-        await OdometerLogs.add({ environment: getEnv(), vehicleId: fd.vehicleId, shiftDate: new Date().toISOString().slice(0,10), kmStart: Number(fd.kmStart), kmEnd: null });
-        toast('Expediente iniciado.', 'success');
+        const duplicate = (await OdometerLogs.all()).some((l) => l.environment === getEnv() && l.shiftDate === todayKey && l.vehicleId === fd.vehicleId);
+        if (duplicate) return toast('Este veículo já possui registro de KM hoje.', 'error');
+        await OdometerLogs.add({ environment: getEnv(), vehicleId: fd.vehicleId, shiftDate: todayKey, kmStart: Number(fd.kmStart), kmEnd: null, startedBy: getOperatorName() });
+        toast('KM inicial registrado. Veículo liberado para ciclos.', 'success');
         closeModal(); refreshApp();
       }},
     ],
@@ -1104,7 +1196,9 @@ function openKmEndModal(log) {
         const fd = Object.fromEntries(new FormData(form).entries());
         const kmEnd = Number(fd.kmEnd);
         if (kmEnd < log.kmStart) return toast('KM final não pode ser menor que o KM inicial.', 'error');
-        await OdometerLogs.update(log.id, { kmEnd });
+        const activeCycle = (await Cycles.all()).find((c) => c.environment === getEnv() && c.vehicleId === log.vehicleId && c.status === 'aberto' && !c.deletedAt);
+        if (activeCycle) return toast('KM final bloqueado: finalize primeiro o ciclo ativo deste veículo.', 'error');
+        await OdometerLogs.update(log.id, { kmEnd, endedBy: getOperatorName(), endedAt: new Date().toISOString() });
         toast('KM final registrado.', 'success');
         closeModal(); refreshApp();
       }},
@@ -1339,6 +1433,7 @@ export async function renderDashboard() {
   const avgRoute = averageMinutes(rows, 'leftStoreAt', 'clientArrivalAt');
   const avgAtClient = averageMinutes(rows, 'clientArrivalAt', 'deliveredAt');
   const avgTotal = averageMinutes(rows, 'entryTime', 'deliveredAt');
+  const bottleneck = [['Espera na loja',avgStoreWait,'tempos'],['Tempo em rota',avgRoute,'tempos'],['Atendimento no cliente',avgAtClient,'tempos']].filter(([,value])=>value!=null).sort((a,b)=>b[1]-a[1])[0] || null;
   const totalDurations = durationValues(rows, 'entryTime', 'deliveredAt');
   const medianTotal = percentile(totalDurations, .5);
   const p90Total = percentile(totalDurations, .9);
@@ -1473,6 +1568,16 @@ export async function renderDashboard() {
       <article class="intel-hero-metric"><small>Volume</small><strong>${rows.length}</strong>${delta(volumeChange)}</article>
       <article class="intel-hero-metric"><small>Tempo completo médio</small><strong>${formatDuration(avgTotal)}</strong>${delta(timeChange,true)}</article>
       <article class="intel-hero-metric ${balance<0?'negative':''}"><small>Resultado operacional</small><strong>${money(balance)}</strong>${delta(resultChange)}</article>
+    </section>
+
+    <section class="decision-brief">
+      <header><div><span>LEITURA AUTOMÁTICA</span><strong>O que merece atenção neste período</strong></div><small>clique para investigar</small></header>
+      <div>
+        <button data-insight-group="fluxo" class="${late.length?'critical':'positive'}"><i>${late.length?'!':'✓'}</i><span><small>OPERAÇÃO</small><strong>${late.length ? `${late.length} atraso(s) acima de 60 min` : 'Nenhum atraso crítico aberto'}</strong></span><b>›</b></button>
+        <button data-insight-group="tempos" class="${bottleneck?'warning':''}"><i>◷</i><span><small>MAIOR GARGALO</small><strong>${bottleneck ? `${bottleneck[0]} · ${formatDuration(bottleneck[1])}` : 'Aguardando horários completos'}</strong></span><b>›</b></button>
+        <button data-insight-group="financeiro" class="${balance<0?'critical':'positive'}"><i>R$</i><span><small>RESULTADO</small><strong>${balance<0?'Prejuízo de ':'Saldo de '}${money(Math.abs(balance))}</strong></span><b>›</b></button>
+        <button data-insight-group="qualidade" class="${dataCompleteness<95?'warning':'positive'}"><i>◇</i><span><small>CONFIABILIDADE</small><strong>${dataCompleteness}% dos dados críticos completos</strong></span><b>›</b></button>
+      </div>
     </section>
 
     <nav class="dashboard-scope" aria-label="Áreas do dashboard">
@@ -1619,6 +1724,11 @@ export function wireDashboardEvents() {
     dashboardSection = btn.dataset.dashboardSection;
     $$('[data-dashboard-section]').forEach((item)=>item.classList.toggle('active',item===btn));
     $$('[data-dashboard-group]').forEach((section)=>section.classList.toggle('dashboard-section-hidden',dashboardSection!=='tudo'&&section.dataset.dashboardGroup!==dashboardSection));
+  }));
+  $$('[data-insight-group]').forEach((btn) => btn.addEventListener('click', () => {
+    const target = $(`[data-dashboard-section="${btn.dataset.insightGroup}"]`);
+    target?.click();
+    $('.dashboard-scope')?.scrollIntoView({behavior:'smooth',block:'start'});
   }));
   $$('[data-dashboard-group]').forEach((section)=>section.classList.toggle('dashboard-section-hidden',dashboardSection!=='tudo'&&section.dataset.dashboardGroup!==dashboardSection));
 }
