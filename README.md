@@ -1,5 +1,20 @@
 # Órbita — Controle de Entregas (v2 completo, client-side)
 
+## Atualização v2.3 — chegada visível e Dashboard completo
+
+- A ação **Chegou no cliente** passou para os comandos rápidos da Central Operacional.
+- Cada entrega em rota ganhou um botão visível **Chegou no cliente** na própria fila; entregas já na casa do cliente exibem **Finalizar entrega**.
+- A Central permite selecionar a entrega em rota por compra, cliente, cupom, PDV e DOC antes de registrar a hora.
+- Cards operacionais, ações, entregas e gráficos exibem balões informativos após aproximadamente 0,5 segundo com o mouse parado.
+- Dashboard com filtros de **Dia, Semana, Mês, Ano, Todo o histórico e Período personalizado**.
+- Indicadores operacionais: total, finalizadas com horário, pendentes, atrasadas, retornos/problemas, prioridades, agendadas, taxa de sucesso, ciclos, produtividade, KM e tempo total.
+- Indicadores de eficiência: espera na loja, tempo em rota, tempo na casa do cliente e inconsistências de horário.
+- Indicadores financeiros: taxas brutas, reembolsos, receita líquida, custos, resultado, custo/entrega, receita/entrega e custo/KM.
+- Previsões estatísticas para próximo dia, próxima semana e próximo mês com base no histórico real; não são garantias de demanda.
+- Gráficos animados e interativos para evolução de entregas, status, dias da semana e composição financeira.
+- Rankings por entregador, veículo e bairro, recorrência de clientes e verificação da qualidade dos dados.
+- Identificação visual **v2.3** e novo cache da PWA para garantir que a atualização apareça.
+
 ## Correção v2.2 — horários obrigatórios no cliente
 
 - Novo fluxo real: **Em rota → Na casa do cliente → Finalizada**.

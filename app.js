@@ -167,7 +167,7 @@ async function render() {
 
   const routes = {
     central: ['Central Operacional', 'O essencial da operação de hoje.', V.renderCentral, V.wireCentralEvents],
-    dashboard: ['Dashboard', 'Panorama geral da operação.', V.renderDashboard, null],
+    dashboard: ['Dashboard', 'Métricas operacionais, financeiras, previsões e gráficos por período.', V.renderDashboard, V.wireDashboardEvents],
     search: ['Busca geral', 'Pesquise por qualquer campo da entrega.', V.renderSearch, V.wireSearchEvents],
     cycles: ['Ciclos', 'Saídas em andamento e finalizadas.', V.renderCycles, V.wireCyclesEvents],
     km: ['Quilometragem', 'Controle de KM por veículo e expediente.', V.renderKm, V.wireKmEvents],

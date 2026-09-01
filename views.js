@@ -38,6 +38,8 @@ export async function renderCentral() {
   const problemsToday = todayRows.filter((r) => ['retorno', 'reentrega', 'cancelada'].includes(r.status)).length;
   const lateToday = atrasadas.filter((r) => isToday(r.entryTime)).length;
   const totalToday = todayRows.length;
+  const pendingToday = todayRows.filter((r) => ['na_loja','em_rota','no_cliente','programada','reentrega'].includes(r.status)).length;
+  const completionPctToday = totalToday ? Math.round((completedToday / totalToday) * 100) : 0;
   const completion = totalToday ? completedToday / totalToday : 0.5;
   const punctuality = totalToday ? Math.max(0, 1 - (lateToday / totalToday)) : 0.5;
   const quality = totalToday ? Math.max(0, 1 - (problemsToday / totalToday)) : 0.5;
@@ -77,6 +79,16 @@ export async function renderCentral() {
 
     ${alerts.length ? `<div class="alert-strip">${alerts.map((a) => `<button type="button" class="alert-chip" data-query="${escapeHtml(a.query)}">${a.text}</button>`).join('')}</div>` : ''}
 
+    <div class="day-performance-head"><div><span>DESEMPENHO DO DIA</span><h2>Progresso de hoje</h2></div><strong>${completionPctToday}% concluído</strong></div>
+    <div class="day-performance-grid">
+      <div class="day-performance-card" data-tip="Total de entregas registradas hoje."><small>Registradas</small><strong data-count="${totalToday}">0</strong></div>
+      <div class="day-performance-card good" data-tip="Finalizadas hoje com hora de conclusão na casa do cliente, mais retiradas na loja."><small>Finalizadas</small><strong data-count="${completedToday}">0</strong></div>
+      <div class="day-performance-card" data-tip="Entregas de hoje que ainda precisam de alguma ação operacional."><small>Pendentes</small><strong data-count="${pendingToday}">0</strong></div>
+      <div class="day-performance-card ${lateToday ? 'bad' : 'good'}" data-tip="Entregas de hoje abertas há mais de 60 minutos."><small>Atrasadas</small><strong data-count="${lateToday}">0</strong></div>
+      <div class="day-performance-card ${problemsToday ? 'warning' : ''}" data-tip="Retornos, reentregas e cancelamentos registrados hoje."><small>Ocorrências</small><strong data-count="${problemsToday}">0</strong></div>
+      <div class="day-performance-card score" data-tip="Percentual de entregas de hoje já concluídas com registro correto."><small>Conclusão</small><strong>${completionPctToday}%</strong><i><b style="width:${completionPctToday}%"></b></i></div>
+    </div>
+
     <div class="stat-row">
       <button class="stat-card clickable" data-central-filter="na_loja" data-tip="Compras lançadas aguardando um ciclo. Clique para filtrar a fila."><span class="stat-icon blue">⌂</span><small>Na loja</small><strong data-count="${naLoja.length}">0</strong><em>aguardando saída</em></button>
       <button class="stat-card clickable" data-central-filter="em_andamento" data-tip="Entregas em rota ou já na casa do cliente. Clique para filtrar."><span class="stat-icon cyan">➜</span><small>Em andamento</small><strong data-count="${emRota.length}">0</strong><em>rota ou cliente</em></button>
@@ -93,11 +105,12 @@ export async function renderCentral() {
     <section class="operation-launcher">
       <div class="section-heading"><div><span>COMANDOS RÁPIDOS</span><h2>Toda a operação em um só lugar</h2></div><div class="heading-signal"><i></i>Atualização automática</div></div>
       <div class="action-grid">
-        <button class="action-card primary-action" id="qaNewDelivery"><span>＋</span><strong>Nova entrega</strong><small>Cadastrar uma compra</small></button>
-        <button class="action-card" id="qaStartCycle"><span>▶</span><strong>Iniciar ciclo</strong><small>Selecionar rota e equipe</small></button>
-        <button class="action-card" id="qaCloseCycle"><span>■</span><strong>Finalizar ciclo</strong><small>Resolver pendências</small></button>
-        <button class="action-card" id="qaKm"><span>⌁</span><strong>Registrar KM</strong><small>Início ou fechamento</small></button>
-        <button class="action-card" id="qaCost"><span>R$</span><strong>Lançar custo</strong><small>Despesa da operação</small></button>
+        <button class="action-card primary-action" id="qaNewDelivery" data-tip="Abra o cadastro completo de uma nova entrega."><span>＋</span><strong>Nova entrega</strong><small>Cadastrar uma compra</small></button>
+        <button class="action-card arrival-action" id="qaArrival" data-tip="Selecione uma entrega em rota e registre imediatamente a hora em que chegou na casa do cliente."><span>⌂</span><strong>Chegou no cliente</strong><small>Registrar hora da chegada</small></button>
+        <button class="action-card" id="qaStartCycle" data-tip="Selecione veículo, entregador e as compras que sairão neste ciclo."><span>▶</span><strong>Iniciar ciclo</strong><small>Selecionar rota e equipe</small></button>
+        <button class="action-card" id="qaCloseCycle" data-tip="Finalize um ciclo resolvendo uma entrega pendente por vez e informando os horários obrigatórios."><span>■</span><strong>Finalizar ciclo</strong><small>Resolver pendências</small></button>
+        <button class="action-card" id="qaKm" data-tip="Registre o KM inicial ou feche um expediente com o KM final."><span>⌁</span><strong>Registrar KM</strong><small>Início ou fechamento</small></button>
+        <button class="action-card" id="qaCost" data-tip="Lance combustível, manutenção e outras despesas da operação."><span>R$</span><strong>Lançar custo</strong><small>Despesa da operação</small></button>
       </div>
     </section>
 
@@ -120,15 +133,16 @@ export async function renderCentral() {
 async function miniList(rows) {
   if (!rows.length) return `<div class="empty-state"><strong>Nada por aqui agora</strong>As entregas na loja e em rota aparecem nesta lista.</div>`;
   const trs = rows.slice(0, 30).map((r) => `
-    <tr data-id="${r.id}" class="row-click" data-status="${r.status}" data-priority="${r.priority}" data-late="${((Date.now() - new Date(r.entryTime).getTime()) / 60000) > 60 ? 'true' : 'false'}" data-search="${escapeHtml([r.purchaseNumber, r.coupon, r.pdv, r.doc, r.clientName, r.street].join(' ').toLowerCase())}">
+    <tr data-id="${r.id}" class="row-click" data-status="${r.status}" data-priority="${r.priority}" data-late="${((Date.now() - new Date(r.entryTime).getTime()) / 60000) > 60 ? 'true' : 'false'}" data-search="${escapeHtml([r.purchaseNumber, r.coupon, r.pdv, r.doc, r.clientName, r.street].join(' ').toLowerCase())}" data-tip="Compra #${r.purchaseNumber} · ${escapeHtml(r.clientName || 'Cliente sem nome')} · Cupom ${escapeHtml(r.coupon || 'não informado')} · PDV ${escapeHtml(r.pdv || '—')} · DOC ${escapeHtml(r.doc || '—')} · Status ${escapeHtml(STATUS_META[r.status]?.label || r.status)} · Chegada ${timeBR(r.clientArrivalAt)} · Finalização ${timeBR(r.deliveredAt)}">
       <td><strong>#${r.purchaseNumber}</strong></td>
       <td>${escapeHtml(r.clientName || 'Sem nome')}<br><span style="color:var(--text-muted);font-size:11px">${escapeHtml(r.street || '')}</span></td>
       <td><strong>${escapeHtml(r.coupon || '—')}</strong><br><span style="color:var(--text-muted);font-size:11px">PDV ${escapeHtml(r.pdv || '—')} · DOC ${escapeHtml(r.doc || '—')}</span></td>
       <td>${badge(r.status)}<br><span class="delivery-times">Chegou: ${timeBR(r.clientArrivalAt)} · Final: ${timeBR(r.deliveredAt)}</span></td>
       <td>${r.priority === 'alta' ? '<span class="badge problema">Alta</span>' : '—'}</td>
       <td>${money(r.deliveryFee)}</td>
+      <td>${r.status === 'em_rota' ? `<button class="btn-primary btn-small arrival-row-btn" data-id="${r.id}">Chegou no cliente</button>` : r.status === 'no_cliente' ? `<button class="btn-primary btn-small completion-row-btn" data-id="${r.id}">Finalizar entrega</button>` : '<span style="color:var(--text-muted)">—</span>'}</td>
     </tr>`).join('');
-  return `<div class="table-wrap central-queue"><table><thead><tr><th>Compra</th><th>Cliente / endereço</th><th>Cupom / documento</th><th>Status</th><th>Prioridade</th><th>Taxa</th></tr></thead><tbody>${trs}</tbody></table><div class="queue-no-result hidden" id="queueNoResult">Nenhuma entrega corresponde a esse filtro.</div></div>`;
+  return `<div class="table-wrap central-queue"><table><thead><tr><th>Compra</th><th>Cliente / endereço</th><th>Cupom / documento</th><th>Status</th><th>Prioridade</th><th>Taxa</th><th>Ação rápida</th></tr></thead><tbody>${trs}</tbody></table><div class="queue-no-result hidden" id="queueNoResult">Nenhuma entrega corresponde a esse filtro.</div></div>`;
 }
 
 let _phraseTimer = null;
@@ -142,6 +156,7 @@ export function wireCentralEvents() {
   }));
   $('#qaNewDelivery')?.addEventListener('click', () => openDeliveryModal());
   $('#qaStartCycle')?.addEventListener('click', () => openStartCycleModal());
+  $('#qaArrival')?.addEventListener('click', () => openArrivalPicker());
   $('#qaKm')?.addEventListener('click', () => openKmStartModal());
   $('#qaCost')?.addEventListener('click', () => openCostModal());
   $('#panelStartCycle')?.addEventListener('click', () => openStartCycleModal());
@@ -159,6 +174,16 @@ export function wireCentralEvents() {
   $$('.central-km-close').forEach((btn) => btn.addEventListener('click', async () => {
     const log = await OdometerLogs.get(btn.dataset.id);
     if (log) openKmEndModal(log);
+  }));
+  $$('.arrival-row-btn').forEach((btn) => btn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const record = await Deliveries.get(btn.dataset.id);
+    if (record) openClientArrivalFlow(record);
+  }));
+  $$('.completion-row-btn').forEach((btn) => btn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const record = await Deliveries.get(btn.dataset.id);
+    if (record) openDeliveryCompletionFlow(record);
   }));
   $$('[data-central-action]').forEach((card) => card.addEventListener('click', async () => {
     if (card.dataset.centralAction === 'km') {
@@ -285,6 +310,21 @@ async function openKmPicker(logs) {
   $$('.picker-row[data-km-id]').forEach((btn) => btn.addEventListener('click', async () => {
     const log = await OdometerLogs.get(btn.dataset.kmId);
     if (log) openKmEndModal(log);
+  }));
+}
+
+async function openArrivalPicker() {
+  const rows = (await Deliveries.active(getEnv())).filter((r) => r.status === 'em_rota');
+  if (!rows.length) return toast('Não há entrega em rota aguardando registro de chegada.', 'error');
+  openModal({
+    title: 'Registrar chegada no cliente',
+    subtitle: 'Escolha qual entrega chegou à casa do cliente.',
+    body: `<div class="picker-list">${rows.map((r) => `<button class="picker-row arrival-picker-row" data-id="${r.id}"><strong>#${r.purchaseNumber} · ${escapeHtml(r.clientName || r.street || 'Sem nome')}</strong><span>Cupom ${escapeHtml(r.coupon || '—')} · PDV ${escapeHtml(r.pdv || '—')} · DOC ${escapeHtml(r.doc || '—')}</span></button>`).join('')}</div>`,
+    actions: [{ label: 'Cancelar', kind: 'ghost', onClick: closeModal }],
+  });
+  $$('.arrival-picker-row').forEach((btn) => btn.addEventListener('click', async () => {
+    const record = await Deliveries.get(btn.dataset.id);
+    if (record) openClientArrivalFlow(record);
   }));
 }
 
@@ -1082,32 +1122,119 @@ function byWeekdayCountOccurrences(rows, weekday) {
 /* =========================================================
    DASHBOARD (seção 14) — métricas, rankings e gráficos
    ========================================================= */
+let dashboardPeriod = { mode: 'mes', start: '', end: '' };
+
+function dashboardDayKey(value) {
+  const d = value instanceof Date ? value : new Date(/^\d{4}-\d{2}-\d{2}$/.test(String(value)) ? `${value}T12:00:00` : value);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function dashboardRange() {
+  const now = new Date();
+  let start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  let end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+  if (dashboardPeriod.mode === 'semana') {
+    const mondayOffset = (now.getDay() + 6) % 7;
+    start.setDate(start.getDate() - mondayOffset);
+  }
+  if (dashboardPeriod.mode === 'mes') start = new Date(now.getFullYear(), now.getMonth(), 1);
+  if (dashboardPeriod.mode === 'ano') start = new Date(now.getFullYear(), 0, 1);
+  if (dashboardPeriod.mode === 'tudo') return { start: null, end: null, label: 'Todo o histórico' };
+  if (dashboardPeriod.mode === 'personalizado') {
+    start = dashboardPeriod.start ? new Date(`${dashboardPeriod.start}T00:00:00`) : null;
+    end = dashboardPeriod.end ? new Date(`${dashboardPeriod.end}T23:59:59.999`) : null;
+  }
+  const label = dashboardPeriod.mode === 'dia' ? 'Hoje'
+    : dashboardPeriod.mode === 'semana' ? 'Semana atual'
+      : dashboardPeriod.mode === 'mes' ? 'Mês atual'
+        : dashboardPeriod.mode === 'ano' ? 'Ano atual'
+          : `${dashboardPeriod.start || 'início'} até ${dashboardPeriod.end || 'hoje'}`;
+  return { start, end, label };
+}
+
+function dashboardInRange(value, range) {
+  if (!value) return false;
+  const d = new Date(/^\d{4}-\d{2}-\d{2}$/.test(String(value)) ? `${value}T12:00:00` : value);
+  return (!range.start || d >= range.start) && (!range.end || d <= range.end);
+}
+
+function averageMinutes(rows, fromField, toField) {
+  const values = rows.map((r) => r[fromField] && r[toField] ? (new Date(r[toField]) - new Date(r[fromField])) / 60000 : null).filter((v) => v != null && v >= 0);
+  return values.length ? values.reduce((s,v) => s + v, 0) / values.length : null;
+}
+
+function formatDuration(minutes) {
+  if (minutes == null) return '—';
+  if (minutes < 60) return `${Math.round(minutes)} min`;
+  const h = Math.floor(minutes / 60), m = Math.round(minutes % 60);
+  return `${h}h ${m}min`;
+}
+
+function meanGroupForecast(rows, keyFn) {
+  const groups = {};
+  rows.forEach((r) => { const key = keyFn(new Date(r.entryTime)); if (key) groups[key] = (groups[key] || 0) + 1; });
+  const values = Object.values(groups);
+  return values.length ? Math.round(values.reduce((s,v) => s + v, 0) / values.length) : null;
+}
+
+function dashboardTrend(rows, range) {
+  if (!rows.length) return { labels: ['Sem dados'], values: [0] };
+  const first = range.start || new Date(Math.min(...rows.map((r) => new Date(r.entryTime))));
+  const last = range.end || new Date(Math.max(...rows.map((r) => new Date(r.entryTime))));
+  const days = Math.max(1, Math.ceil((last - first) / 86400000));
+  const groups = {};
+  if (days > 62) {
+    rows.forEach((r) => { const d = new Date(r.entryTime); const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; groups[key] = (groups[key] || 0) + 1; });
+  } else if (days > 21) {
+    rows.forEach((r) => { const d = new Date(r.entryTime); const start = new Date(d); start.setDate(d.getDate() - ((d.getDay()+6)%7)); const key = `S ${dashboardDayKey(start).slice(5)}`; groups[key] = (groups[key] || 0) + 1; });
+  } else {
+    rows.forEach((r) => { const key = dashboardDayKey(r.entryTime).slice(5); groups[key] = (groups[key] || 0) + 1; });
+  }
+  const entries = Object.entries(groups).sort((a,b) => a[0].localeCompare(b[0]));
+  return { labels: entries.map(([k]) => k), values: entries.map(([,v]) => v) };
+}
+
 export async function renderDashboard() {
   const env = getEnv();
-  const rows = await Deliveries.active(env);
-  const finalized = rows.filter((r) => r.status === 'finalizada');
+  const [allRows, allCycles, allCosts, allKm, drivers, vehicles, neighborhoods] = await Promise.all([
+    Deliveries.active(env), Cycles.all(), Costs.all(), OdometerLogs.all(), Drivers.all(), Vehicles.all(), Neighborhoods.all(),
+  ]);
+  const range = dashboardRange();
+  const rows = allRows.filter((r) => dashboardInRange(r.entryTime, range));
+  const cycles = allCycles.filter((c) => c.environment === env && !c.deletedAt && dashboardInRange(c.startedAt, range));
+  const costs = allCosts.filter((c) => c.environment === env && !c.deletedAt && dashboardInRange(c.date, range));
+  const kmLogs = allKm.filter((l) => l.environment === env && dashboardInRange(l.shiftDate, range));
+  const finalized = rows.filter((r) => r.status === 'finalizada' && r.deliveredAt);
   const problems = rows.filter((r) => ['retorno', 'reentrega', 'cancelada'].includes(r.status));
   const refunded = rows.filter((r) => r.refunded);
-  const financial = await computeFinancialSummary(env);
-  const cycles = (await Cycles.all()).filter((c) => !c.deletedAt);
   const closedCycles = cycles.filter((c) => c.status === 'fechado');
+  const pending = rows.filter((r) => ['na_loja','em_rota','no_cliente','programada','reentrega'].includes(r.status));
+  const late = rows.filter((r) => ['na_loja','em_rota','no_cliente'].includes(r.status) && (Date.now() - new Date(r.entryTime)) > 3600000);
+  const priority = rows.filter((r) => r.priority === 'alta');
+  const scheduled = rows.filter((r) => r.type === 'agendada' || r.status === 'programada');
 
-  const drivers = await Drivers.all();
-  const vehicles = await Vehicles.all();
-  const neighborhoods = await Neighborhoods.all();
-
-  if (!rows.length) {
-    return `<div class="empty-state"><strong>Sem dados ainda</strong>Os números e gráficos aparecem assim que você registrar entregas.</div>`;
-  }
+  const feeRows = rows.filter((r) => r.status === 'finalizada' || (r.status === 'retirada_loja' && !r.refunded));
+  const grossFees = feeRows.reduce((s,r) => s + Number(r.deliveryFee || 0), 0);
+  const refunds = refunded.reduce((s,r) => s + Number(r.deliveryFee || 0), 0);
+  const netRevenue = grossFees - refunds;
+  const costTotal = costs.reduce((s,c) => s + Number(c.amount || 0), 0);
+  const balance = netRevenue - costTotal;
+  const kmTotal = kmLogs.filter((l) => l.kmEnd != null).reduce((s,l) => s + (l.kmEnd - l.kmStart), 0);
 
   // produtividade
   const successRate = rows.length ? Math.round((finalized.length / rows.length) * 100) : 0;
   const avgPerCycle = closedCycles.length ? (finalized.length / closedCycles.length).toFixed(1) : '—';
+  const avgStoreWait = averageMinutes(rows, 'entryTime', 'leftStoreAt');
+  const avgRoute = averageMinutes(rows, 'leftStoreAt', 'clientArrivalAt');
+  const avgAtClient = averageMinutes(rows, 'clientArrivalAt', 'deliveredAt');
+  const avgTotal = averageMinutes(rows, 'entryTime', 'deliveredAt');
 
   // qualidade dos dados
   const missingPhone = rows.filter((r) => !r.phone).length;
   const missingClient = rows.filter((r) => !r.clientName).length;
   const missingVehicleOrDriver = rows.filter((r) => !r.vehicleId || !r.driverId).length;
+  const missingCompletionTime = rows.filter((r) => r.status === 'finalizada' && !r.deliveredAt).length;
 
   // rankings
   const rank = (items, keyFn, nameFn) => {
@@ -1146,11 +1273,16 @@ export async function renderDashboard() {
   rows.forEach((r) => { byHour[new Date(r.entryTime).getHours()]++; });
   const peakHour = byHour.indexOf(Math.max(...byHour));
 
-  // previsão simples: média histórica do mesmo dia da semana (estimativa, não é IA preditiva)
+  // previsões estatísticas simples baseadas exclusivamente no histórico real
   const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
   const tomorrowWeekday = tomorrow.getDay();
-  const sameWeekdayCount = byWeekdayCountOccurrences(rows, tomorrowWeekday);
+  const sameWeekdayCount = byWeekdayCountOccurrences(allRows, tomorrowWeekday);
   const forecastTomorrow = sameWeekdayCount.occurrences ? (sameWeekdayCount.total / sameWeekdayCount.occurrences).toFixed(1) : null;
+  const weekKey = (d) => { const s = new Date(d); s.setDate(d.getDate() - ((d.getDay()+6)%7)); return dashboardDayKey(s); };
+  const monthKey = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+  const forecastWeek = meanGroupForecast(allRows, weekKey);
+  const forecastMonth = meanGroupForecast(allRows, monthKey);
+  const trend = dashboardTrend(rows, range);
 
   const rankTable = (title, data, tip) => `
     <div class="stat-card" data-tip="${tip}">
@@ -1160,37 +1292,86 @@ export async function renderDashboard() {
       </table>
     </div>`;
 
+  const metric = (title, value, tip, tone = '') => `<div class="stat-card dashboard-metric ${tone}" data-tip="${escapeHtml(tip)}"><small>${title}</small><strong>${value}</strong></div>`;
+  const currentStart = range.start ? dashboardDayKey(range.start) : '';
+  const currentEnd = range.end ? dashboardDayKey(range.end) : '';
+
   return `
-    <div class="stat-card" style="margin-bottom:16px">${thermometerHTML(successRate, 'Desempenho geral (taxa de sucesso)', true)}</div>
-    <div class="stat-row">
-      <div class="stat-card" data-tip="Todas as entregas ativas no ambiente atual"><small>Total de entregas</small><strong data-count="${rows.length}">0</strong></div>
-      <div class="stat-card" data-tip="Percentual de entregas que chegaram ao cliente"><small>Taxa de sucesso</small><strong data-count="${successRate}">0</strong>%</div>
-      <div class="stat-card" data-tip="Retorno, reentrega ou cancelada"><small>Retorno/Problemas</small><strong data-count="${problems.length}">0</strong></div>
-      <div class="stat-card accent" data-tip="Taxas recebidas menos reembolsos menos custos"><small>Saldo financeiro</small><strong>${money(financial.balance)}</strong></div>
-    </div>
-    <div class="stat-row">
-      <div class="stat-card" data-tip="Ciclos abertos + fechados no período"><small>Ciclos realizados</small><strong data-count="${cycles.length}">0</strong></div>
-      <div class="stat-card" data-tip="Entregas finalizadas por ciclo fechado, em média"><small>Produtividade média/ciclo</small><strong>${avgPerCycle}</strong></div>
-      <div class="stat-card" data-tip="KM total rodado no ambiente atual"><small>KM total rodado</small><strong>${financial.kmTotal.toFixed(1)}</strong></div>
-      <div class="stat-card" data-tip="Taxas retiradas do resultado por retirada na loja"><small>Reembolsos</small><strong>${money(financial.refunds)}</strong></div>
-    </div>
-
-    <h3 style="font-size:14px;margin:22px 0 10px">Entregas por dia da semana</h3>
-    <div class="stat-card" data-tip="Volume total por dia da semana, desde o início dos registros">
-      ${barChartSVG({ labels: weekdayNames, values: byWeekday, color: 'var(--ink)' })}
+    <div class="dashboard-filter-bar">
+      <div><span>PERÍODO ANALISADO</span><strong>${range.label}</strong></div>
+      <div class="dashboard-period-buttons">
+        ${[['dia','Dia'],['semana','Semana'],['mes','Mês'],['ano','Ano'],['tudo','Tudo']].map(([mode,label]) => `<button class="dashboard-period-btn ${dashboardPeriod.mode === mode ? 'active' : ''}" data-mode="${mode}">${label}</button>`).join('')}
+      </div>
+      <div class="dashboard-custom-period">
+        <input type="date" id="dashboardStart" value="${dashboardPeriod.start || currentStart}" />
+        <span>até</span>
+        <input type="date" id="dashboardEnd" value="${dashboardPeriod.end || currentEnd}" />
+        <button class="btn-primary btn-small" id="dashboardApplyPeriod">Aplicar período</button>
+      </div>
     </div>
 
-    <h3 style="font-size:14px;margin:22px 0 10px">Distribuição por status</h3>
-    <div class="stat-card" data-tip="Quantidade de entregas em cada status atual">
-      ${barChartSVG({ labels: statusLabels, values: statusCounts, color: 'var(--accent)' })}
+    ${!rows.length ? `<div class="dashboard-empty-notice">Não existem entregas neste período. Troque o filtro para visualizar outros dados.</div>` : ''}
+
+    <div class="dashboard-thermo-card" data-tip="Desempenho do período: percentual de entregas finalizadas com hora de conclusão registrada.">${thermometerHTML(successRate, 'Desempenho do período', true)}</div>
+
+    <div class="dashboard-section-title"><span>OPERAÇÃO</span><h2>Indicadores operacionais</h2></div>
+    <div class="dashboard-kpi-grid">
+      ${metric('Total previsto/registrado', `<span data-count="${rows.length}">0</span>`, 'Todas as entregas registradas no período selecionado.')}
+      ${metric('Finalizadas com horário', `<span data-count="${finalized.length}">0</span>`, 'Entregas finalizadas que possuem hora de conclusão na casa do cliente.', 'good')}
+      ${metric('Pendentes', `<span data-count="${pending.length}">0</span>`, 'Na loja, em rota, na casa do cliente, programadas ou aguardando reentrega.')}
+      ${metric('Atrasadas', `<span data-count="${late.length}">0</span>`, 'Entregas abertas há mais de 60 minutos.', late.length ? 'bad' : 'good')}
+      ${metric('Retornos/Problemas', `<span data-count="${problems.length}">0</span>`, 'Retornos, reentregas e cancelamentos registrados no período.', problems.length ? 'warning' : '')}
+      ${metric('Prioridade alta', `<span data-count="${priority.length}">0</span>`, 'Entregas classificadas como prioridade alta.')}
+      ${metric('Agendadas', `<span data-count="${scheduled.length}">0</span>`, 'Entregas agendadas ou programadas no período.')}
+      ${metric('Taxa de sucesso', `${successRate}%`, 'Finalizadas com horário dividido pelo total registrado.', 'good')}
+      ${metric('Ciclos', `<span data-count="${cycles.length}">0</span>`, 'Total de ciclos iniciados no período.')}
+      ${metric('Produtividade/ciclo', avgPerCycle, 'Média de entregas finalizadas por ciclo fechado.')}
+      ${metric('KM rodado', `${kmTotal.toFixed(1)} km`, 'Soma do KM final menos KM inicial dos expedientes fechados.')}
+      ${metric('Tempo total médio', formatDuration(avgTotal), 'Tempo médio entre a entrada da compra e a finalização na casa do cliente.')}
     </div>
 
-    <h3 style="font-size:14px;margin:22px 0 10px">Clientes e previsão</h3>
-    <div class="stat-row">
-      <div class="stat-card" data-tip="Clientes identificados por telefone ou nome com mais de uma entrega"><small>Clientes recorrentes</small><strong data-count="${recurringClients}">0</strong></div>
-      <div class="stat-card" data-tip="Total de clientes distintos identificados"><small>Clientes únicos</small><strong data-count="${uniqueClients}">0</strong></div>
-      <div class="stat-card" data-tip="Hora do dia com maior volume histórico de entregas"><small>Horário de pico</small><strong>${String(peakHour).padStart(2,'0')}h</strong></div>
-      <div class="stat-card" data-tip="Estimativa simples: média histórica de entregas nesse mesmo dia da semana. Não é uma previsão estatística avançada."><small>Estimativa p/ amanhã</small><strong>${forecastTomorrow ?? '—'}</strong></div>
+    <div class="dashboard-section-title"><span>TEMPOS</span><h2>Eficiência do fluxo</h2></div>
+    <div class="dashboard-kpi-grid compact">
+      ${metric('Espera na loja', formatDuration(avgStoreWait), 'Tempo médio da entrada da compra até a saída da loja.')}
+      ${metric('Tempo em rota', formatDuration(avgRoute), 'Tempo médio da saída da loja até a chegada na casa do cliente.')}
+      ${metric('Tempo no cliente', formatDuration(avgAtClient), 'Tempo médio entre a chegada e a finalização na casa do cliente.')}
+      ${metric('Sem hora final', `<span data-count="${missingCompletionTime}">0</span>`, 'Entregas marcadas como finalizadas que ainda não têm hora de conclusão.', missingCompletionTime ? 'bad' : 'good')}
+    </div>
+
+    <div class="dashboard-section-title"><span>FINANCEIRO</span><h2>Resultado do período</h2></div>
+    <div class="dashboard-kpi-grid financial-grid">
+      ${metric('Taxas brutas', money(grossFees), 'Soma das taxas das entregas contabilizadas.')}
+      ${metric('Reembolsos', money(refunds), 'Taxas devolvidas em retiradas na loja.', refunds ? 'warning' : '')}
+      ${metric('Receita líquida', money(netRevenue), 'Taxas brutas menos reembolsos.', 'good')}
+      ${metric('Custos operacionais', money(costTotal), 'Soma de combustível, manutenção e demais custos do período.')}
+      ${metric('Resultado', money(balance), 'Receita líquida menos custos: lucro ou prejuízo operacional.', balance >= 0 ? 'good' : 'bad')}
+      ${metric('Custo por entrega', finalized.length ? money(costTotal/finalized.length) : '—', 'Custos divididos pelas entregas finalizadas com horário.')}
+      ${metric('Receita por entrega', finalized.length ? money(netRevenue/finalized.length) : '—', 'Receita líquida dividida pelas entregas finalizadas com horário.')}
+      ${metric('Custo por KM', kmTotal ? money(costTotal/kmTotal) : '—', 'Custos operacionais divididos pelo KM rodado.')}
+    </div>
+
+    <div class="dashboard-section-title"><span>PREVISÕES</span><h2>Estimativa de movimento futuro</h2></div>
+    <div class="forecast-grid">
+      <div class="forecast-card" data-tip="Média histórica do mesmo dia da semana de amanhã. É uma estimativa estatística baseada nos registros existentes."><span>PRÓXIMO DIA</span><strong>${forecastTomorrow ?? '—'}</strong><small>entregas previstas</small></div>
+      <div class="forecast-card" data-tip="Média de entregas por semana registrada no histórico. Não é uma garantia de demanda."><span>PRÓXIMA SEMANA</span><strong>${forecastWeek ?? '—'}</strong><small>entregas previstas</small></div>
+      <div class="forecast-card" data-tip="Média de entregas por mês registrado no histórico. A precisão melhora conforme novos meses são acumulados."><span>PRÓXIMO MÊS</span><strong>${forecastMonth ?? '—'}</strong><small>entregas previstas</small></div>
+      <div class="forecast-card peak" data-tip="Faixa horária com maior quantidade de entradas no período selecionado."><span>PICO OPERACIONAL</span><strong>${rows.length ? String(peakHour).padStart(2,'0')+'h' : '—'}</strong><small>horário mais movimentado</small></div>
+    </div>
+
+    <div class="dashboard-section-title"><span>GRÁFICOS VIVOS</span><h2>Movimento, horários e situação</h2></div>
+    <div class="dashboard-chart-grid">
+      <div class="chart-card" data-tip="Evolução do volume de entregas dentro do período selecionado. Passe o mouse sobre cada barra para ver o valor."><div class="chart-title"><strong>Evolução das entregas</strong><small>${range.label}</small></div>${barChartSVG({ labels: trend.labels, values: trend.values, color: 'var(--ink-2)' })}</div>
+      <div class="chart-card" data-tip="Distribuição atual das entregas do período por status operacional."><div class="chart-title"><strong>Distribuição por status</strong><small>situação atual</small></div>${barChartSVG({ labels: statusLabels, values: statusCounts, color: 'var(--accent)' })}</div>
+      <div class="chart-card" data-tip="Quantidade de entregas registrada em cada dia da semana dentro do período."><div class="chart-title"><strong>Entregas por dia da semana</strong><small>volume semanal</small></div>${barChartSVG({ labels: weekdayNames, values: byWeekday, color: '#2f9e5b' })}</div>
+      <div class="chart-card" data-tip="Comparação entre taxas brutas, reembolsos, custos e resultado positivo do período."><div class="chart-title"><strong>Composição financeira</strong><small>valores em reais</small></div>${barChartSVG({ labels: ['Taxas','Reemb.','Custos','Resultado'], values: [grossFees,refunds,costTotal,Math.max(0,balance)].map((v)=>Number(v.toFixed(2))), color: '#e8a33d', unit: ' R$' })}</div>
+    </div>
+
+    <div class="dashboard-section-title"><span>CLIENTES E RANKINGS</span><h2>Recorrência e produtividade</h2></div>
+    <div class="dashboard-kpi-grid compact">
+      ${metric('Clientes recorrentes', `<span data-count="${recurringClients}">0</span>`, 'Clientes identificados por telefone ou nome com mais de uma entrega.')}
+      ${metric('Clientes únicos', `<span data-count="${uniqueClients}">0</span>`, 'Quantidade de clientes diferentes identificados no período.')}
+      ${metric('Sem telefone', `<span data-count="${missingPhone}">0</span>`, 'Entregas sem telefone do cliente preenchido.', missingPhone ? 'warning' : 'good')}
+      ${metric('Sem cliente', `<span data-count="${missingClient}">0</span>`, 'Entregas sem nome de cliente preenchido.', missingClient ? 'warning' : 'good')}
     </div>
     <div class="stat-card" style="margin-bottom:16px" data-tip="Clientes com mais entregas registradas">
       <small>Clientes mais recorrentes</small>
@@ -1199,20 +1380,28 @@ export async function renderDashboard() {
       </table>
     </div>
 
-    <h3 style="font-size:14px;margin:22px 0 10px">Rankings</h3>
     <div class="stat-row" style="grid-template-columns:repeat(3,1fr)">
       ${rankTable('Por entregador (finalizadas)', rankingDriver, 'Quem mais finalizou entregas')}
       ${rankTable('Por veículo (finalizadas)', rankingVehicle, 'Qual veículo mais rodou entregas finalizadas')}
       ${rankTable('Por bairro (volume)', rankingNeighborhood, 'Bairros com mais entregas registradas')}
     </div>
 
-    <h3 style="font-size:14px;margin:22px 0 10px">Qualidade dos dados</h3>
-    <div class="stat-row" style="grid-template-columns:repeat(3,1fr)">
-      <div class="stat-card" data-tip="Entregas sem telefone preenchido"><small>Sem telefone</small><strong data-count="${missingPhone}">0</strong></div>
-      <div class="stat-card" data-tip="Entregas sem nome de cliente"><small>Sem nome de cliente</small><strong data-count="${missingClient}">0</strong></div>
-      <div class="stat-card" data-tip="Entregas sem veículo ou entregador vinculado"><small>Sem veículo/entregador</small><strong data-count="${missingVehicleOrDriver}">0</strong></div>
-    </div>
+    <div class="dashboard-quality-note ${missingVehicleOrDriver || missingCompletionTime ? 'has-warning' : ''}" data-tip="Verificação automática de dados necessários para relatórios e indicadores confiáveis.">Qualidade dos dados: ${missingVehicleOrDriver} sem veículo/entregador · ${missingCompletionTime} finalizada(s) sem hora de conclusão.</div>
   `;
+}
+
+export function wireDashboardEvents() {
+  $$('.dashboard-period-btn').forEach((btn) => btn.addEventListener('click', () => {
+    dashboardPeriod = { ...dashboardPeriod, mode: btn.dataset.mode };
+    refreshApp();
+  }));
+  $('#dashboardApplyPeriod')?.addEventListener('click', () => {
+    const start = $('#dashboardStart')?.value || '';
+    const end = $('#dashboardEnd')?.value || '';
+    if (start && end && start > end) return toast('A data inicial não pode ser maior que a final.', 'error');
+    dashboardPeriod = { mode: 'personalizado', start, end };
+    refreshApp();
+  });
 }
 
 /* =========================================================

@@ -59,20 +59,25 @@ export function initTooltips(root = document) {
   root.addEventListener('mouseover', (e) => {
     const el = e.target.closest('[data-tip]');
     if (!el) return;
+    if (e.relatedTarget && el.contains(e.relatedTarget)) return;
     clearTimeout(timer);
     timer = setTimeout(() => {
+      document.querySelectorAll('.tooltip').forEach((old) => old.remove());
       const tip = document.createElement('div');
       tip.className = 'tooltip';
       tip.textContent = el.dataset.tip;
       document.body.appendChild(tip);
       const r = el.getBoundingClientRect();
-      tip.style.left = `${r.left + r.width / 2}px`;
-      tip.style.top = `${r.top - 8}px`;
+      const half = Math.min(130, tip.offsetWidth / 2);
+      tip.style.left = `${Math.max(half + 8, Math.min(window.innerWidth - half - 8, r.left + r.width / 2))}px`;
+      if (r.top > tip.offsetHeight + 18) tip.style.top = `${r.top - 8}px`;
+      else { tip.classList.add('tooltip-below'); tip.style.top = `${r.bottom + 8}px`; }
       el._tip = tip;
     }, 500);
   });
   root.addEventListener('mouseout', (e) => {
     const el = e.target.closest('[data-tip]');
+    if (el && e.relatedTarget && el.contains(e.relatedTarget)) return;
     clearTimeout(timer);
     if (el && el._tip) { el._tip.remove(); el._tip = null; }
   });
@@ -103,11 +108,11 @@ export function countUp(el, target, duration = 600) {
   requestAnimationFrame(tick);
 }
 export function animateStatCards(root = document) {
-  $$('.stat-card', root).forEach((card, i) => {
+  $$('.stat-card, .day-performance-card', root).forEach((card, i) => {
     card.style.animationDelay = `${i * 45}ms`;
     card.classList.add('stat-anim');
-    const strong = card.querySelector('strong[data-count]');
-    if (strong) countUp(strong, Number(strong.dataset.count));
+    const counter = card.querySelector('[data-count]');
+    if (counter) countUp(counter, Number(counter.dataset.count));
   });
 }
 
