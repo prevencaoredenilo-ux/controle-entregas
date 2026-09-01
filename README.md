@@ -1,5 +1,18 @@
 # Órbita — Controle de Entregas (v2 completo, client-side)
 
+## Correção v2.8 — retorno visível, cache corrigido e Cadê o Nilo?
+
+- Corrigido o problema que podia combinar o HTML novo com JavaScript antigo: os arquivos principais agora recebem a versão no endereço e o cache offline foi renovado em conjunto.
+- A antiga Pausa do Nilo foi substituída pelo minijogo **Cadê o Nilo?**: três caixas embaralham, o usuário escolhe uma e o mascote é revelado com animação e confetes.
+- O registro de **Retorno de entrega à loja** ganhou um painel permanente logo abaixo do cabeçalho principal, antes dos indicadores, além dos atalhos já existentes.
+- Ao clicar no retorno sem haver entrega elegível, o sistema explica claramente que a entrega precisa estar **Em rota** ou **Na casa do cliente** e mostra o caminho do processo.
+- O encerramento pergunta exatamente **“Esta entrega voltou? SIM ou NÃO?”**, mostra uma pendência por vez e continua bloqueado até todas serem resolvidas.
+- Responder SIM exige horário de retorno, motivo, situação da mercadoria, descrição do retorno parcial quando aplicável, decisão de reentrega e novo horário quando houver outra tentativa.
+- Responder NÃO abre obrigatoriamente chegada e finalização no cliente.
+- Antes da confirmação final do ciclo, um resumo mostra entregues, retornos, reentregas e zero pendências.
+- Entregas que ainda pertencem a ciclo aberto não podem ser incluídas indevidamente em outro ciclo.
+- O CSV inclui situação da mercadoria e itens/volumes retornados.
+
 ## Atualização v2.7 — retorno obrigatório e Pausa do Nilo
 
 - O cabeçalho ganhou a **Pausa do Nilo**, uma interação divertida e totalmente separada da operação, com pedra-papel-tesoura, desafio surpresa e piada.

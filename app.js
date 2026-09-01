@@ -1,6 +1,6 @@
-import { ensureSeed, saveAutoBackup } from './db.js';
-import { $, $$, toast, initTooltips, animateStatCards, performanceProfile } from './helpers.js';
-import * as V from './views.js';
+import { ensureSeed, saveAutoBackup } from './db.js?v=2.8';
+import { $, $$, toast, initTooltips, animateStatCards, performanceProfile } from './helpers.js?v=2.8';
+import * as V from './views.js?v=2.8';
 
 let currentView = 'central';
 let currentRegistryTab = 'vehicles';
@@ -110,7 +110,7 @@ function wireNav() {
 }
 
 async function openOperatorPicker() {
-  const { Collaborators } = await import('./db.js');
+  const { Collaborators } = await import('./db.js?v=2.8');
   const list = (await Collaborators.all()).filter((c) => c.active !== false);
   openModal({
     title: 'Quem está operando agora?',
@@ -149,61 +149,44 @@ function wireGlobalActions() {
   $('#funBreakBtn')?.addEventListener('click', openFunBreak);
 }
 
-/* ---------- pausa divertida: não lê nem altera dados operacionais ---------- */
-const FUN_CHALLENGES = [
-  'Faça a melhor imitação de narrador de futebol por 10 segundos. ⚽',
-  'Diga três palavras que rimam — vale palavra inventada. 🎤',
-  'Tente falar “o rato roeu a roupa” três vezes sem tropeçar. 😄',
-  'Faça uma pose de super-herói por cinco segundos. 🦸',
-  'Desenhe um gato de olhos fechados em 15 segundos. 🐈',
-  'Conte até dez trocando todo número par por “Nilo!”. 🔢',
-];
-const FUN_JOKES = [
-  'Por que o computador foi ao médico? Porque estava com um vírus. 😄',
-  'O que o zero disse para o oito? Belo cinto! 😄',
-  'Qual é o café mais perigoso? O ex-presso. ☕',
-  'Por que o livro de matemática ficou triste? Porque tinha muitos problemas. 📘',
-  'O que uma parede disse para a outra? A gente se encontra na esquina. 😄',
-];
-const funPick = (list) => list[Math.floor(Math.random() * list.length)];
-
+/* ---------- Cadê o Nilo?: minijogo sem qualquer dado operacional ---------- */
 function openFunBreak() {
   openModal({
-    title: '🎲 Pausa do Nilo',
-    subtitle: 'Só uma brincadeira rápida — nada aqui interfere na operação.',
-    body: `<div class="fun-break-intro"><div class="fun-mascot"><img src="assets/brand/mascote.png" alt="Mascote Nilo" /></div><div><strong>Escolha sua pausa</strong><p>Vale jogar sozinho ou chamar quem estiver por perto.</p></div></div><div class="fun-game-grid"><button type="button" id="funRps"><span>✊</span><strong>Pedra, papel ou tesoura</strong><small>Desafie o Nilo</small></button><button type="button" id="funChallenge"><span>⚡</span><strong>Desafio surpresa</strong><small>Uma missão de 15 segundos</small></button><button type="button" id="funJoke"><span>😄</span><strong>Piada do Nilo</strong><small>Humor de qualidade duvidosa</small></button></div><div class="fun-result" id="funResult"><span>✨</span><p>Escolha uma brincadeira acima.</p></div>`,
-    actions: [{ label: 'Voltar ao sistema', kind: 'primary', onClick: closeModal }],
+    title: '🐾 Cadê o Nilo?',
+    subtitle: 'O mascote se escondeu em uma das caixas. Você tem uma tentativa!',
+    body: `<div class="nilo-hunt-head"><div class="hunt-mascot-peek"><img src="assets/brand/mascote.png" alt="Mascote Nilo" /></div><div><strong>Encontre o mascote</strong><p>As caixas vão embaralhar. Depois, escolha uma delas.</p></div></div><div class="nilo-hunt-stage" id="niloHuntStage"></div>`,
+    actions: [{ label: 'Fechar brincadeira', kind: 'ghost', onClick: closeModal }],
   });
-  $('#funRps')?.addEventListener('click', openRockPaperScissors);
-  $('#funChallenge')?.addEventListener('click', () => showFunResult('⚡', funPick(FUN_CHALLENGES)));
-  $('#funJoke')?.addEventListener('click', () => showFunResult('😄', funPick(FUN_JOKES)));
+  startNiloHunt();
 }
 
-function showFunResult(icon, message) {
-  const result = $('#funResult');
-  if (!result) return;
-  result.classList.remove('fun-pop');
-  void result.offsetWidth;
-  result.innerHTML = `<span>${icon}</span><p>${message}</p>`;
-  result.classList.add('fun-pop');
-}
-
-function openRockPaperScissors() {
-  const result = $('#funResult');
-  if (!result) return;
-  result.innerHTML = `<div class="rps-title">Escolha sua jogada:</div><div class="rps-choices"><button type="button" data-rps="pedra">✊<small>Pedra</small></button><button type="button" data-rps="papel">✋<small>Papel</small></button><button type="button" data-rps="tesoura">✌️<small>Tesoura</small></button></div>`;
-  $$('#funResult [data-rps]').forEach((button) => button.addEventListener('click', () => {
-    const options = ['pedra', 'papel', 'tesoura'];
-    const icons = { pedra: '✊', papel: '✋', tesoura: '✌️' };
-    const player = button.dataset.rps;
-    const nilo = funPick(options);
-    const won = (player === 'pedra' && nilo === 'tesoura') || (player === 'papel' && nilo === 'pedra') || (player === 'tesoura' && nilo === 'papel');
-    const message = player === nilo ? 'Empate! O Nilo leu sua mente.' : won ? 'Você venceu o Nilo! 🏆' : 'O Nilo venceu desta vez! 😎';
-    result.classList.remove('fun-pop');
-    void result.offsetWidth;
-    result.innerHTML = `<div class="rps-score"><div><span>${icons[player]}</span><small>Você</small></div><strong>×</strong><div><span>${icons[nilo]}</span><small>Nilo</small></div></div><p>${message}</p><button type="button" class="btn-ghost btn-small" id="funPlayAgain">Jogar novamente</button>`;
-    result.classList.add('fun-pop');
-    $('#funPlayAgain')?.addEventListener('click', openRockPaperScissors);
+function startNiloHunt() {
+  const stage = $('#niloHuntStage');
+  if (!stage) return;
+  const hidingPlace = Math.floor(Math.random() * 3);
+  stage.innerHTML = `<div class="hunt-message" id="huntMessage"><span>👀</span><strong>Olhe bem… embaralhando!</strong></div><div class="hunt-boxes">${[0,1,2].map((index) => `<button type="button" class="hunt-box shuffling" data-hunt-box="${index}" disabled><span class="hunt-gift">🎁</span><small>Caixa ${index + 1}</small></button>`).join('')}</div><div class="hunt-replay hidden" id="huntReplay"><button type="button" class="btn-primary">Jogar outra vez</button></div>`;
+  setTimeout(() => {
+    $$('#niloHuntStage .hunt-box').forEach((box) => { box.disabled = false; box.classList.remove('shuffling'); box.classList.add('ready'); });
+    const message = $('#huntMessage');
+    if (message) message.innerHTML = '<span>👇</span><strong>Agora escolha uma caixa!</strong>';
+  }, 850);
+  $$('#niloHuntStage [data-hunt-box]').forEach((box) => box.addEventListener('click', () => {
+    if (stage.dataset.finished === '1') return;
+    stage.dataset.finished = '1';
+    const selected = Number(box.dataset.huntBox);
+    $$('#niloHuntStage .hunt-box').forEach((item) => {
+      item.disabled = true;
+      const index = Number(item.dataset.huntBox);
+      item.classList.remove('ready');
+      item.classList.add('revealed', index === hidingPlace ? 'winner' : 'empty-box');
+      item.querySelector('.hunt-gift').innerHTML = index === hidingPlace ? '<img src="assets/brand/mascote.png" alt="Nilo encontrado" />' : '✨';
+    });
+    const won = selected === hidingPlace;
+    const message = $('#huntMessage');
+    if (message) message.innerHTML = won ? '<span>🏆</span><strong>Você encontrou o Nilo!</strong><small>Boa memória! O mascote não escapou desta vez.</small>' : `<span>😄</span><strong>Quase! Ele estava na caixa ${hidingPlace + 1}.</strong><small>O Nilo foi mais rápido nesta rodada.</small>`;
+    if (won) stage.insertAdjacentHTML('beforeend', `<div class="hunt-confetti" aria-hidden="true">${new Array(18).fill('<i></i>').join('')}</div>`);
+    $('#huntReplay')?.classList.remove('hidden');
+    $('#huntReplay button')?.addEventListener('click', () => { stage.dataset.finished = '0'; startNiloHunt(); });
   }));
 }
 
@@ -279,7 +262,7 @@ async function render() {
 }
 
 async function updateBadges() {
-  const { Deliveries, Cycles } = await import('./db.js');
+  const { Deliveries, Cycles } = await import('./db.js?v=2.8');
   const rows = await Deliveries.active(environment);
   $('#pendingBadge').textContent = rows.filter((r) => r.status === 'na_loja').length;
   const trashed = await Deliveries.trashed(environment);
@@ -302,7 +285,7 @@ if ('serviceWorker' in navigator) {
     refreshingForUpdate = true;
     window.location.reload();
   });
-  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).then((registration) => registration.update()).catch(() => {}));
+  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js?v=2.8', { updateViaCache: 'none' }).then((registration) => registration.update()).catch(() => {}));
 }
 
 boot();

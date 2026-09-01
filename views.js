@@ -1,6 +1,6 @@
-import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters } from './db.js';
-import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js';
-import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js';
+import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters } from './db.js?v=2.8';
+import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=2.8';
+import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=2.8';
 
 const DEFAULT_OPERATIONAL_TARGETS = { startMinutes:120, arrivalMinutes:210, warningMinutes:30, successTarget:90 };
 
@@ -44,6 +44,7 @@ export async function renderCentral() {
 
   const naLoja = rows.filter((r) => r.status === 'na_loja');
   const emRota = rows.filter((r) => ['em_rota', 'no_cliente'].includes(r.status));
+  const returnEligible = rows.filter((r) => ['em_rota', 'no_cliente'].includes(r.status));
   const prioritarias = rows.filter((r) => r.priority === 'alta' && ['na_loja', 'em_rota', 'no_cliente'].includes(r.status));
   const reentrega = rows.filter((r) => r.status === 'reentrega');
   const agendadas = rows.filter((r) => r.type === 'agendada' && r.status === 'programada');
@@ -154,6 +155,13 @@ export async function renderCentral() {
         ${vehiclesClosedToday.length ? `<small class="readiness-note">${vehiclesClosedToday.length} veículo(s) com expediente já encerrado hoje.</small>` : ''}
       </aside>
     </div>
+
+    <section class="return-spotlight ${returnEligible.length ? 'has-returns' : ''}" id="returnSpotlight">
+      <div class="return-spotlight-icon">↩</div>
+      <div class="return-spotlight-copy"><span>RETORNO DE ENTREGA À LOJA</span><h2>${returnEligible.length ? `${returnEligible.length} entrega(s) podem ter o retorno registrado` : 'A entrega não foi concluída no cliente?'}</h2><p>Registre a hora que voltou, o motivo, a situação da mercadoria e se haverá nova tentativa. O ciclo não fecha sem resolver isso.</p></div>
+      <div class="return-spotlight-status"><small>${returnEligible.length ? 'AGUARDANDO AÇÃO' : 'ACESSO SEMPRE VISÍVEL'}</small><strong>${returnEligible.length}</strong></div>
+      <button type="button" class="return-spotlight-btn" id="returnSpotlightBtn">Registrar retorno agora <b>›</b></button>
+    </section>
 
     ${alerts.length ? `<div class="alert-strip">${alerts.map((a) => `<button type="button" class="alert-chip" data-query="${escapeHtml(a.query)}">${a.text}</button>`).join('')}</div>` : ''}
 
@@ -278,6 +286,7 @@ export function wireCentralEvents() {
   $('#qaStartCycle')?.addEventListener('click', () => openStartCycleModal());
   $('#qaArrival')?.addEventListener('click', () => openArrivalPicker());
   $('#qaReturn')?.addEventListener('click', () => openReturnPicker());
+  $('#returnSpotlightBtn')?.addEventListener('click', () => openReturnPicker());
   $('#qaKm')?.addEventListener('click', () => openKmStartModal());
   $('#qaCost')?.addEventListener('click', () => openCostModal());
   $('#qaCloseDay')?.addEventListener('click', () => openDayCloseAssistant());
@@ -567,7 +576,14 @@ async function openArrivalPicker() {
 
 async function openReturnPicker() {
   const rows = (await Deliveries.active(getEnv())).filter((r) => ['em_rota', 'no_cliente'].includes(r.status));
-  if (!rows.length) return toast('Não há entrega em rota aguardando resolução de retorno.', 'error');
+  if (!rows.length) {
+    return openModal({
+      title: 'Registrar retorno à loja',
+      subtitle: 'A função está ativa, mas não existe uma entrega elegível neste momento.',
+      body: `<div class="return-empty-guide"><span>↩</span><div><strong>Quando esta função fica disponível?</strong><p>A entrega precisa ter saído em um ciclo e estar com o status <b>Em rota</b> ou <b>Na casa do cliente</b>. Depois disso, ela aparecerá aqui automaticamente.</p></div></div><div class="return-guide-steps"><div><i>1</i><span>Inicie o ciclo</span></div><b>›</b><div><i>2</i><span>Entrega não concluída</span></div><b>›</b><div><i>3</i><span>Registrar retorno</span></div></div><p class="return-guide-note">Você também verá a pergunta obrigatória ao clicar em <b>Finalizar ciclo</b> enquanto existir entrega sem os horários completos no cliente.</p>`,
+      actions: [{ label: 'Entendi', kind: 'primary', onClick: closeModal }],
+    });
+  }
   if (rows.length === 1) {
     const cycle = rows[0].cycleId ? await Cycles.get(rows[0].cycleId) : null;
     return openReturnResolutionFlow(rows[0], { cycle: cycle?.status === 'aberto' ? cycle : null });
@@ -975,6 +991,17 @@ async function openReturnResolutionFlow(record, { cycle = null, onBack = null, c
           </select>
         </label>
         <label>Observação do ocorrido<textarea name="note" rows="2" placeholder="Ex.: número incorreto, cliente não atendeu, mercadoria voltou completa…"></textarea></label>
+        <label>Situação da mercadoria *
+          <select name="merchandiseSituation" id="returnMerchandiseSelect" required>
+            <option value="">Selecione…</option>
+            <option value="completa">Voltou completa para a loja</option>
+            <option value="parcial">Voltou parcialmente</option>
+            <option value="sem_mercadoria">Não havia mercadoria para retornar</option>
+          </select>
+        </label>
+        <label id="returnedItemsWrap" class="hidden">O que retornou e o que foi entregue? *
+          <textarea name="returnedItems" rows="2" placeholder="Descreva os itens ou volumes que retornaram e os que ficaram no cliente"></textarea>
+        </label>
         <label>Haverá outra tentativa de entrega? *
           <select name="retryPlanned" id="returnRetrySelect" required>
             <option value="">Selecione…</option>
@@ -1001,10 +1028,14 @@ async function openReturnResolutionFlow(record, { cycle = null, onBack = null, c
         if (retryPlanned && !fd.retryAt) return toast('Informe quando será a nova tentativa.', 'error');
         const retryAt = retryPlanned ? new Date(fd.retryAt).toISOString() : null;
         if (retryAt && new Date(retryAt) <= new Date(returnedAt)) return toast('A nova tentativa precisa ser posterior ao retorno à loja.', 'error');
+        const merchandiseSituation = fd.merchandiseSituation;
+        const returnedItems = fd.returnedItems?.trim() || '';
+        if (merchandiseSituation === 'parcial' && !returnedItems) return toast('Descreva o que retornou e o que foi entregue.', 'error');
         const attempt = {
           id: `ret_${Date.now().toString(36)}`,
           cycleId: cycle?.id || record.cycleId || null,
           returnedAt, reasonId: fd.reasonId, reasonLabel: reason?.label || '', note,
+          merchandiseSituation, returnedItems,
           retryPlanned, retryAt,
           leftStoreAt: record.leftStoreAt || null,
           clientArrivalAt: record.clientArrivalAt || null,
@@ -1012,10 +1043,12 @@ async function openReturnResolutionFlow(record, { cycle = null, onBack = null, c
           registeredBy: getOperatorName(), registeredAt: new Date().toISOString(),
         };
         const nextStatus = retryPlanned ? 'reentrega' : 'retorno';
-        const historyNote = `${reason?.label || 'Motivo não informado'} · retorno ${timeBR(returnedAt)}${retryPlanned ? ` · nova tentativa ${dateTimeBR(retryAt)}` : ' · sem nova tentativa'}${note ? ` · ${note}` : ''}`;
+        const merchandiseLabel = merchandiseSituation === 'completa' ? 'mercadoria completa' : merchandiseSituation === 'parcial' ? 'retorno parcial' : 'sem mercadoria retornada';
+        const historyNote = `${reason?.label || 'Motivo não informado'} · retorno ${timeBR(returnedAt)} · ${merchandiseLabel}${retryPlanned ? ` · nova tentativa ${dateTimeBR(retryAt)}` : ' · sem nova tentativa'}${note ? ` · ${note}` : ''}`;
         await Deliveries.changeStatus(record.id, nextStatus, {
           reasonId: fd.reasonId, note: historyNote,
           returnedAt, returnReasonId: fd.reasonId, returnReasonLabel: reason?.label || '', returnNote: note,
+          merchandiseSituation, returnedItems,
           retryPlanned, nextAttemptAt: retryAt,
           returnAttempts: [...(record.returnAttempts || []), attempt],
           returnRegisteredBy: getOperatorName(), returnRegisteredAt: new Date().toISOString(),
@@ -1032,6 +1065,12 @@ async function openReturnResolutionFlow(record, { cycle = null, onBack = null, c
     $('#returnRetryAtWrap')?.classList.toggle('hidden', !retry);
     const input = $('#returnRetryAtWrap input');
     if (input) { input.required = retry; if (retry && !input.value) input.value = localDateTimeValue(new Date(Date.now() + 60 * 60 * 1000)); }
+  });
+  $('#returnMerchandiseSelect')?.addEventListener('change', (event) => {
+    const partial = event.target.value === 'parcial';
+    $('#returnedItemsWrap')?.classList.toggle('hidden', !partial);
+    const input = $('#returnedItemsWrap textarea');
+    if (input) input.required = partial;
   });
 }
 
@@ -1103,6 +1142,7 @@ export async function openStartCycleModal() {
   const openCycles = (await Cycles.all()).filter((c) => c.environment === env && c.status === 'aberto' && !c.deletedAt);
   const busyVehicles = new Set(openCycles.map((c) => c.vehicleId));
   const busyDrivers = new Set(openCycles.map((c) => c.driverId));
+  const busyDeliveryIds = new Set(openCycles.flatMap((c) => c.deliveryIds || []));
 
   const vehicles = (await Vehicles.all()).filter((v) => v.active);
   const drivers = (await Drivers.all()).filter((d) => d.active);
@@ -1112,7 +1152,7 @@ export async function openStartCycleModal() {
   const neighOrder = Object.fromEntries(neighborhoods.map((n) => [n.id, n.routeOrder ?? 0]));
 
   const candidates = (await Deliveries.active(env))
-    .filter((d) => d.status === 'na_loja' || (d.status === 'reentrega' && (!d.nextAttemptAt || new Date(d.nextAttemptAt) <= new Date())))
+    .filter((d) => !busyDeliveryIds.has(d.id) && (d.status === 'na_loja' || (d.status === 'reentrega' && (!d.nextAttemptAt || new Date(d.nextAttemptAt) <= new Date()))))
     .sort((a, b) => {
       if (a.priority !== b.priority) return a.priority === 'alta' ? -1 : 1;
       return (neighOrder[a.neighborhoodId] || 0) - (neighOrder[b.neighborhoodId] || 0);
@@ -1254,7 +1294,7 @@ function showPendingOne(cycle, delivery, remainingCount) {
   openModal({
     title: `Finalizar ciclo — ${remainingCount} pendente(s)`,
     subtitle: `Entrega #${delivery.purchaseNumber} · ${escapeHtml(delivery.clientName || delivery.street)}`,
-    body: `<div class="cycle-pending-alert"><span>!</span><div><strong>Esta entrega está sem horário de finalização no cliente</strong><p>O ciclo permanece bloqueado até você informar o que aconteceu.</p></div></div><div class="cycle-return-question"><span>↩</span><div><strong>Esta entrega voltou para a loja?</strong><small>Responda uma pendência por vez. Nenhuma poderá ficar sem classificação.</small></div></div>`,
+    body: `<div class="cycle-pending-alert"><span>!</span><div><strong>Esta entrega está sem horário de chegada ou finalização no cliente</strong><p>O ciclo permanece bloqueado até você informar o que aconteceu.</p></div></div><div class="cycle-return-question"><span>↩</span><div><strong>Esta entrega voltou? SIM ou NÃO?</strong><small>SIM registra o retorno à loja. NÃO exige chegada e finalização no cliente. Uma pendência por vez.</small></div></div>`,
     actions: [
       { label: 'Sim, voltou', kind: 'ghost', onClick: async () => {
         openReturnResolutionFlow(delivery, { cycle, continueClose: true, onBack: () => showPendingOne(cycle, delivery, remainingCount) });
@@ -1279,6 +1319,9 @@ async function openCycleEndTimeModal(cycle) {
   const items = await Promise.all((cycle.deliveryIds || []).map((id) => Deliveries.get(id)));
   const unresolved = items.filter((item) => item && !isCycleDeliveryResolved(item, cycle));
   if (unresolved.length) return showPendingOne(cycle, unresolved[0], unresolved.length);
+  const deliveredCycleItems = items.filter((item) => item?.status === 'finalizada' && item.clientArrivalAt && item.deliveredAt);
+  const returnedCycleItems = items.filter((item) => (item?.returnAttempts || []).some((attempt) => attempt.cycleId === cycle.id));
+  const retryCycleItems = returnedCycleItems.filter((item) => item.retryPlanned);
   const latestOperationalAt = items.reduce((latest, item) => {
     const value = item?.returnedAt || item?.deliveredAt || item?.clientArrivalAt || item?.leftStoreAt;
     return value && new Date(value) > new Date(latest) ? value : latest;
@@ -1297,6 +1340,12 @@ async function openCycleEndTimeModal(cycle) {
           <label>Fim do ciclo *
             <input type="datetime-local" name="closedAt" required value="${localDateTimeValue(new Date())}" />
           </label>
+        </div>
+        <div class="cycle-resolution-summary">
+          <div><span>✓</span><small>Entregues no cliente</small><strong>${deliveredCycleItems.length}</strong></div>
+          <div><span>↩</span><small>Retornaram à loja</small><strong>${returnedCycleItems.length}</strong></div>
+          <div><span>↻</span><small>Com nova tentativa</small><strong>${retryCycleItems.length}</strong></div>
+          <div><span>☑</span><small>Pendências abertas</small><strong>0</strong></div>
         </div>
         <label>Observação do encerramento<textarea name="closeNote" rows="2" placeholder="Opcional"></textarea></label>
       </form>`,
@@ -2090,8 +2139,8 @@ async function buildExport(kind, env, period = null) {
 
   if (kind === 'deliveries') {
     const rows = (await Deliveries.active(env)).filter((r) => inReportPeriod(r.entryTime, period));
-    const header = ['Compra','Chegada','Data entrada','PDV','DOC','Cupom','Cliente','Telefone','Endereço','Nº','Complemento','Referência','Bairro','Taxa','Tamanho','Viagens','Prioridade','Tipo','Agendado para','Status','Saída da loja','Limite da saída','SLA da saída','Chegada na casa do cliente','Limite da chegada','SLA da chegada','Finalizada na casa do cliente','Retornou à loja em','Motivo do retorno','Nova tentativa','Próxima tentativa','Quantidade de retornos','Veículo','Entregador','Reembolsado','Observações'];
-    const lines = rows.map((r) => {const sla=deliverySla(r);return [r.purchaseNumber, r.arrivalNumber, dateTimeBR(r.entryTime), r.pdv, r.doc, r.coupon, r.clientName, r.phone, r.street, r.houseNumber, r.complement, r.reference, nName(r.neighborhoodId), r.deliveryFee, r.size, r.tripCount, r.priority, r.type, r.scheduledAt ? dateTimeBR(r.scheduledAt) : '', STATUS_META[r.status]?.label, r.leftStoreAt ? dateTimeBR(r.leftStoreAt) : '', dateTimeBR(sla.startDeadline),sla.startLate?'Atrasada':'No prazo',r.clientArrivalAt ? dateTimeBR(r.clientArrivalAt) : '',dateTimeBR(sla.arrivalDeadline),sla.arrivalLate?'Atrasada':'No prazo',r.deliveredAt ? dateTimeBR(r.deliveredAt) : '',r.returnedAt ? dateTimeBR(r.returnedAt) : '',r.returnReasonLabel || '',r.retryPlanned ? 'Sim' : r.returnedAt ? 'Não' : '',r.nextAttemptAt ? dateTimeBR(r.nextAttemptAt) : '',(r.returnAttempts || []).length, vName(r.vehicleId), dName(r.driverId), r.refunded ? 'Sim' : 'Não', r.notes];});
+    const header = ['Compra','Chegada','Data entrada','PDV','DOC','Cupom','Cliente','Telefone','Endereço','Nº','Complemento','Referência','Bairro','Taxa','Tamanho','Viagens','Prioridade','Tipo','Agendado para','Status','Saída da loja','Limite da saída','SLA da saída','Chegada na casa do cliente','Limite da chegada','SLA da chegada','Finalizada na casa do cliente','Retornou à loja em','Motivo do retorno','Situação da mercadoria','Itens/volumes retornados','Nova tentativa','Próxima tentativa','Quantidade de retornos','Veículo','Entregador','Reembolsado','Observações'];
+    const lines = rows.map((r) => {const sla=deliverySla(r);return [r.purchaseNumber, r.arrivalNumber, dateTimeBR(r.entryTime), r.pdv, r.doc, r.coupon, r.clientName, r.phone, r.street, r.houseNumber, r.complement, r.reference, nName(r.neighborhoodId), r.deliveryFee, r.size, r.tripCount, r.priority, r.type, r.scheduledAt ? dateTimeBR(r.scheduledAt) : '', STATUS_META[r.status]?.label, r.leftStoreAt ? dateTimeBR(r.leftStoreAt) : '', dateTimeBR(sla.startDeadline),sla.startLate?'Atrasada':'No prazo',r.clientArrivalAt ? dateTimeBR(r.clientArrivalAt) : '',dateTimeBR(sla.arrivalDeadline),sla.arrivalLate?'Atrasada':'No prazo',r.deliveredAt ? dateTimeBR(r.deliveredAt) : '',r.returnedAt ? dateTimeBR(r.returnedAt) : '',r.returnReasonLabel || '',r.merchandiseSituation || '',r.returnedItems || '',r.retryPlanned ? 'Sim' : r.returnedAt ? 'Não' : '',r.nextAttemptAt ? dateTimeBR(r.nextAttemptAt) : '',(r.returnAttempts || []).length, vName(r.vehicleId), dName(r.driverId), r.refunded ? 'Sim' : 'Não', r.notes];});
     return { name: 'entregas', header, lines };
   }
   if (kind === 'cycles') {
@@ -2543,7 +2592,7 @@ function openVehicleAddModal(record = null) {
    ========================================================= */
 export async function renderSettings() {
   const cfg = JSON.parse(localStorage.getItem('orbita_settings') || '{}');
-  const { listAutoBackups } = await import('./db.js');
+  const { listAutoBackups } = await import('./db.js?v=2.8');
   const autoBackups = await listAutoBackups();
   const autoList = autoBackups.length
     ? autoBackups.map((b) => `
@@ -2580,13 +2629,13 @@ export async function renderSettings() {
 export function wireSettingsEvents() {
   $$('.auto-restore-btn').forEach((btn) => btn.addEventListener('click', async () => {
     if (!confirm('Restaurar esse backup automático vai substituir os dados atuais. Continuar?')) return;
-    const { restoreAutoBackup } = await import('./db.js');
+    const { restoreAutoBackup } = await import('./db.js?v=2.8');
     await restoreAutoBackup(btn.dataset.id);
     toast('Backup automático restaurado.', 'success');
     refreshApp();
   }));
   $('#settingsBackupBtn')?.addEventListener('click', async () => {
-    const data = await (await import('./db.js')).exportAll();
+    const data = await (await import('./db.js?v=2.8')).exportAll();
     downloadJSON(`orbita-backup-completo-${new Date().toISOString().slice(0,10)}.json`, data);
     toast('Backup completo gerado.', 'success');
   });
@@ -2594,12 +2643,12 @@ export function wireSettingsEvents() {
     const file = e.target.files[0];
     if (!file) return;
     if (!confirm('Isso vai substituir os dados atuais pelo conteúdo do backup. Um backup de segurança dos dados atuais será baixado antes. Continuar?')) { e.target.value = ''; return; }
-    const currentBackup = await (await import('./db.js')).exportAll();
+    const currentBackup = await (await import('./db.js?v=2.8')).exportAll();
     downloadJSON(`orbita-backup-seguranca-antes-restauracao-${Date.now()}.json`, currentBackup);
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      await (await import('./db.js')).importAll(data);
+      await (await import('./db.js?v=2.8')).importAll(data);
       toast('Backup restaurado.', 'success');
       refreshApp();
     } catch { toast('Arquivo de backup inválido.', 'error'); }
