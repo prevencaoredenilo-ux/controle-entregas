@@ -211,6 +211,7 @@ export async function renderCentral() {
         <button class="primary-command" id="qaNewDelivery" data-tip="Cadastrar uma nova compra e colocá-la na fila."><span>＋</span><strong>Nova entrega</strong></button>
         <button id="qaStartCycle" data-tip="Pergunta a hora exata de saída antes de confirmar o início."><span>↗</span><strong>Iniciar ciclo</strong></button>
         <button id="qaArrival" data-tip="Registrar a hora exata em que chegou na casa do cliente."><span>⌂</span><strong>Chegou no cliente</strong></button>
+        <button id="qaReturn" data-tip="Registrar quando uma entrega retornou à loja, o motivo e a próxima tentativa."><span>↩</span><strong>Entrega retornou</strong></button>
         <button id="qaCloseCycle" data-tip="Resolve pendências e pergunta a hora exata antes de confirmar o fim."><span>✓</span><strong>Finalizar ciclo</strong></button>
         <button id="qaKm" data-tip="Registrar KM inicial ou final."><span>⌁</span><strong>KM</strong></button>
         <button id="qaCost" data-tip="Lançar custo operacional."><span>R$</span><strong>Custo</strong></button>
@@ -253,7 +254,7 @@ async function miniList(rows) {
       <td>${badge(r.status)}${sla.startLate?'<span class="badge problema sla-mini-badge">Saída atrasada</span>':''}${sla.arrivalLate?'<span class="badge problema sla-mini-badge">Chegada atrasada</span>':''}${sla.startRisk||sla.arrivalRisk?'<span class="badge pendente sla-mini-badge">Perto do limite</span>':''}<br><span class="delivery-times">Limites: saída ${timeBR(sla.startDeadline)} · chegada ${timeBR(sla.arrivalDeadline)}</span></td>
       <td>${r.priority === 'alta' ? '<span class="badge problema">Alta</span>' : '—'}</td>
       <td>${money(r.deliveryFee)}</td>
-      <td>${r.status === 'em_rota' ? `<button class="btn-primary btn-small arrival-row-btn" data-id="${r.id}">Chegou no cliente</button>` : r.status === 'no_cliente' ? `<button class="btn-primary btn-small completion-row-btn" data-id="${r.id}">Finalizar entrega</button>` : '<span style="color:var(--text-muted)">—</span>'}</td>
+      <td>${r.status === 'em_rota' ? `<div class="queue-actions"><button class="btn-primary btn-small arrival-row-btn" data-id="${r.id}">Chegou</button><button class="btn-ghost btn-small return-row-btn" data-id="${r.id}">Retornou</button></div>` : r.status === 'no_cliente' ? `<div class="queue-actions"><button class="btn-primary btn-small completion-row-btn" data-id="${r.id}">Finalizar</button><button class="btn-ghost btn-small return-row-btn" data-id="${r.id}">Retornou</button></div>` : '<span style="color:var(--text-muted)">—</span>'}</td>
     </tr>`;
   }).join('');
   return `<div class="table-wrap central-queue"><table><thead><tr><th>Compra</th><th>Cliente / endereço</th><th>Cupom / documento</th><th>Status</th><th>Prioridade</th><th>Taxa</th><th>Ação rápida</th></tr></thead><tbody>${trs}</tbody></table><div class="queue-no-result hidden" id="queueNoResult">Nenhuma entrega corresponde a esse filtro.</div></div>`;
@@ -276,6 +277,7 @@ export function wireCentralEvents() {
   $('#qaNewDelivery')?.addEventListener('click', () => openDeliveryModal());
   $('#qaStartCycle')?.addEventListener('click', () => openStartCycleModal());
   $('#qaArrival')?.addEventListener('click', () => openArrivalPicker());
+  $('#qaReturn')?.addEventListener('click', () => openReturnPicker());
   $('#qaKm')?.addEventListener('click', () => openKmStartModal());
   $('#qaCost')?.addEventListener('click', () => openCostModal());
   $('#qaCloseDay')?.addEventListener('click', () => openDayCloseAssistant());
@@ -347,6 +349,13 @@ export function wireCentralEvents() {
     e.stopPropagation();
     const record = await Deliveries.get(btn.dataset.id);
     if (record) openDeliveryCompletionFlow(record);
+  }));
+  $$('.return-row-btn').forEach((btn) => btn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const record = await Deliveries.get(btn.dataset.id);
+    if (!record) return;
+    const cycle = record.cycleId ? await Cycles.get(record.cycleId) : null;
+    openReturnResolutionFlow(record, { cycle: cycle?.status === 'aberto' ? cycle : null });
   }));
   $$('[data-central-action]').forEach((card) => card.addEventListener('click', async () => {
     if (card.dataset.centralAction === 'km') {
@@ -556,6 +565,27 @@ async function openArrivalPicker() {
   }));
 }
 
+async function openReturnPicker() {
+  const rows = (await Deliveries.active(getEnv())).filter((r) => ['em_rota', 'no_cliente'].includes(r.status));
+  if (!rows.length) return toast('Não há entrega em rota aguardando resolução de retorno.', 'error');
+  if (rows.length === 1) {
+    const cycle = rows[0].cycleId ? await Cycles.get(rows[0].cycleId) : null;
+    return openReturnResolutionFlow(rows[0], { cycle: cycle?.status === 'aberto' ? cycle : null });
+  }
+  openModal({
+    title: 'Qual entrega retornou à loja?',
+    subtitle: 'Escolha a entrega para registrar horário, motivo e nova tentativa.',
+    body: `<div class="picker-list">${rows.map((r) => `<button class="picker-row return-picker-row" data-id="${r.id}"><strong>#${r.purchaseNumber} · ${escapeHtml(r.clientName || r.street || 'Sem nome')}</strong><span>${STATUS_META[r.status]?.label || r.status} · Cupom ${escapeHtml(r.coupon || '—')} · saída ${timeBR(r.leftStoreAt)}</span></button>`).join('')}</div>`,
+    actions: [{ label: 'Cancelar', kind: 'ghost', onClick: closeModal }],
+  });
+  $$('.return-picker-row').forEach((btn) => btn.addEventListener('click', async () => {
+    const record = await Deliveries.get(btn.dataset.id);
+    if (!record) return;
+    const cycle = record.cycleId ? await Cycles.get(record.cycleId) : null;
+    openReturnResolutionFlow(record, { cycle: cycle?.status === 'aberto' ? cycle : null });
+  }));
+}
+
 /* =========================================================
    MODAL — CADASTRO / EDIÇÃO DE ENTREGA (seção 7 e 8)
    ========================================================= */
@@ -714,9 +744,13 @@ function deliveryStatusActionsHtml(record) {
   if (record.status === 'em_rota') {
     buttons.push('<button type="button" class="btn-ghost btn-small" data-action="chegou_cliente">Chegou ao cliente</button>');
     buttons.push('<button type="button" class="btn-primary btn-small" data-action="finalizada">Finalizar na casa do cliente</button>');
+    buttons.push('<button type="button" class="btn-ghost btn-small" data-action="retorno">Registrar retorno à loja</button>');
     buttons.push('<button type="button" class="btn-ghost btn-small" data-action="retirada">Retirada na loja</button>');
   }
-  if (record.status === 'no_cliente') buttons.push('<button type="button" class="btn-primary btn-small" data-action="finalizada">Finalizar na casa do cliente</button>');
+  if (record.status === 'no_cliente') {
+    buttons.push('<button type="button" class="btn-primary btn-small" data-action="finalizada">Finalizar na casa do cliente</button>');
+    buttons.push('<button type="button" class="btn-ghost btn-small" data-action="retorno">Registrar retorno à loja</button>');
+  }
   if (record.status === 'na_loja') buttons.push('<button type="button" class="btn-ghost btn-small" data-action="retirada">Retirada na loja</button>');
   if (record.status === 'finalizada') {
     buttons.push('<button type="button" class="btn-ghost btn-small" data-action="editar_horarios">Editar horários</button>');
@@ -919,39 +953,85 @@ async function finishRetirada(record, refunded) {
 
 /* ---------- retorno / reentrega (seção 8 e 10) ---------- */
 async function openRetornoFlow(record) {
+  const cycle = record.cycleId ? await Cycles.get(record.cycleId) : null;
+  return openReturnResolutionFlow(record, { cycle: cycle?.status === 'aberto' ? cycle : null });
+}
+
+async function openReturnResolutionFlow(record, { cycle = null, onBack = null, continueClose = false } = {}) {
   const reasons = (await ReturnReasons.all()).filter((r) => r.active);
   openModal({
-    title: 'A entrega voltou?',
-    subtitle: `Entrega #${record.purchaseNumber} — registre o motivo para manter o histórico.`,
+    title: 'Registrar retorno à loja',
+    subtitle: `Entrega #${record.purchaseNumber} — o ciclo só será liberado depois deste registro.`,
     body: `
-      <form id="retornoForm">
-        <label>Motivo *
+      <div class="return-alert"><span>↩</span><div><strong>${record.deliveredAt ? 'Registrar uma ocorrência de retorno à loja' : 'Esta entrega voltou sem ser finalizada no cliente'}</strong><small>Informe quando voltou, por que voltou e se haverá uma nova tentativa.</small></div></div>
+      <form id="retornoForm" class="return-resolution-form">
+        <label>Quando retornou à loja? *
+          <input type="datetime-local" name="returnedAt" required value="${localDateTimeValue(new Date())}" />
+        </label>
+        <label>Por que retornou? *
           <select name="reasonId" required>
             <option value="">Selecione…</option>
             ${reasons.map((r) => `<option value="${r.id}">${escapeHtml(r.label)}</option>`).join('')}
           </select>
         </label>
-        <label>Observação<textarea name="note" rows="2"></textarea></label>
-        <label>Encaminhar para
-          <select name="nextStatus">
-            <option value="reentrega">Reentrega</option>
-            <option value="programada">Reagendar</option>
-            <option value="cancelada">Cancelar entrega</option>
+        <label>Observação do ocorrido<textarea name="note" rows="2" placeholder="Ex.: número incorreto, cliente não atendeu, mercadoria voltou completa…"></textarea></label>
+        <label>Haverá outra tentativa de entrega? *
+          <select name="retryPlanned" id="returnRetrySelect" required>
+            <option value="">Selecione…</option>
+            <option value="sim">Sim, tentar novamente em outro horário</option>
+            <option value="nao">Não haverá nova tentativa</option>
           </select>
+        </label>
+        <label id="returnRetryAtWrap" class="hidden">Quando será a nova tentativa? *
+          <input type="datetime-local" name="retryAt" />
         </label>
       </form>`,
     actions: [
-      { label: 'Cancelar', kind: 'ghost', onClick: closeModal },
-      { label: 'Confirmar', kind: 'primary', onClick: async () => {
+      { label: cycle ? 'Voltar à pergunta' : 'Cancelar', kind: 'ghost', onClick: onBack || closeModal },
+      { label: 'Confirmar retorno', kind: 'primary', onClick: async () => {
         const form = $('#retornoForm');
         if (!form.reportValidity()) return;
         const fd = Object.fromEntries(new FormData(form).entries());
-        await Deliveries.changeStatus(record.id, fd.nextStatus, { reasonId: fd.reasonId, note: fd.note });
-        toast('Retorno registrado.', 'success');
-        closeModal();
-        refreshApp();
+        const reason = reasons.find((item) => item.id === fd.reasonId);
+        const note = fd.note?.trim() || '';
+        if (reason?.label?.toLowerCase().includes('outro') && !note) return toast('Descreva o motivo quando escolher “Outros”.', 'error');
+        const returnedAt = new Date(fd.returnedAt).toISOString();
+        if (record.leftStoreAt && new Date(returnedAt) < new Date(record.leftStoreAt)) return toast('O retorno não pode ser anterior à saída da loja.', 'error');
+        const retryPlanned = fd.retryPlanned === 'sim';
+        if (retryPlanned && !fd.retryAt) return toast('Informe quando será a nova tentativa.', 'error');
+        const retryAt = retryPlanned ? new Date(fd.retryAt).toISOString() : null;
+        if (retryAt && new Date(retryAt) <= new Date(returnedAt)) return toast('A nova tentativa precisa ser posterior ao retorno à loja.', 'error');
+        const attempt = {
+          id: `ret_${Date.now().toString(36)}`,
+          cycleId: cycle?.id || record.cycleId || null,
+          returnedAt, reasonId: fd.reasonId, reasonLabel: reason?.label || '', note,
+          retryPlanned, retryAt,
+          leftStoreAt: record.leftStoreAt || null,
+          clientArrivalAt: record.clientArrivalAt || null,
+          deliveredAt: record.deliveredAt || null,
+          registeredBy: getOperatorName(), registeredAt: new Date().toISOString(),
+        };
+        const nextStatus = retryPlanned ? 'reentrega' : 'retorno';
+        const historyNote = `${reason?.label || 'Motivo não informado'} · retorno ${timeBR(returnedAt)}${retryPlanned ? ` · nova tentativa ${dateTimeBR(retryAt)}` : ' · sem nova tentativa'}${note ? ` · ${note}` : ''}`;
+        await Deliveries.changeStatus(record.id, nextStatus, {
+          reasonId: fd.reasonId, note: historyNote,
+          returnedAt, returnReasonId: fd.reasonId, returnReasonLabel: reason?.label || '', returnNote: note,
+          retryPlanned, nextAttemptAt: retryAt,
+          returnAttempts: [...(record.returnAttempts || []), attempt],
+          returnRegisteredBy: getOperatorName(), returnRegisteredAt: new Date().toISOString(),
+          ...(retryPlanned ? { type: 'agendada', scheduledAt: retryAt, clientArrivalAt: null, deliveredAt: null } : {}),
+        });
+        toast(retryPlanned ? `Retorno registrado. Nova tentativa em ${dateTimeBR(retryAt)}.` : 'Retorno registrado sem nova tentativa.', 'success');
+        if (cycle && continueClose) return advanceCloseCycle(cycle);
+        closeModal(); refreshApp();
       }},
     ],
+  });
+  $('#returnRetrySelect')?.addEventListener('change', (event) => {
+    const retry = event.target.value === 'sim';
+    $('#returnRetryAtWrap')?.classList.toggle('hidden', !retry);
+    const input = $('#returnRetryAtWrap input');
+    if (input) { input.required = retry; if (retry && !input.value) input.value = localDateTimeValue(new Date(Date.now() + 60 * 60 * 1000)); }
   });
 }
 
@@ -994,7 +1074,7 @@ export async function renderCycles() {
 
   const rows = await Promise.all(cycles.map(async (c) => {
     const items = await Promise.all((c.deliveryIds || []).map((id) => Deliveries.get(id)));
-    const pending = items.filter((i) => i && (['em_rota', 'no_cliente'].includes(i.status) || (i.status === 'finalizada' && !i.deliveredAt))).length;
+    const pending = items.filter((i) => i && !isCycleDeliveryResolved(i, c)).length;
     return `<tr data-id="${c.id}" class="row-click-cycle">
       <td>${dateTimeBR(c.startedAt)}</td>
       <td>${escapeHtml(vName(c.vehicleId))}</td>
@@ -1032,7 +1112,7 @@ export async function openStartCycleModal() {
   const neighOrder = Object.fromEntries(neighborhoods.map((n) => [n.id, n.routeOrder ?? 0]));
 
   const candidates = (await Deliveries.active(env))
-    .filter((d) => d.status === 'na_loja')
+    .filter((d) => d.status === 'na_loja' || (d.status === 'reentrega' && (!d.nextAttemptAt || new Date(d.nextAttemptAt) <= new Date())))
     .sort((a, b) => {
       if (a.priority !== b.priority) return a.priority === 'alta' ? -1 : 1;
       return (neighOrder[a.neighborhoodId] || 0) - (neighOrder[b.neighborhoodId] || 0);
@@ -1144,10 +1224,24 @@ export async function openStartCycleModal() {
 }
 
 /* ---------- finalizar ciclo: uma pendência por vez (seção 9) ---------- */
+function isCycleDeliveryResolved(delivery, cycle) {
+  if (!delivery) return false;
+  if (delivery.status === 'finalizada') return !!delivery.clientArrivalAt && !!delivery.deliveredAt;
+  if (delivery.status === 'retirada_loja') return true;
+  if (['retorno', 'reentrega', 'programada', 'cancelada'].includes(delivery.status)) {
+    return (delivery.returnAttempts || []).some((attempt) => attempt.returnedAt && (!cycle?.id || attempt.cycleId === cycle.id));
+  }
+  return false;
+}
+
+async function unresolvedCycleDeliveries(cycle) {
+  const items = await Promise.all((cycle.deliveryIds || []).map((id) => Deliveries.get(id)));
+  return items.filter((item) => item && !isCycleDeliveryResolved(item, cycle));
+}
+
 export async function openCloseCycleModal(cycle) {
   if(!canPerform('cycle'))return toast('Seu perfil não pode finalizar ciclos.','error');
-  const items = await Promise.all((cycle.deliveryIds || []).map((id) => Deliveries.get(id)));
-  const pending = items.filter((i) => i && (['em_rota', 'no_cliente'].includes(i.status) || (i.status === 'finalizada' && !i.deliveredAt)));
+  const pending = await unresolvedCycleDeliveries(cycle);
 
   if (!pending.length) {
     return openCycleEndTimeModal(cycle);
@@ -1157,41 +1251,13 @@ export async function openCloseCycleModal(cycle) {
 }
 
 function showPendingOne(cycle, delivery, remainingCount) {
-  const reasonsPromise = ReturnReasons.all();
   openModal({
     title: `Finalizar ciclo — ${remainingCount} pendente(s)`,
     subtitle: `Entrega #${delivery.purchaseNumber} · ${escapeHtml(delivery.clientName || delivery.street)}`,
-    body: `<p style="font-size:14px;font-weight:700">A entrega voltou?</p><p style="font-size:12.5px;color:var(--text-muted)">Se não voltou, vamos registrar a hora de entrega ao cliente.</p>`,
+    body: `<div class="cycle-pending-alert"><span>!</span><div><strong>Esta entrega está sem horário de finalização no cliente</strong><p>O ciclo permanece bloqueado até você informar o que aconteceu.</p></div></div><div class="cycle-return-question"><span>↩</span><div><strong>Esta entrega voltou para a loja?</strong><small>Responda uma pendência por vez. Nenhuma poderá ficar sem classificação.</small></div></div>`,
     actions: [
       { label: 'Sim, voltou', kind: 'ghost', onClick: async () => {
-        const reasons = await reasonsPromise;
-        openModal({
-          title: 'Motivo do retorno',
-          subtitle: `Entrega #${delivery.purchaseNumber}`,
-          body: `
-            <form id="pendReturnForm">
-              <label>Motivo *
-                <select name="reasonId" required>
-                  <option value="">Selecione…</option>
-                  ${reasons.filter(r=>r.active).map((r) => `<option value="${r.id}">${escapeHtml(r.label)}</option>`).join('')}
-                </select>
-              </label>
-              <label>Observação<textarea name="note" rows="2"></textarea></label>
-              <label>Encaminhar para
-                <select name="nextStatus"><option value="reentrega">Reentrega</option><option value="programada">Reagendar</option></select>
-              </label>
-            </form>`,
-          actions: [
-            { label: 'Voltar', kind: 'ghost', onClick: () => showPendingOne(cycle, delivery, remainingCount) },
-            { label: 'Confirmar', kind: 'primary', onClick: async () => {
-              const form = $('#pendReturnForm');
-              if (!form.reportValidity()) return;
-              const fd = Object.fromEntries(new FormData(form).entries());
-              await Deliveries.changeStatus(delivery.id, fd.nextStatus, { reasonId: fd.reasonId, note: fd.note });
-              await advanceCloseCycle(cycle);
-            }},
-          ],
-        });
+        openReturnResolutionFlow(delivery, { cycle, continueClose: true, onBack: () => showPendingOne(cycle, delivery, remainingCount) });
       }},
       { label: 'Não, foi entregue', kind: 'primary', onClick: async () => {
         openDeliveryCompletionFlow(delivery, { cycle });
@@ -1201,8 +1267,7 @@ function showPendingOne(cycle, delivery, remainingCount) {
 }
 
 async function advanceCloseCycle(cycle) {
-  const items = await Promise.all((cycle.deliveryIds || []).map((id) => Deliveries.get(id)));
-  const pending = items.filter((i) => i && (['em_rota', 'no_cliente'].includes(i.status) || (i.status === 'finalizada' && !i.deliveredAt)));
+  const pending = await unresolvedCycleDeliveries(cycle);
   if (pending.length) {
     showPendingOne(cycle, pending[0], pending.length);
   } else {
@@ -1212,8 +1277,10 @@ async function advanceCloseCycle(cycle) {
 
 async function openCycleEndTimeModal(cycle) {
   const items = await Promise.all((cycle.deliveryIds || []).map((id) => Deliveries.get(id)));
+  const unresolved = items.filter((item) => item && !isCycleDeliveryResolved(item, cycle));
+  if (unresolved.length) return showPendingOne(cycle, unresolved[0], unresolved.length);
   const latestOperationalAt = items.reduce((latest, item) => {
-    const value = item?.deliveredAt || item?.clientArrivalAt || item?.leftStoreAt;
+    const value = item?.returnedAt || item?.deliveredAt || item?.clientArrivalAt || item?.leftStoreAt;
     return value && new Date(value) > new Date(latest) ? value : latest;
   }, cycle.startedAt);
   openModal({
@@ -1239,6 +1306,11 @@ async function openCycleEndTimeModal(cycle) {
         const form = $('#cycleEndTimeForm');
         if (!form.reportValidity()) return;
         const fd = Object.fromEntries(new FormData(form).entries());
+        const stillUnresolved = await unresolvedCycleDeliveries(cycle);
+        if (stillUnresolved.length) {
+          toast('Ciclo bloqueado: ainda existe entrega sem finalização ou retorno completo.', 'error');
+          return showPendingOne(cycle, stillUnresolved[0], stillUnresolved.length);
+        }
         const closedAt = new Date(fd.closedAt).toISOString();
         if (new Date(closedAt) < new Date(cycle.startedAt)) return toast('O fim do ciclo não pode ser anterior ao início.', 'error');
         if (latestOperationalAt && new Date(closedAt) < new Date(latestOperationalAt)) return toast(`O fim do ciclo não pode ser anterior ao último evento, às ${timeBR(latestOperationalAt)}.`, 'error');
@@ -1557,7 +1629,7 @@ export async function renderDashboard() {
   const costs = allCosts.filter((c) => c.environment === env && !c.deletedAt && dashboardInRange(c.date, range));
   const kmLogs = allKm.filter((l) => l.environment === env && dashboardInRange(l.shiftDate, range));
   const finalized = rows.filter((r) => r.status === 'finalizada' && r.deliveredAt);
-  const problems = rows.filter((r) => ['retorno', 'reentrega', 'cancelada'].includes(r.status));
+  const problems = rows.filter((r) => ['retorno', 'reentrega', 'cancelada'].includes(r.status) || (r.returnAttempts || []).length || (r.statusHistory || []).some((h) => ['retorno','reentrega'].includes(h.to)));
   const refunded = rows.filter((r) => r.refunded);
   const closedCycles = cycles.filter((c) => c.status === 'fechado');
   const pending = rows.filter((r) => ['na_loja','em_rota','no_cliente','programada','reentrega'].includes(r.status));
@@ -1599,7 +1671,8 @@ export async function renderDashboard() {
   const largeDeliveries = rows.filter((r) => r.size === 'grande').length;
   const firstAttempt = finalized.filter((r) => !(r.statusHistory || []).some((h) => ['retorno','reentrega'].includes(h.to))).length;
   const firstAttemptRate = finalized.length ? Math.round(firstAttempt/finalized.length*100) : 0;
-  const returnRate = rows.length ? problems.length/rows.length*100 : 0;
+  const returnEvents = rows.reduce((total, row) => total + ((row.returnAttempts || []).length || (row.statusHistory || []).filter((h) => ['retorno','reentrega'].includes(h.to)).length), 0);
+  const returnRate = rows.length ? returnEvents/rows.length*100 : 0;
   const startEvaluated = dashboardSla.filter(({record,sla})=>record.leftStoreAt||sla.startLate);
   const arrivalEvaluated = dashboardSla.filter(({record,sla})=>record.clientArrivalAt||sla.arrivalLate);
   const startOnTimeRate = startEvaluated.length ? Math.round(startEvaluated.filter(({record,sla})=>record.leftStoreAt&&!sla.startLate).length/startEvaluated.length*100) : 0;
@@ -2017,8 +2090,8 @@ async function buildExport(kind, env, period = null) {
 
   if (kind === 'deliveries') {
     const rows = (await Deliveries.active(env)).filter((r) => inReportPeriod(r.entryTime, period));
-    const header = ['Compra','Chegada','Data entrada','PDV','DOC','Cupom','Cliente','Telefone','Endereço','Nº','Complemento','Referência','Bairro','Taxa','Tamanho','Viagens','Prioridade','Tipo','Agendado para','Status','Saída da loja','Limite da saída','SLA da saída','Chegada na casa do cliente','Limite da chegada','SLA da chegada','Finalizada na casa do cliente','Veículo','Entregador','Reembolsado','Observações'];
-    const lines = rows.map((r) => {const sla=deliverySla(r);return [r.purchaseNumber, r.arrivalNumber, dateTimeBR(r.entryTime), r.pdv, r.doc, r.coupon, r.clientName, r.phone, r.street, r.houseNumber, r.complement, r.reference, nName(r.neighborhoodId), r.deliveryFee, r.size, r.tripCount, r.priority, r.type, r.scheduledAt ? dateTimeBR(r.scheduledAt) : '', STATUS_META[r.status]?.label, r.leftStoreAt ? dateTimeBR(r.leftStoreAt) : '', dateTimeBR(sla.startDeadline),sla.startLate?'Atrasada':'No prazo',r.clientArrivalAt ? dateTimeBR(r.clientArrivalAt) : '',dateTimeBR(sla.arrivalDeadline),sla.arrivalLate?'Atrasada':'No prazo',r.deliveredAt ? dateTimeBR(r.deliveredAt) : '', vName(r.vehicleId), dName(r.driverId), r.refunded ? 'Sim' : 'Não', r.notes];});
+    const header = ['Compra','Chegada','Data entrada','PDV','DOC','Cupom','Cliente','Telefone','Endereço','Nº','Complemento','Referência','Bairro','Taxa','Tamanho','Viagens','Prioridade','Tipo','Agendado para','Status','Saída da loja','Limite da saída','SLA da saída','Chegada na casa do cliente','Limite da chegada','SLA da chegada','Finalizada na casa do cliente','Retornou à loja em','Motivo do retorno','Nova tentativa','Próxima tentativa','Quantidade de retornos','Veículo','Entregador','Reembolsado','Observações'];
+    const lines = rows.map((r) => {const sla=deliverySla(r);return [r.purchaseNumber, r.arrivalNumber, dateTimeBR(r.entryTime), r.pdv, r.doc, r.coupon, r.clientName, r.phone, r.street, r.houseNumber, r.complement, r.reference, nName(r.neighborhoodId), r.deliveryFee, r.size, r.tripCount, r.priority, r.type, r.scheduledAt ? dateTimeBR(r.scheduledAt) : '', STATUS_META[r.status]?.label, r.leftStoreAt ? dateTimeBR(r.leftStoreAt) : '', dateTimeBR(sla.startDeadline),sla.startLate?'Atrasada':'No prazo',r.clientArrivalAt ? dateTimeBR(r.clientArrivalAt) : '',dateTimeBR(sla.arrivalDeadline),sla.arrivalLate?'Atrasada':'No prazo',r.deliveredAt ? dateTimeBR(r.deliveredAt) : '',r.returnedAt ? dateTimeBR(r.returnedAt) : '',r.returnReasonLabel || '',r.retryPlanned ? 'Sim' : r.returnedAt ? 'Não' : '',r.nextAttemptAt ? dateTimeBR(r.nextAttemptAt) : '',(r.returnAttempts || []).length, vName(r.vehicleId), dName(r.driverId), r.refunded ? 'Sim' : 'Não', r.notes];});
     return { name: 'entregas', header, lines };
   }
   if (kind === 'cycles') {

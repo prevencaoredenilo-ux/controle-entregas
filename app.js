@@ -146,6 +146,65 @@ function escapeAttr(s) { return String(s ?? '').replace(/"/g, '&quot;'); }
 
 function wireGlobalActions() {
   $('#newDeliveryBtn').addEventListener('click', () => canPerform('delivery_edit')?V.openDeliveryModal():toast('Seu perfil possui acesso somente para consulta.','error'));
+  $('#funBreakBtn')?.addEventListener('click', openFunBreak);
+}
+
+/* ---------- pausa divertida: não lê nem altera dados operacionais ---------- */
+const FUN_CHALLENGES = [
+  'Faça a melhor imitação de narrador de futebol por 10 segundos. ⚽',
+  'Diga três palavras que rimam — vale palavra inventada. 🎤',
+  'Tente falar “o rato roeu a roupa” três vezes sem tropeçar. 😄',
+  'Faça uma pose de super-herói por cinco segundos. 🦸',
+  'Desenhe um gato de olhos fechados em 15 segundos. 🐈',
+  'Conte até dez trocando todo número par por “Nilo!”. 🔢',
+];
+const FUN_JOKES = [
+  'Por que o computador foi ao médico? Porque estava com um vírus. 😄',
+  'O que o zero disse para o oito? Belo cinto! 😄',
+  'Qual é o café mais perigoso? O ex-presso. ☕',
+  'Por que o livro de matemática ficou triste? Porque tinha muitos problemas. 📘',
+  'O que uma parede disse para a outra? A gente se encontra na esquina. 😄',
+];
+const funPick = (list) => list[Math.floor(Math.random() * list.length)];
+
+function openFunBreak() {
+  openModal({
+    title: '🎲 Pausa do Nilo',
+    subtitle: 'Só uma brincadeira rápida — nada aqui interfere na operação.',
+    body: `<div class="fun-break-intro"><div class="fun-mascot"><img src="assets/brand/mascote.png" alt="Mascote Nilo" /></div><div><strong>Escolha sua pausa</strong><p>Vale jogar sozinho ou chamar quem estiver por perto.</p></div></div><div class="fun-game-grid"><button type="button" id="funRps"><span>✊</span><strong>Pedra, papel ou tesoura</strong><small>Desafie o Nilo</small></button><button type="button" id="funChallenge"><span>⚡</span><strong>Desafio surpresa</strong><small>Uma missão de 15 segundos</small></button><button type="button" id="funJoke"><span>😄</span><strong>Piada do Nilo</strong><small>Humor de qualidade duvidosa</small></button></div><div class="fun-result" id="funResult"><span>✨</span><p>Escolha uma brincadeira acima.</p></div>`,
+    actions: [{ label: 'Voltar ao sistema', kind: 'primary', onClick: closeModal }],
+  });
+  $('#funRps')?.addEventListener('click', openRockPaperScissors);
+  $('#funChallenge')?.addEventListener('click', () => showFunResult('⚡', funPick(FUN_CHALLENGES)));
+  $('#funJoke')?.addEventListener('click', () => showFunResult('😄', funPick(FUN_JOKES)));
+}
+
+function showFunResult(icon, message) {
+  const result = $('#funResult');
+  if (!result) return;
+  result.classList.remove('fun-pop');
+  void result.offsetWidth;
+  result.innerHTML = `<span>${icon}</span><p>${message}</p>`;
+  result.classList.add('fun-pop');
+}
+
+function openRockPaperScissors() {
+  const result = $('#funResult');
+  if (!result) return;
+  result.innerHTML = `<div class="rps-title">Escolha sua jogada:</div><div class="rps-choices"><button type="button" data-rps="pedra">✊<small>Pedra</small></button><button type="button" data-rps="papel">✋<small>Papel</small></button><button type="button" data-rps="tesoura">✌️<small>Tesoura</small></button></div>`;
+  $$('#funResult [data-rps]').forEach((button) => button.addEventListener('click', () => {
+    const options = ['pedra', 'papel', 'tesoura'];
+    const icons = { pedra: '✊', papel: '✋', tesoura: '✌️' };
+    const player = button.dataset.rps;
+    const nilo = funPick(options);
+    const won = (player === 'pedra' && nilo === 'tesoura') || (player === 'papel' && nilo === 'pedra') || (player === 'tesoura' && nilo === 'papel');
+    const message = player === nilo ? 'Empate! O Nilo leu sua mente.' : won ? 'Você venceu o Nilo! 🏆' : 'O Nilo venceu desta vez! 😎';
+    result.classList.remove('fun-pop');
+    void result.offsetWidth;
+    result.innerHTML = `<div class="rps-score"><div><span>${icons[player]}</span><small>Você</small></div><strong>×</strong><div><span>${icons[nilo]}</span><small>Nilo</small></div></div><p>${message}</p><button type="button" class="btn-ghost btn-small" id="funPlayAgain">Jogar novamente</button>`;
+    result.classList.add('fun-pop');
+    $('#funPlayAgain')?.addEventListener('click', openRockPaperScissors);
+  }));
 }
 
 /* ---------- modal genérico ---------- */
@@ -195,7 +254,7 @@ async function render() {
   const sub = $('#viewSubtitle');
 
   const routes = {
-    central: ['Central Operacional', 'Sala de controle: dois SLAs, riscos, capacidade, ciclos, KM e fechamento do dia.', V.renderCentral, V.wireCentralEvents],
+    central: ['Central Operacional', 'Sala de controle: SLAs, ciclos, retornos assistidos, KM e fechamento do dia.', V.renderCentral, V.wireCentralEvents],
     dashboard: ['Centro de Inteligência', 'Operação, SLA de saída e chegada, ciclos, frota, financeiro, qualidade e previsões.', V.renderDashboard, V.wireDashboardEvents],
     search: ['Busca geral', 'Pesquise por qualquer campo da entrega.', V.renderSearch, V.wireSearchEvents],
     cycles: ['Ciclos', 'Saídas em andamento e finalizadas.', V.renderCycles, V.wireCyclesEvents],

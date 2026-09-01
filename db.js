@@ -276,9 +276,9 @@ export async function restoreAutoBackup(id) {
 /* ---------- seed inicial (bairros/motivos/categorias padrão) ---------- */
 export async function ensureSeed() {
   const reasons = await ReturnReasons.all();
-  if (!reasons.length) {
-    const defaults = ['Cliente ausente', 'Endereço errado', 'Cliente recusou', 'Cliente pediu outro dia', 'Produto incorreto', 'Produto avariado', 'Problema no veículo', 'Outros'];
-    for (const label of defaults) await ReturnReasons.add({ label, active: true });
+  const defaults = ['Cliente ausente', 'Endereço não localizado', 'Telefone sem resposta', 'Cliente recusou', 'Cliente pediu outro dia', 'Problema com mercadoria', 'Pagamento não realizado', 'Problema no veículo', 'Outros'];
+  for (const label of defaults) {
+    if (!reasons.some((item) => item.label?.trim().toLowerCase() === label.toLowerCase())) await ReturnReasons.add({ label, active: true });
   }
   const cats = await CostCategories.all();
   if (!cats.length) {

@@ -1,5 +1,17 @@
 # Órbita — Controle de Entregas (v2 completo, client-side)
 
+## Atualização v2.7 — retorno obrigatório e Pausa do Nilo
+
+- O cabeçalho ganhou a **Pausa do Nilo**, uma interação divertida e totalmente separada da operação, com pedra-papel-tesoura, desafio surpresa e piada.
+- **Registrar retorno** agora aparece nos comandos rápidos, na própria entrega em rota e durante a finalização do ciclo.
+- Ao tentar finalizar um ciclo com entrega sem os horários completos, o sistema mostra **uma pendência por vez** e pergunta: “Esta entrega voltou para a loja?”.
+- Se voltou, são obrigatórios: **data/hora do retorno, motivo e decisão sobre nova tentativa**. Se houver reentrega, a nova data/hora também é obrigatória.
+- Motivos padrão incluem cliente ausente, endereço não localizado, telefone sem resposta, recusa, problema com mercadoria, pagamento não realizado, problema no veículo e outros.
+- O ciclo permanece bloqueado até todas as entregas estarem finalizadas com chegada e conclusão ou possuírem retorno completamente identificado.
+- Cada retorno guarda uma tentativa histórica com ciclo, saída, eventual chegada, horário do retorno, motivo, observação, responsável e reentrega; a tentativa anterior não é apagada.
+- Entregas marcadas para nova tentativa voltam a ficar disponíveis para um ciclo quando chega o horário programado.
+- O Excel/CSV ganhou colunas específicas de retorno e o Centro de Inteligência passa a considerar ocorrências históricas mesmo depois da reentrega ser concluída.
+
 ## Atualização v2.6 — dois SLAs, prevenção e fechamento do dia
 
 - Dois tipos de atraso independentes: **saída/início acima de 2 horas** e **chegada à casa do cliente acima de 3 horas e 30 minutos**, contados desde a entrada da compra ou do horário agendado.
