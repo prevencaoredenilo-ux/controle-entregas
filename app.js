@@ -1,5 +1,5 @@
 import { ensureSeed, saveAutoBackup } from './db.js';
-import { $, $$, toast, initTooltips, animateStatCards } from './helpers.js';
+import { $, $$, toast, initTooltips, animateStatCards, performanceProfile } from './helpers.js';
 import * as V from './views.js';
 
 let currentView = 'central';
@@ -195,7 +195,7 @@ async function updateBadges() {
   $('#pendingBadge').textContent = rows.filter((r) => r.status === 'na_loja').length;
   const trashed = await Deliveries.trashed(environment);
   $('#trashBadge').textContent = trashed.length;
-  const cycles = (await Cycles.all()).filter((c) => c.status === 'aberto' && !c.deletedAt);
+  const cycles = (await Cycles.all()).filter((c) => c.environment === environment && c.status === 'aberto' && !c.deletedAt);
   $('#cyclesBadge').textContent = cycles.length;
 }
 
@@ -203,14 +203,7 @@ async function updateBadges() {
 async function updateMascot() {
   const box = $('#mascotMood');
   if (!box) return;
-  const { Deliveries } = await import('./db.js');
-  const rows = await Deliveries.active(environment);
-  const finalized = rows.filter((r) => r.status === 'finalizada').length;
-  const problems = rows.filter((r) => ['retorno', 'cancelada'].includes(r.status)).length;
-  const total = rows.length || 1;
-  const ratio = finalized / total;
-  const mood = problems > finalized ? '😟' : ratio > 0.7 ? '😄' : ratio > 0.3 ? '🙂' : '😐';
-  box.textContent = mood;
+  box.textContent = performanceProfile(Number(box.dataset.score || 0)).mood;
 }
 
 if ('serviceWorker' in navigator) {

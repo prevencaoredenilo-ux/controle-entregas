@@ -1,5 +1,18 @@
 # Órbita — Controle de Entregas (v2 completo, client-side)
 
+## Atualização v2.1 — Central Operacional viva
+
+- Central Operacional transformada em mesa de comando: cadastro de entrega, início e finalização de ciclo, KM inicial/final e lançamento de custo podem ser executados sem sair da Central.
+- Painéis ao vivo para ciclos abertos, expedientes sem KM final e fila de entregas que exige acompanhamento.
+- Cards clicáveis e animados: filtram a fila por status, prioridade e atraso; os balões explicativos aparecem após 0,5 segundo.
+- Termômetro de desempenho calculado automaticamente com conclusão (65%), pontualidade (20%) e qualidade/ocorrências (15%) somente sobre o dia atual.
+- Faixas motivacionais: Crítico, Atenção, Bom ritmo, Muito bom e Excelente. Cada faixa controla o humor e as frases do mascote.
+- Mascote clicável, com reação, respiração, aceno periódico e frases coerentes com o desempenho.
+- Saudação por horário com rodízio automático de todos os colaboradores ativos cadastrados.
+- Edição completa de veículos, entregadores, colaboradores, bairros, categorias de custo e motivos de retorno, mantendo auditoria e histórico.
+- Relatório gerencial e 13 exportações analíticas com seleção de período; impressão/PDF com cabeçalho da marca e dados financeiros filtrados.
+- Separação entre Operação Real e Treinamento aplicada também aos ciclos e aos indicadores da Central.
+
 ## Como publicar
 Suba **todos os arquivos desta pasta** (incluindo `icons/`) para um repositório GitHub e ative o GitHub Pages na branch `main`, pasta raiz — mesmo processo do app original. Funciona 100% offline (IndexedDB + Service Worker) e é instalável como PWA.
 

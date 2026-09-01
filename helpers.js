@@ -110,14 +110,31 @@ export function animateStatCards(root = document) {
 }
 
 const PHRASES = {
-  otimo: ['Dia excelente, a operação está redonda! 🚀', 'Ritmo ótimo — continue assim!', 'Time voando hoje, parabéns!'],
-  bom: ['Bom ritmo hoje, seguimos evoluindo.', 'Boa entrega! Vamos manter o ritmo.', 'Está indo bem, foco até o fim do dia.'],
-  regular: ['Dia de atenção redobrada nas rotas.', 'Vamos ajustar o ritmo para melhorar.', 'Fique de olho nas entregas em atraso.'],
-  ruim: ['Dia difícil — priorize resolver as pendências.', 'Atenção: várias ocorrências hoje, vamos reforçar o time.', 'Momento de reorganizar a rota com calma.'],
+  excelente: ['Operação brilhando — esse time está voando! 🚀', 'Meta no azul! Mantenham esse ritmo incrível.', 'Excelente trabalho: agilidade com qualidade!'],
+  otimo: ['Ritmo forte e operação sob controle!', 'Muito bem, equipe — falta pouco para o topo.', 'Boa cadência! Vamos fechar o dia ainda melhor.'],
+  bom: ['Bom ritmo hoje, seguimos evoluindo.', 'A operação está avançando — foco nas próximas.', 'Cada entrega conta. Vamos manter a cadência!'],
+  atencao: ['Atenção nas pendências: juntos viramos o jogo.', 'Vamos priorizar atrasos e liberar a fila.', 'Hora de reorganizar o ritmo com calma e foco.'],
+  critico: ['Um passo de cada vez: primeiro, resolva os atrasos.', 'Dia desafiador — união e prioridade nas ocorrências.', 'Vamos estabilizar a operação começando pelo mais urgente.'],
 };
-export function motivationalPhrase(mood) {
-  const key = mood === '😄' ? 'otimo' : mood === '🙂' ? 'bom' : mood === '😐' ? 'regular' : 'ruim';
-  const list = PHRASES[key];
+
+export function performanceProfile(rate) {
+  const pct = Math.max(0, Math.min(100, Math.round(Number(rate) || 0)));
+  if (pct < 35) return { key: 'critico', label: 'Crítico', mood: '😟', color: '#d6425f', pct };
+  if (pct < 55) return { key: 'atencao', label: 'Atenção', mood: '😐', color: '#e8783d', pct };
+  if (pct < 75) return { key: 'bom', label: 'Bom ritmo', mood: '🙂', color: '#e8a33d', pct };
+  if (pct < 90) return { key: 'otimo', label: 'Muito bom', mood: '😄', color: '#2f9e5b', pct };
+  return { key: 'excelente', label: 'Excelente', mood: '🤩', color: '#16a36a', pct };
+}
+
+export function motivationalPhrase(value) {
+  const profile = typeof value === 'number'
+    ? performanceProfile(value)
+    : value === '🤩' ? { key: 'excelente' }
+      : value === '😄' ? { key: 'otimo' }
+        : value === '🙂' ? { key: 'bom' }
+          : value === '😐' ? { key: 'atencao' }
+            : { key: 'critico' };
+  const list = PHRASES[profile.key];
   return list[Math.floor(Math.random() * list.length)];
 }
 
@@ -139,17 +156,20 @@ export function barChartSVG({ labels, values, height = 160, color = 'var(--ink)'
 
 // termômetro de desempenho — cor muda de vermelho a verde conforme a taxa
 export function thermometerHTML(rate, label = 'Desempenho de hoje', onLight = false) {
-  const pct = Math.max(0, Math.min(100, Math.round(rate)));
-  const color = pct < 40 ? '#d6425f' : pct < 70 ? '#e8a33d' : '#2f9e5b';
-  const mood = pct < 40 ? 'Atenção' : pct < 70 ? 'Regular' : 'Ótimo';
+  const profile = performanceProfile(rate);
+  const { pct, color } = profile;
   return `
-    <div class="thermo ${onLight ? 'thermo-light' : ''}">
+    <div class="thermo ${onLight ? 'thermo-light' : ''}" data-performance="${pct}">
       <div class="thermo-head">
         <span>${label}</span>
-        <strong style="color:${color}">${pct}% · ${mood}</strong>
+        <strong style="color:${color}">${pct}% · ${profile.label}</strong>
       </div>
-      <div class="thermo-track">
-        <div class="thermo-fill" style="width:${pct}%;background:${color}"></div>
+      <div class="thermo-body">
+        <div class="thermo-bulb" style="--thermo-color:${color}"></div>
+        <div class="thermo-track">
+          <div class="thermo-fill" style="width:${pct}%;background:${color}"></div>
+          <i style="left:25%"></i><i style="left:50%"></i><i style="left:75%"></i>
+        </div>
       </div>
     </div>`;
 }

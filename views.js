@@ -1,5 +1,5 @@
 import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, AuditLog, Counters } from './db.js';
-import { $, $$, money, dateBR, dateTimeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, barChartSVG, thermometerHTML } from './helpers.js';
+import { $, $$, money, dateBR, dateTimeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, barChartSVG, thermometerHTML } from './helpers.js';
 import { getEnv, getOperatorName, closeModal, openModal, refreshApp } from './app.js';
 
 /* =========================================================
@@ -8,8 +8,12 @@ import { getEnv, getOperatorName, closeModal, openModal, refreshApp } from './ap
 export async function renderCentral() {
   const env = getEnv();
   const rows = await Deliveries.active(env);
-  const cycles = await Cycles.all();
-  const openCycles = cycles.filter((c) => c.status === 'aberto' && !c.deletedAt);
+  const [cycles, vehicles, drivers, collaborators, kmLogs] = await Promise.all([
+    Cycles.all(), Vehicles.all(), Drivers.all(), Collaborators.all(), OdometerLogs.all(),
+  ]);
+  const openCycles = cycles.filter((c) => c.environment === env && c.status === 'aberto' && !c.deletedAt);
+  const vName = (id) => vehicles.find((v) => v.id === id)?.label || 'Veículo';
+  const dName = (id) => drivers.find((d) => d.id === id)?.name || 'Entregador';
 
   const naLoja = rows.filter((r) => r.status === 'na_loja');
   const emRota = rows.filter((r) => r.status === 'em_rota');
@@ -21,18 +25,32 @@ export async function renderCentral() {
     const mins = (Date.now() - new Date(r.entryTime).getTime()) / 60000;
     return mins > 60;
   });
-  const kmPendente = (await OdometerLogs.all()).filter((k) => k.environment === env && k.kmEnd == null).length;
+  const pendingKmLogs = kmLogs.filter((k) => k.environment === env && k.kmEnd == null);
+  const kmPendente = pendingKmLogs.length;
 
-  const finalized = rows.filter((r) => r.status === 'finalizada').length;
-  const problems = rows.filter((r) => ['retorno', 'cancelada'].includes(r.status)).length;
-  const totalForRatio = rows.length || 1;
-  const ratio = finalized / totalForRatio;
-  const mood = problems > finalized && rows.length > 0 ? '😟' : ratio > 0.7 ? '😄' : ratio > 0.3 ? '🙂' : rows.length ? '😐' : '🙂';
-  const phrase = motivationalPhrase(mood);
+  const now = new Date();
+  const isToday = (value) => {
+    const d = new Date(value);
+    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+  };
+  const todayRows = rows.filter((r) => isToday(r.entryTime));
+  const completedToday = todayRows.filter((r) => ['finalizada', 'retirada_loja'].includes(r.status)).length;
+  const problemsToday = todayRows.filter((r) => ['retorno', 'reentrega', 'cancelada'].includes(r.status)).length;
+  const lateToday = atrasadas.filter((r) => isToday(r.entryTime)).length;
+  const totalToday = todayRows.length;
+  const completion = totalToday ? completedToday / totalToday : 0.5;
+  const punctuality = totalToday ? Math.max(0, 1 - (lateToday / totalToday)) : 0.5;
+  const quality = totalToday ? Math.max(0, 1 - (problemsToday / totalToday)) : 0.5;
+  const score = Math.round((completion * 65) + (punctuality * 20) + (quality * 15));
+  const profile = performanceProfile(score);
+  const mood = profile.mood;
+  const phrase = motivationalPhrase(score);
 
   const hour = new Date().getHours();
   const greet = hour < 12 ? 'Bom dia' : hour < 18 ? 'Boa tarde' : 'Boa noite';
-  const operatorName = getOperatorName();
+  const activeCollaborators = collaborators.filter((c) => c.active !== false);
+  const selectedName = getOperatorName();
+  const firstName = activeCollaborators.find((c) => c.name === selectedName)?.name || activeCollaborators[0]?.name || '';
 
   const alerts = [];
   if (atrasadas.length) alerts.push({ text: `⚠️ ${atrasadas.length} entrega(s) atrasada(s) há mais de 60 min`, query: 'na_loja' });
@@ -41,42 +59,60 @@ export async function renderCentral() {
   if (reentrega.length) alerts.push({ text: `↻ ${reentrega.length} entrega(s) aguardando reentrega`, query: 'reentrega' });
 
   return `
-    <div class="greeting-card">
-      <div class="mascot-frame">
+    <div class="central-hero" style="--performance-color:${profile.color}">
+      <div class="orbit-decor" aria-hidden="true"><i></i><i></i><i></i></div>
+      <div class="mascot-frame interactive" role="button" tabindex="0" aria-label="Interagir com o mascote Nilo" data-score="${score}">
         <img src="assets/brand/mascote.png" alt="Mascote Nilo" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'mascot-fallback',textContent:'🧑\u200d🌾'}))" />
-        <div class="mascot-mood" id="mascotMood">${mood}</div>
+        <div class="mascot-mood" id="mascotMood" data-score="${score}">${mood}</div>
+        <span class="mascot-hint">Clique em mim</span>
       </div>
-      <div style="flex:1">
-        <div class="greeting-title">${greet}<span id="greetName">${operatorName ? ', ' + escapeHtml(operatorName) : ''}</span>! 👋</div>
+      <div class="hero-copy">
+        <div class="eyebrow">CENTRAL OPERACIONAL · AO VIVO</div>
+        <div class="greeting-title">${greet}<span id="greetName">${firstName ? ', ' + escapeHtml(firstName) : ''}</span>! <span class="hello-wave">👋</span></div>
         <div class="greeting-phrase">${phrase}</div>
         <div style="color:var(--text-muted);font-size:12px;margin-top:2px">${env === 'treino' ? '🎓 Modo Treinamento — nada aqui entra no histórico oficial.' : 'Operação Real'}</div>
       </div>
-      <div class="greeting-thermo">${thermometerHTML(Math.round(ratio * 100), 'Desempenho de hoje')}</div>
+      <div class="greeting-thermo">${thermometerHTML(score, 'Termômetro de desempenho')}</div>
     </div>
 
     ${alerts.length ? `<div class="alert-strip">${alerts.map((a) => `<button type="button" class="alert-chip" data-query="${escapeHtml(a.query)}">${a.text}</button>`).join('')}</div>` : ''}
 
     <div class="stat-row">
-      <div class="stat-card" data-tip="Compras já lançadas, aguardando formar um ciclo de saída"><small>Na loja</small><strong data-count="${naLoja.length}">0</strong></div>
-      <div class="stat-card" data-tip="Saíram para entrega e ainda não foram finalizadas"><small>Em rota</small><strong data-count="${emRota.length}">0</strong></div>
-      <div class="stat-card" data-tip="Prioridade Alta, ainda na loja ou em rota"><small>Prioritárias</small><strong data-count="${prioritarias.length}">0</strong></div>
-      <div class="stat-card ${atrasadas.length ? 'accent' : ''}" data-tip="Na loja ou em rota há mais de 60 minutos"><small>Atrasadas (&gt;60min)</small><strong data-count="${atrasadas.length}">0</strong></div>
+      <button class="stat-card clickable" data-central-filter="na_loja" data-tip="Compras lançadas aguardando um ciclo. Clique para filtrar a fila."><span class="stat-icon blue">⌂</span><small>Na loja</small><strong data-count="${naLoja.length}">0</strong><em>aguardando saída</em></button>
+      <button class="stat-card clickable" data-central-filter="em_rota" data-tip="Entregas que saíram e ainda não foram concluídas. Clique para filtrar."><span class="stat-icon cyan">➜</span><small>Em rota</small><strong data-count="${emRota.length}">0</strong><em>em atendimento</em></button>
+      <button class="stat-card clickable" data-central-filter="alta" data-tip="Prioridades altas na loja ou em rota. Clique para filtrar."><span class="stat-icon yellow">★</span><small>Prioritárias</small><strong data-count="${prioritarias.length}">0</strong><em>exigem atenção</em></button>
+      <button class="stat-card clickable ${atrasadas.length ? 'danger-card' : ''}" data-central-filter="atrasada" data-tip="Entregas abertas há mais de 60 minutos. Clique para ver as ocorrências."><span class="stat-icon red">!</span><small>Atrasadas (&gt;60min)</small><strong data-count="${atrasadas.length}">0</strong><em>${atrasadas.length ? 'agir agora' : 'tudo em ordem'}</em></button>
     </div>
     <div class="stat-row">
-      <div class="stat-card" data-tip="Ciclos abertos agora, com veículo/entregador ocupados"><small>Ciclos ativos</small><strong data-count="${openCycles.length}">0</strong></div>
-      <div class="stat-card" data-tip="Voltaram e precisam ser entregues novamente"><small>Para reentrega</small><strong data-count="${reentrega.length}">0</strong></div>
-      <div class="stat-card" data-tip="Programadas para data/hora futura"><small>Agendadas</small><strong data-count="${agendadas.length}">0</strong></div>
-      <div class="stat-card" data-tip="Veículos com expediente aberto sem KM final"><small>KM pendente</small><strong data-count="${kmPendente}">0</strong></div>
+      <button class="stat-card clickable" data-central-action="close-cycle" data-tip="Ciclos abertos agora. Clique para finalizar um ciclo."><span class="stat-icon violet">↻</span><small>Ciclos ativos</small><strong data-count="${openCycles.length}">0</strong><em>veículos ocupados</em></button>
+      <button class="stat-card clickable" data-central-filter="reentrega" data-tip="Entregas que voltaram e precisam de nova tentativa."><span class="stat-icon orange">↺</span><small>Para reentrega</small><strong data-count="${reentrega.length}">0</strong><em>nova tentativa</em></button>
+      <button class="stat-card clickable" data-central-filter="programada" data-tip="Entregas programadas para uma data e hora futura."><span class="stat-icon green">◷</span><small>Agendadas</small><strong data-count="${agendadas.length}">0</strong><em>programadas</em></button>
+      <button class="stat-card clickable" data-central-action="km" data-tip="Expedientes sem KM final. Clique para registrar."><span class="stat-icon navy">⌁</span><small>KM pendente</small><strong data-count="${kmPendente}">0</strong><em>fechar expediente</em></button>
     </div>
 
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin:18px 0 22px">
-      <button class="btn-primary" id="qaNewDelivery">＋ Nova entrega</button>
-      <button class="btn-ghost" id="qaStartCycle">▶ Iniciar ciclo</button>
-      <button class="btn-ghost" id="qaCloseCycle">■ Finalizar ciclo</button>
-      <button class="btn-ghost" id="qaKm">⌁ Registrar KM</button>
+    <section class="operation-launcher">
+      <div class="section-heading"><div><span>COMANDOS RÁPIDOS</span><h2>Toda a operação em um só lugar</h2></div><div class="heading-signal"><i></i>Atualização automática</div></div>
+      <div class="action-grid">
+        <button class="action-card primary-action" id="qaNewDelivery"><span>＋</span><strong>Nova entrega</strong><small>Cadastrar uma compra</small></button>
+        <button class="action-card" id="qaStartCycle"><span>▶</span><strong>Iniciar ciclo</strong><small>Selecionar rota e equipe</small></button>
+        <button class="action-card" id="qaCloseCycle"><span>■</span><strong>Finalizar ciclo</strong><small>Resolver pendências</small></button>
+        <button class="action-card" id="qaKm"><span>⌁</span><strong>Registrar KM</strong><small>Início ou fechamento</small></button>
+        <button class="action-card" id="qaCost"><span>R$</span><strong>Lançar custo</strong><small>Despesa da operação</small></button>
+      </div>
+    </section>
+
+    <div class="operation-panels">
+      <section class="ops-panel">
+        <div class="panel-head"><div><span class="live-mini"></span><strong>Ciclos em andamento</strong></div><button class="text-action" id="panelStartCycle">＋ Novo ciclo</button></div>
+        ${openCycles.length ? openCycles.map((c) => `<div class="ops-line"><div><strong>${escapeHtml(vName(c.vehicleId))}</strong><small>${escapeHtml(dName(c.driverId))} · ${(c.deliveryIds || []).length} entrega(s)</small></div><button class="btn-ghost btn-small central-cycle-close" data-id="${c.id}">Finalizar</button></div>`).join('') : '<div class="panel-empty">Nenhum ciclo aberto agora.</div>'}
+      </section>
+      <section class="ops-panel">
+        <div class="panel-head"><div><span class="live-mini ${kmPendente ? 'warning' : ''}"></span><strong>Expedientes de KM</strong></div><button class="text-action" id="panelKmStart">＋ Iniciar</button></div>
+        ${pendingKmLogs.length ? pendingKmLogs.map((l) => `<div class="ops-line"><div><strong>${escapeHtml(vName(l.vehicleId))}</strong><small>KM inicial ${l.kmStart} · ${dateBR(l.shiftDate)}</small></div><button class="btn-ghost btn-small central-km-close" data-id="${l.id}">KM final</button></div>`).join('') : '<div class="panel-empty">Todos os expedientes estão fechados.</div>'}
+      </section>
     </div>
 
-    <h3 style="margin:0 0 10px;font-size:14px">Entregas na loja e em rota</h3>
+    <div class="queue-heading"><div><span>FILA OPERACIONAL</span><h2>Entregas que exigem acompanhamento</h2></div><label class="central-search">⌕<input id="centralQueueSearch" placeholder="Buscar compra, cupom, PDV, DOC ou cliente" /></label></div>
     ${await miniList([...naLoja, ...emRota])}
   `;
 }
@@ -84,14 +120,15 @@ export async function renderCentral() {
 async function miniList(rows) {
   if (!rows.length) return `<div class="empty-state"><strong>Nada por aqui agora</strong>As entregas na loja e em rota aparecem nesta lista.</div>`;
   const trs = rows.slice(0, 30).map((r) => `
-    <tr data-id="${r.id}" class="row-click">
+    <tr data-id="${r.id}" class="row-click" data-status="${r.status}" data-priority="${r.priority}" data-late="${((Date.now() - new Date(r.entryTime).getTime()) / 60000) > 60 ? 'true' : 'false'}" data-search="${escapeHtml([r.purchaseNumber, r.coupon, r.pdv, r.doc, r.clientName, r.street].join(' ').toLowerCase())}">
       <td><strong>#${r.purchaseNumber}</strong></td>
       <td>${escapeHtml(r.clientName || 'Sem nome')}<br><span style="color:var(--text-muted);font-size:11px">${escapeHtml(r.street || '')}</span></td>
+      <td><strong>${escapeHtml(r.coupon || '—')}</strong><br><span style="color:var(--text-muted);font-size:11px">PDV ${escapeHtml(r.pdv || '—')} · DOC ${escapeHtml(r.doc || '—')}</span></td>
       <td>${badge(r.status)}</td>
       <td>${r.priority === 'alta' ? '<span class="badge problema">Alta</span>' : '—'}</td>
       <td>${money(r.deliveryFee)}</td>
     </tr>`).join('');
-  return `<div class="table-wrap"><table><thead><tr><th>Compra</th><th>Cliente</th><th>Status</th><th>Prioridade</th><th>Taxa</th></tr></thead><tbody>${trs}</tbody></table></div>`;
+  return `<div class="table-wrap central-queue"><table><thead><tr><th>Compra</th><th>Cliente / endereço</th><th>Cupom / documento</th><th>Status</th><th>Prioridade</th><th>Taxa</th></tr></thead><tbody>${trs}</tbody></table><div class="queue-no-result hidden" id="queueNoResult">Nenhuma entrega corresponde a esse filtro.</div></div>`;
 }
 
 let _phraseTimer = null;
@@ -106,13 +143,49 @@ export function wireCentralEvents() {
   $('#qaNewDelivery')?.addEventListener('click', () => openDeliveryModal());
   $('#qaStartCycle')?.addEventListener('click', () => openStartCycleModal());
   $('#qaKm')?.addEventListener('click', () => openKmStartModal());
+  $('#qaCost')?.addEventListener('click', () => openCostModal());
+  $('#panelStartCycle')?.addEventListener('click', () => openStartCycleModal());
+  $('#panelKmStart')?.addEventListener('click', () => openKmStartModal());
   $('#qaCloseCycle')?.addEventListener('click', async () => {
-    const cycles = (await Cycles.all()).filter((c) => c.status === 'aberto' && !c.deletedAt);
+    const cycles = (await Cycles.all()).filter((c) => c.environment === getEnv() && c.status === 'aberto' && !c.deletedAt);
     if (!cycles.length) return toast('Não há ciclo aberto no momento.', 'error');
-    openCloseCycleModal(cycles[0]);
+    if (cycles.length === 1) return openCloseCycleModal(cycles[0]);
+    openCyclePicker(cycles);
   });
+  $$('.central-cycle-close').forEach((btn) => btn.addEventListener('click', async () => {
+    const cycle = await Cycles.get(btn.dataset.id);
+    if (cycle) openCloseCycleModal(cycle);
+  }));
+  $$('.central-km-close').forEach((btn) => btn.addEventListener('click', async () => {
+    const log = await OdometerLogs.get(btn.dataset.id);
+    if (log) openKmEndModal(log);
+  }));
+  $$('[data-central-action]').forEach((card) => card.addEventListener('click', async () => {
+    if (card.dataset.centralAction === 'km') {
+      const pending = (await OdometerLogs.all()).filter((k) => k.environment === getEnv() && k.kmEnd == null);
+      if (pending.length === 1) return openKmEndModal(pending[0]);
+      if (!pending.length) return openKmStartModal();
+      return openKmPicker(pending);
+    }
+    const cycles = (await Cycles.all()).filter((c) => c.environment === getEnv() && c.status === 'aberto' && !c.deletedAt);
+    if (!cycles.length) return toast('Não há ciclo aberto no momento.', 'error');
+    if (cycles.length === 1) return openCloseCycleModal(cycles[0]);
+    openCyclePicker(cycles);
+  }));
   $$('.alert-chip').forEach((chip) => chip.addEventListener('click', () => {
-    if (window.__orbitaGoToSearch) window.__orbitaGoToSearch(chip.dataset.query || '');
+    applyCentralFilter(chip.dataset.query || '');
+  }));
+
+  const queueSearch = $('#centralQueueSearch');
+  queueSearch?.addEventListener('input', () => applyCentralFilter(queueSearch.value));
+  $$('[data-central-filter]').forEach((card) => card.addEventListener('click', () => {
+    const active = card.classList.contains('filter-active');
+    $$('[data-central-filter]').forEach((item) => item.classList.remove('filter-active'));
+    const value = active ? '' : card.dataset.centralFilter;
+    if (!active) card.classList.add('filter-active');
+    if (queueSearch) queueSearch.value = '';
+    applyCentralFilter(value);
+    $('.queue-heading')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }));
 
   // frases motivacionais alternando sozinhas a cada 8s, sem recarregar o card inteiro
@@ -123,7 +196,7 @@ export function wireCentralEvents() {
     if (!el || !moodEl) { clearInterval(_phraseTimer); return; }
     el.style.opacity = '0';
     setTimeout(() => {
-      el.textContent = motivationalPhrase(moodEl.textContent.trim());
+      el.textContent = motivationalPhrase(Number(moodEl.dataset.score || 0));
       el.style.opacity = '1';
     }, 200);
   }, 8000);
@@ -137,28 +210,81 @@ export function wireCentralEvents() {
     setTimeout(() => img.classList.remove('waving'), 900);
   }, 6000);
 
-  // como todo mundo pode operar, sem nome fixado a saudação alterna
-  // entre os colaboradores cadastrados em vez de travar num nome só
+  // a saudação percorre automaticamente todos os colaboradores ativos
   clearInterval(_nameTimer);
-  if (!getOperatorName()) {
-    Collaborators.all().then((list) => {
-      const active = list.filter((c) => c.active !== false);
-      if (!active.length) return;
-      let i = 0;
-      const el = $('#greetName');
-      if (!el) return;
-      _nameTimer = setInterval(() => {
-        const other = $('#greetName');
-        if (!other) { clearInterval(_nameTimer); return; }
-        i = (i + 1) % active.length;
-        other.style.opacity = '0';
-        setTimeout(() => {
-          other.textContent = ', ' + active[i].name;
-          other.style.opacity = '1';
-        }, 200);
-      }, 5000);
-    });
-  }
+  Collaborators.all().then((list) => {
+    const active = list.filter((c) => c.active !== false);
+    if (!active.length) return;
+    const selectedIndex = active.findIndex((c) => c.name === getOperatorName());
+    let i = selectedIndex >= 0 ? selectedIndex : 0;
+    _nameTimer = setInterval(() => {
+      const other = $('#greetName');
+      if (!other) { clearInterval(_nameTimer); return; }
+      i = (i + 1) % active.length;
+      other.style.opacity = '0';
+      setTimeout(() => {
+        other.textContent = ', ' + active[i].name;
+        other.style.opacity = '1';
+      }, 220);
+    }, 5000);
+  });
+
+  const mascot = $('.mascot-frame.interactive');
+  const reactMascot = () => {
+    if (!mascot) return;
+    mascot.classList.remove('mascot-react');
+    void mascot.offsetWidth;
+    mascot.classList.add('mascot-react');
+    const phraseEl = $('.greeting-phrase');
+    if (phraseEl) phraseEl.textContent = motivationalPhrase(Number(mascot.dataset.score || 0));
+    setTimeout(() => mascot.classList.remove('mascot-react'), 1100);
+  };
+  mascot?.addEventListener('click', reactMascot);
+  mascot?.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); reactMascot(); } });
+}
+
+function applyCentralFilter(value) {
+  const q = String(value || '').trim().toLowerCase();
+  const rows = $$('.central-queue tbody tr');
+  let visible = 0;
+  rows.forEach((row) => {
+    const matches = !q
+      || (q === 'atrasada' && row.dataset.late === 'true')
+      || (q === 'alta' && row.dataset.priority === 'alta')
+      || row.dataset.status === q
+      || (row.dataset.search || '').includes(q);
+    row.classList.toggle('hidden', !matches);
+    if (matches) visible++;
+  });
+  $('#queueNoResult')?.classList.toggle('hidden', visible !== 0);
+}
+
+async function openCyclePicker(cycles) {
+  const vehicles = await Vehicles.all();
+  const drivers = await Drivers.all();
+  openModal({
+    title: 'Qual ciclo deseja finalizar?',
+    subtitle: 'Escolha o ciclo para iniciar a conferência das entregas pendentes.',
+    body: `<div class="picker-list">${cycles.map((c) => `<button class="picker-row" data-cycle-id="${c.id}"><strong>${escapeHtml(vehicles.find((v) => v.id === c.vehicleId)?.label || 'Veículo')}</strong><span>${escapeHtml(drivers.find((d) => d.id === c.driverId)?.name || 'Entregador')} · ${(c.deliveryIds || []).length} entrega(s)</span></button>`).join('')}</div>`,
+    actions: [{ label: 'Cancelar', kind: 'ghost', onClick: closeModal }],
+  });
+  $$('.picker-row[data-cycle-id]').forEach((btn) => btn.addEventListener('click', async () => {
+    const cycle = await Cycles.get(btn.dataset.cycleId);
+    if (cycle) openCloseCycleModal(cycle);
+  }));
+}
+
+async function openKmPicker(logs) {
+  const vehicles = await Vehicles.all();
+  openModal({
+    title: 'Qual expediente deseja fechar?',
+    body: `<div class="picker-list">${logs.map((l) => `<button class="picker-row" data-km-id="${l.id}"><strong>${escapeHtml(vehicles.find((v) => v.id === l.vehicleId)?.label || 'Veículo')}</strong><span>KM inicial ${l.kmStart} · ${dateBR(l.shiftDate)}</span></button>`).join('')}</div>`,
+    actions: [{ label: 'Cancelar', kind: 'ghost', onClick: closeModal }],
+  });
+  $$('.picker-row[data-km-id]').forEach((btn) => btn.addEventListener('click', async () => {
+    const log = await OdometerLogs.get(btn.dataset.kmId);
+    if (log) openKmEndModal(log);
+  }));
 }
 
 /* =========================================================
@@ -479,7 +605,7 @@ function openReagendarFlow(record) {
    CICLOS (seção 9)
    ========================================================= */
 export async function renderCycles() {
-  const cycles = (await Cycles.all()).filter((c) => !c.deletedAt).sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+  const cycles = (await Cycles.all()).filter((c) => c.environment === getEnv() && !c.deletedAt).sort((a, b) => b.startedAt.localeCompare(a.startedAt));
   if (!cycles.length) return `<div class="empty-state"><strong>Nenhum ciclo iniciado</strong>Use "Iniciar ciclo" na Central Operacional.</div>`;
 
   const vehicles = await Vehicles.all();
@@ -513,7 +639,7 @@ export function wireCyclesEvents() {
 
 export async function openStartCycleModal() {
   const env = getEnv();
-  const openCycles = (await Cycles.all()).filter((c) => c.status === 'aberto' && !c.deletedAt);
+  const openCycles = (await Cycles.all()).filter((c) => c.environment === env && c.status === 'aberto' && !c.deletedAt);
   const busyVehicles = new Set(openCycles.map((c) => c.vehicleId));
   const busyDrivers = new Set(openCycles.map((c) => c.driverId));
 
@@ -1026,7 +1152,17 @@ export function wireSearchEvents() {
    RELATÓRIOS (seção 14)
    ========================================================= */
 export async function renderReports() {
+  const today = new Date();
+  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+  const localISO = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   return `
+    <div class="report-period-card">
+      <div><span>PERÍODO DO RELATÓRIO</span><strong>Escolha as datas antes de gerar</strong></div>
+      <label>De<input type="date" id="reportStart" value="${localISO(monthStart)}" /></label>
+      <label>Até<input type="date" id="reportEnd" value="${localISO(today)}" /></label>
+      <button class="btn-ghost btn-small" id="reportTodayBtn">Hoje</button>
+      <button class="btn-ghost btn-small" id="reportMonthBtn">Mês atual</button>
+    </div>
     <div class="stat-row" style="grid-template-columns:1fr 1fr">
       <div class="stat-card">
         <small>Relatório gerencial</small>
@@ -1058,7 +1194,17 @@ export async function renderReports() {
   `;
 }
 
-async function buildExport(kind, env) {
+function readReportPeriod() {
+  return { start: $('#reportStart')?.value || '', end: $('#reportEnd')?.value || '' };
+}
+
+function inReportPeriod(value, period) {
+  if (!value || !period) return true;
+  const key = String(value).slice(0, 10);
+  return (!period.start || key >= period.start) && (!period.end || key <= period.end);
+}
+
+async function buildExport(kind, env, period = null) {
   const neighborhoods = await Neighborhoods.all();
   const vehicles = await Vehicles.all();
   const drivers = await Drivers.all();
@@ -1067,38 +1213,38 @@ async function buildExport(kind, env) {
   const dName = (id) => drivers.find((d) => d.id === id)?.name || '';
 
   if (kind === 'deliveries') {
-    const rows = await Deliveries.active(env);
+    const rows = (await Deliveries.active(env)).filter((r) => inReportPeriod(r.entryTime, period));
     const header = ['Compra','Chegada','Data entrada','PDV','DOC','Cupom','Cliente','Telefone','Endereço','Nº','Complemento','Referência','Bairro','Taxa','Tamanho','Viagens','Prioridade','Tipo','Agendado para','Status','Veículo','Entregador','Reembolsado','Observações'];
     const lines = rows.map((r) => [r.purchaseNumber, r.arrivalNumber, dateTimeBR(r.entryTime), r.pdv, r.doc, r.coupon, r.clientName, r.phone, r.street, r.houseNumber, r.complement, r.reference, nName(r.neighborhoodId), r.deliveryFee, r.size, r.tripCount, r.priority, r.type, r.scheduledAt ? dateTimeBR(r.scheduledAt) : '', STATUS_META[r.status]?.label, vName(r.vehicleId), dName(r.driverId), r.refunded ? 'Sim' : 'Não', r.notes]);
     return { name: 'entregas', header, lines };
   }
   if (kind === 'cycles') {
-    const rows = (await Cycles.all()).filter((c) => c.environment === env && !c.deletedAt);
+    const rows = (await Cycles.all()).filter((c) => c.environment === env && !c.deletedAt && inReportPeriod(c.startedAt, period));
     const header = ['Início', 'Fim', 'Veículo', 'Entregador', 'Status', 'Qtd. entregas'];
     const lines = rows.map((c) => [dateTimeBR(c.startedAt), c.closedAt ? dateTimeBR(c.closedAt) : '', vName(c.vehicleId), dName(c.driverId), c.status, (c.deliveryIds || []).length]);
     return { name: 'ciclos', header, lines };
   }
   if (kind === 'km') {
-    const rows = (await OdometerLogs.all()).filter((l) => l.environment === env);
+    const rows = (await OdometerLogs.all()).filter((l) => l.environment === env && inReportPeriod(l.shiftDate, period));
     const header = ['Data', 'Veículo', 'KM inicial', 'KM final', 'KM rodado'];
     const lines = rows.map((l) => [dateBR(l.shiftDate), vName(l.vehicleId), l.kmStart, l.kmEnd ?? '', l.kmEnd != null ? (l.kmEnd - l.kmStart).toFixed(1) : '']);
     return { name: 'quilometragem', header, lines };
   }
   if (kind === 'costs') {
     const categories = await CostCategories.all();
-    const rows = (await Costs.all()).filter((c) => c.environment === env && !c.deletedAt);
+    const rows = (await Costs.all()).filter((c) => c.environment === env && !c.deletedAt && inReportPeriod(c.date, period));
     const header = ['Data', 'Categoria', 'Veículo', 'Entregador', 'Valor', 'Observação'];
     const lines = rows.map((c) => [dateBR(c.date), categories.find((cat) => cat.id === c.categoryId)?.name || '', vName(c.vehicleId), dName(c.driverId), c.amount, c.note]);
     return { name: 'custos', header, lines };
   }
   if (kind === 'audit') {
-    const rows = await AuditLog.all();
+    const rows = (await AuditLog.all()).filter((e) => inReportPeriod(e.at, period));
     const header = ['Quando', 'Entidade', 'Ação', 'ID do registro'];
     const lines = rows.map((e) => [dateTimeBR(e.at), e.entityTable, e.action, e.entityId]);
     return { name: 'auditoria', header, lines };
   }
   if (kind === 'clients') {
-    const rows = await Deliveries.active(env);
+    const rows = (await Deliveries.active(env)).filter((r) => inReportPeriod(r.entryTime, period));
     const clientKey = (r) => (r.phone || r.clientName || '').trim().toLowerCase();
     const map = {};
     rows.forEach((r) => {
@@ -1113,10 +1259,19 @@ async function buildExport(kind, env) {
     return { name: 'clientes', header, lines };
   }
   if (kind === 'resumo') {
-    const rows = await Deliveries.active(env);
+    const rows = (await Deliveries.active(env)).filter((r) => inReportPeriod(r.entryTime, period));
     const finalized = rows.filter((r) => r.status === 'finalizada');
-    const financial = await computeFinancialSummary(env);
-    const cycles = (await Cycles.all()).filter((c) => c.environment === env && !c.deletedAt);
+    const countedFees = rows.filter((d) => d.status === 'finalizada' || (d.status === 'retirada_loja' && !d.refunded));
+    const periodCosts = (await Costs.all()).filter((c) => c.environment === env && !c.deletedAt && inReportPeriod(c.date, period));
+    const periodKm = (await OdometerLogs.all()).filter((l) => l.environment === env && l.kmEnd != null && inReportPeriod(l.shiftDate, period));
+    const financial = {
+      fees: countedFees.reduce((s,d) => s + Number(d.deliveryFee || 0), 0),
+      refunds: rows.filter((d) => d.refunded).reduce((s,d) => s + Number(d.deliveryFee || 0), 0),
+      costsTotal: periodCosts.reduce((s,c) => s + Number(c.amount || 0), 0),
+      kmTotal: periodKm.reduce((s,l) => s + (l.kmEnd - l.kmStart), 0),
+    };
+    financial.balance = financial.fees - financial.refunds - financial.costsTotal;
+    const cycles = (await Cycles.all()).filter((c) => c.environment === env && !c.deletedAt && inReportPeriod(c.startedAt, period));
     const clientKey = (r) => (r.phone || r.clientName || '').trim().toLowerCase();
     const clientCounts = {};
     rows.forEach((r) => { const k = clientKey(r); if (k) clientCounts[k] = (clientCounts[k] || 0) + 1; });
@@ -1144,20 +1299,20 @@ async function buildExport(kind, env) {
     return { name: 'resumo_executivo', header, lines };
   }
   if (kind === 'dias_semana') {
-    const rows = await Deliveries.active(env);
+    const rows = (await Deliveries.active(env)).filter((r) => inReportPeriod(r.entryTime, period));
     const names = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
     const counts = new Array(7).fill(0);
     rows.forEach((r) => { counts[new Date(r.entryTime).getDay()]++; });
     return { name: 'dias_semana', header: ['Dia da semana', 'Entregas'], lines: names.map((n, i) => [n, counts[i]]) };
   }
   if (kind === 'horarios_pico') {
-    const rows = await Deliveries.active(env);
+    const rows = (await Deliveries.active(env)).filter((r) => inReportPeriod(r.entryTime, period));
     const counts = new Array(24).fill(0);
     rows.forEach((r) => { counts[new Date(r.entryTime).getHours()]++; });
     return { name: 'horarios_pico', header: ['Faixa horária', 'Entregas'], lines: counts.map((c, h) => [`${String(h).padStart(2,'0')}:00–${String(h).padStart(2,'0')}:59`, c]) };
   }
   if (kind === 'status') {
-    const rows = await Deliveries.active(env);
+    const rows = (await Deliveries.active(env)).filter((r) => inReportPeriod(r.entryTime, period));
     return { name: 'status', header: ['Status', 'Quantidade'], lines: Object.entries(STATUS_META).map(([k, v]) => [v.label, rows.filter((r) => r.status === k).length]) };
   }
   if (kind === 'vehicles') {
@@ -1175,17 +1330,28 @@ async function buildExport(kind, env) {
 }
 
 export function wireReportsEvents() {
+  const setPeriod = (start, end) => { if ($('#reportStart')) $('#reportStart').value = start; if ($('#reportEnd')) $('#reportEnd').value = end; };
+  $('#reportTodayBtn')?.addEventListener('click', () => {
+    const d = new Date(); const iso = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    setPeriod(iso, iso);
+  });
+  $('#reportMonthBtn')?.addEventListener('click', () => {
+    const d = new Date(); const end = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    setPeriod(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`, end);
+  });
   $$('.export-btn').forEach((btn) => btn.addEventListener('click', async () => {
     const env = getEnv();
-    const { name, header, lines } = await buildExport(btn.dataset.kind, env);
+    const period = readReportPeriod();
+    const { name, header, lines } = await buildExport(btn.dataset.kind, env, period);
     downloadCSV(`orbita-${name}-${env}-${new Date().toISOString().slice(0,10)}.csv`, [header, ...lines]);
     toast('Arquivo CSV gerado.', 'success');
   }));
 
   $('#exportAllBtn')?.addEventListener('click', async () => {
     const env = getEnv();
+    const period = readReportPeriod();
     for (const kind of ['resumo', 'deliveries', 'cycles', 'km', 'costs', 'audit', 'clients', 'dias_semana', 'horarios_pico', 'status', 'vehicles', 'collaborators', 'neighborhoods']) {
-      const { name, header, lines } = await buildExport(kind, env);
+      const { name, header, lines } = await buildExport(kind, env, period);
       downloadCSV(`orbita-${name}-${env}-${new Date().toISOString().slice(0,10)}.csv`, [header, ...lines]);
       await new Promise((r) => setTimeout(r, 250)); // evita o navegador bloquear downloads múltiplos
     }
@@ -1194,9 +1360,20 @@ export function wireReportsEvents() {
 
   $('#printReportBtn')?.addEventListener('click', async () => {
     const env = getEnv();
-    const rows = await Deliveries.active(env);
-    const financial = await computeFinancialSummary(env);
-    const cycles = (await Cycles.all()).filter((c) => c.environment === env && !c.deletedAt);
+    const period = readReportPeriod();
+    if (period.start && period.end && period.start > period.end) return toast('A data inicial não pode ser maior que a final.', 'error');
+    const rows = (await Deliveries.active(env)).filter((r) => inReportPeriod(r.entryTime, period));
+    const allCosts = (await Costs.all()).filter((c) => c.environment === env && !c.deletedAt && inReportPeriod(c.date, period));
+    const allKm = (await OdometerLogs.all()).filter((l) => l.environment === env && l.kmEnd != null && inReportPeriod(l.shiftDate, period));
+    const finalizedForFinance = rows.filter((d) => d.status === 'finalizada' || (d.status === 'retirada_loja' && !d.refunded));
+    const financial = {
+      fees: finalizedForFinance.reduce((s,d) => s + Number(d.deliveryFee || 0), 0),
+      refunds: rows.filter((d) => d.refunded).reduce((s,d) => s + Number(d.deliveryFee || 0), 0),
+      costsTotal: allCosts.reduce((s,c) => s + Number(c.amount || 0), 0),
+      kmTotal: allKm.reduce((s,l) => s + (l.kmEnd - l.kmStart), 0),
+    };
+    financial.balance = financial.fees - financial.refunds - financial.costsTotal;
+    const cycles = (await Cycles.all()).filter((c) => c.environment === env && !c.deletedAt && inReportPeriod(c.startedAt, period));
     const drivers = await Drivers.all();
     const finalized = rows.filter((r) => r.status === 'finalizada');
     const byDriver = {};
@@ -1210,8 +1387,7 @@ export function wireReportsEvents() {
 
     const area = $('#printArea');
     area.innerHTML = `
-      <h2>Relatório gerencial — ${env === 'treino' ? 'Treinamento' : 'Operação Real'}</h2>
-      <p>Gerado em ${dateTimeBR(new Date().toISOString())}</p>
+      <div class="print-report-head"><img src="assets/brand/nilo-logo.png" alt="Nilo" /><div><span>ÓRBITA · CONTROLE DE ENTREGAS</span><h2>Relatório gerencial</h2><p>${env === 'treino' ? 'Ambiente de treinamento' : 'Operação Real'} · Período: ${period.start ? dateBR(period.start + 'T12:00:00') : 'início'} a ${period.end ? dateBR(period.end + 'T12:00:00') : 'hoje'}</p></div><strong>${dateTimeBR(new Date().toISOString())}</strong></div>
       <h3>Indicadores gerais</h3>
       <table border="1" cellpadding="6" style="border-collapse:collapse;width:100%;margin-bottom:16px">
         <tr><td>Total de entregas</td><td>${rows.length}</td></tr>
@@ -1237,6 +1413,7 @@ export function wireReportsEvents() {
         <tr><th>Entregador</th><th>Entregas finalizadas</th></tr>
         ${rankingRows || '<tr><td colspan="2">Sem dados suficientes</td></tr>'}
       </table>`;    area.classList.remove('hidden');
+    window.addEventListener('afterprint', () => area.classList.add('hidden'), { once: true });
     window.print();
   });
 }
@@ -1307,7 +1484,7 @@ async function registryList(store, field, storeName, showOrder = false) {
     <tr data-id="${r.id}" data-store="${storeName}">
       <td>${escapeHtml(r[field])}${showOrder ? ` <span style="color:var(--text-muted);font-size:11px">(ordem ${r.routeOrder ?? 0})</span>` : ''}</td>
       <td>${r.active === false ? '<span class="badge problema">Inativo</span>' : '<span class="badge entregue">Ativo</span>'}</td>
-      <td><button class="btn-ghost btn-small registry-toggle">${r.active === false ? 'Reativar' : 'Desativar'}</button></td>
+      <td><div class="registry-actions"><button class="btn-ghost btn-small registry-edit">Editar</button><button class="btn-ghost btn-small registry-toggle">${r.active === false ? 'Reativar' : 'Desativar'}</button></div></td>
     </tr>`).join('');
   return `<div class="table-wrap"><table><thead><tr><th>Nome</th><th>Status</th><th></th></tr></thead><tbody>${trs}</tbody></table></div>`;
 }
@@ -1320,7 +1497,7 @@ async function collaboratorList() {
       <td><strong>${escapeHtml(c.name)}</strong></td>
       <td>${escapeHtml(c.role || 'Operador')}</td>
       <td>${c.active === false ? '<span class="badge problema">Inativo</span>' : '<span class="badge entregue">Ativo</span>'}</td>
-      <td><button class="btn-ghost btn-small registry-toggle">${c.active === false ? 'Reativar' : 'Desativar'}</button></td>
+      <td><div class="registry-actions"><button class="btn-ghost btn-small registry-edit">Editar</button><button class="btn-ghost btn-small registry-toggle">${c.active === false ? 'Reativar' : 'Desativar'}</button></div></td>
     </tr>`).join('');
   return `<div class="table-wrap"><table><thead><tr><th>Nome</th><th>Função</th><th>Status</th><th></th></tr></thead><tbody>${trs}</tbody></table></div>`;
 }
@@ -1336,7 +1513,7 @@ async function vehicleList() {
       <td>${escapeHtml(v.plate || '—')}</td>
       <td>${escapeHtml(v.year || '—')}</td>
       <td>${v.active === false ? '<span class="badge problema">Inativo</span>' : '<span class="badge entregue">Ativo</span>'}</td>
-      <td><button class="btn-ghost btn-small registry-toggle">${v.active === false ? 'Reativar' : 'Desativar'}</button></td>
+      <td><div class="registry-actions"><button class="btn-ghost btn-small registry-edit">Editar</button><button class="btn-ghost btn-small registry-toggle">${v.active === false ? 'Reativar' : 'Desativar'}</button></div></td>
     </tr>`).join('');
   return `<div class="table-wrap"><table><thead><tr><th>Apelido</th><th>Fabricante</th><th>Modelo</th><th>Placa</th><th>Ano</th><th>Status</th><th></th></tr></thead><tbody>${trs}</tbody></table></div>`;
 }
@@ -1347,6 +1524,12 @@ const REGISTRY_FIELD = { vehicles: 'label', drivers: 'name', collaborators: 'nam
 export function wireRegistryEvents(currentTab, onTabChange) {
   $$('.registry-tab').forEach((btn) => btn.addEventListener('click', () => onTabChange(btn.dataset.tab)));
   $('#registryAddBtn')?.addEventListener('click', () => openRegistryAddModal(currentTab));
+  $$('.registry-edit').forEach((btn) => btn.addEventListener('click', async (e) => {
+    const tr = e.target.closest('tr');
+    const store = REGISTRY_STORES[tr.dataset.store];
+    const rec = await store.get(tr.dataset.id);
+    if (rec) openRegistryAddModal(currentTab, rec);
+  }));
   $$('.registry-toggle').forEach((btn) => btn.addEventListener('click', async (e) => {
     const tr = e.target.closest('tr');
     const store = REGISTRY_STORES[tr.dataset.store];
@@ -1358,18 +1541,19 @@ export function wireRegistryEvents(currentTab, onTabChange) {
   }));
 }
 
-function openRegistryAddModal(tab) {
-  if (tab === 'vehicles') return openVehicleAddModal();
-  if (tab === 'collaborators') return openCollaboratorAddModal();
+function openRegistryAddModal(tab, record = null) {
+  if (tab === 'vehicles') return openVehicleAddModal(record);
+  if (tab === 'collaborators') return openCollaboratorAddModal(record);
   const field = REGISTRY_FIELD[tab];
   const store = REGISTRY_STORES[tab];
   const isNeighborhood = tab === 'neighborhoods';
   openModal({
-    title: 'Novo cadastro',
+    title: record ? 'Editar cadastro' : 'Novo cadastro',
+    subtitle: record ? 'As alterações serão registradas automaticamente na auditoria.' : '',
     body: `
       <form id="registryForm">
-        <label>Nome *<input name="${field}" required /></label>
-        ${isNeighborhood ? '<label>Ordem de rota<input name="routeOrder" type="number" value="0" /></label>' : ''}
+        <label>Nome *<input name="${field}" required value="${escapeHtml(record?.[field] || '')}" /></label>
+        ${isNeighborhood ? `<label>Ordem de rota<input name="routeOrder" type="number" value="${record?.routeOrder ?? 0}" /></label>` : ''}
       </form>`,
     actions: [
       { label: 'Cancelar', kind: 'ghost', onClick: closeModal },
@@ -1377,10 +1561,11 @@ function openRegistryAddModal(tab) {
         const form = $('#registryForm');
         if (!form.reportValidity()) return;
         const fd = Object.fromEntries(new FormData(form).entries());
-        const payload = { [field]: fd[field].trim(), active: true };
+        const payload = { [field]: fd[field].trim(), active: record?.active ?? true };
         if (isNeighborhood) payload.routeOrder = Number(fd.routeOrder || 0);
-        await store.add(payload);
-        toast('Cadastrado.', 'success');
+        if (record) await store.update(record.id, payload);
+        else await store.add(payload);
+        toast(record ? 'Cadastro atualizado.' : 'Cadastrado.', 'success');
         closeModal();
         refreshApp();
       }},
@@ -1388,20 +1573,17 @@ function openRegistryAddModal(tab) {
   });
 }
 
-function openCollaboratorAddModal() {
+function openCollaboratorAddModal(record = null) {
+  const roles = ['Operador', 'Líder', 'Agente de Prevenção', 'Administrador', 'Outro'];
   openModal({
-    title: 'Novo colaborador',
-    subtitle: 'Qualquer nome cadastrado aqui aparece no seletor "Quem está operando?" da saudação.',
+    title: record ? 'Editar colaborador' : 'Novo colaborador',
+    subtitle: record ? 'O nome atualizado entrará automaticamente no rodízio da saudação.' : 'Qualquer nome cadastrado aqui aparece automaticamente na saudação.',
     body: `
       <form id="collabForm">
-        <label>Nome *<input name="name" required /></label>
+        <label>Nome *<input name="name" required value="${escapeHtml(record?.name || '')}" /></label>
         <label>Função
           <select name="role">
-            <option value="Operador">Operador</option>
-            <option value="Líder">Líder</option>
-            <option value="Agente de Prevenção">Agente de Prevenção</option>
-            <option value="Administrador">Administrador</option>
-            <option value="Outro">Outro</option>
+            ${roles.map((role) => `<option value="${role}" ${record?.role === role ? 'selected' : ''}>${role}</option>`).join('')}
           </select>
         </label>
       </form>`,
@@ -1411,8 +1593,10 @@ function openCollaboratorAddModal() {
         const form = $('#collabForm');
         if (!form.reportValidity()) return;
         const fd = Object.fromEntries(new FormData(form).entries());
-        await Collaborators.add({ name: fd.name.trim(), role: fd.role, active: true });
-        toast('Colaborador cadastrado.', 'success');
+        const payload = { name: fd.name.trim(), role: fd.role, active: record?.active ?? true };
+        if (record) await Collaborators.update(record.id, payload);
+        else await Collaborators.add(payload);
+        toast(record ? 'Colaborador atualizado.' : 'Colaborador cadastrado.', 'success');
         closeModal();
         refreshApp();
       }},
@@ -1420,24 +1604,26 @@ function openCollaboratorAddModal() {
   });
 }
 
-function openVehicleAddModal() {
+function openVehicleAddModal(record = null) {
   const years = Array.from({ length: 36 }, (_, i) => new Date().getFullYear() + 1 - i);
+  const types = [['carro','Carro'],['moto','Moto'],['van','Van/Furgão'],['outro','Outro']];
   openModal({
-    title: 'Novo veículo',
+    title: record ? 'Editar veículo' : 'Novo veículo',
+    subtitle: record ? 'Você pode alterar qualquer campo sem perder o histórico deste veículo.' : '',
     body: `
       <form id="vehicleForm">
-        <label>Apelido (como aparece nas listas) *<input name="label" required placeholder="Ex: Fiorino 1" /></label>
+        <label>Apelido (como aparece nas listas) *<input name="label" required placeholder="Ex: Fiorino 1" value="${escapeHtml(record?.label || '')}" /></label>
         <div class="field-row">
-          <label>Fabricante<input name="brand" placeholder="Ex: Fiat" /></label>
-          <label>Modelo<input name="model" placeholder="Ex: Fiorino Furgão" /></label>
+          <label>Fabricante<input name="brand" placeholder="Ex: Fiat" value="${escapeHtml(record?.brand || '')}" /></label>
+          <label>Modelo<input name="model" placeholder="Ex: Fiorino Furgão" value="${escapeHtml(record?.model || '')}" /></label>
         </div>
         <div class="field-row">
-          <label>Placa<input name="plate" placeholder="ABC-1D23" style="text-transform:uppercase" /></label>
-          <label>Ano de fabricação<select name="year"><option value="">—</option>${years.map((y) => `<option value="${y}">${y}</option>`).join('')}</select></label>
+          <label>Placa<input name="plate" placeholder="ABC-1D23" style="text-transform:uppercase" value="${escapeHtml(record?.plate || '')}" /></label>
+          <label>Ano de fabricação<select name="year"><option value="">—</option>${years.map((y) => `<option value="${y}" ${String(record?.year || '') === String(y) ? 'selected' : ''}>${y}</option>`).join('')}</select></label>
         </div>
         <div class="field-row">
-          <label>Tipo<select name="type"><option value="carro">Carro</option><option value="moto">Moto</option><option value="van">Van/Furgão</option><option value="outro">Outro</option></select></label>
-          <label>Capacidade (kg)<input name="capacity" type="number" min="0" placeholder="Opcional" /></label>
+          <label>Tipo<select name="type">${types.map(([value,label]) => `<option value="${value}" ${record?.type === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label>
+          <label>Capacidade (kg)<input name="capacity" type="number" min="0" placeholder="Opcional" value="${record?.capacity ?? ''}" /></label>
         </div>
       </form>`,
     actions: [
@@ -1446,12 +1632,14 @@ function openVehicleAddModal() {
         const form = $('#vehicleForm');
         if (!form.reportValidity()) return;
         const fd = Object.fromEntries(new FormData(form).entries());
-        await Vehicles.add({
+        const payload = {
           label: fd.label.trim(), brand: fd.brand?.trim() || '', model: fd.model?.trim() || '',
           plate: fd.plate?.trim().toUpperCase() || '', year: fd.year || '', type: fd.type, capacity: fd.capacity ? Number(fd.capacity) : null,
-          active: true,
-        });
-        toast('Veículo cadastrado.', 'success');
+          active: record?.active ?? true,
+        };
+        if (record) await Vehicles.update(record.id, payload);
+        else await Vehicles.add(payload);
+        toast(record ? 'Veículo atualizado.' : 'Veículo cadastrado.', 'success');
         closeModal();
         refreshApp();
       }},
