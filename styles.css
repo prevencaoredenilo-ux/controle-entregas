@@ -259,13 +259,16 @@ tr:last-child td { border-bottom: none; }
   box-shadow: 0 6px 18px rgba(11,42,74,.18);
 }
 .greeting-title { color: #fff; font-weight: 800; font-size: 18px; }
-.greeting-phrase { color: var(--accent); font-weight: 700; font-size: 13px; margin-top: 3px; }
+.greeting-title #greetName { transition: opacity .2s ease; display: inline-block; }
+.greeting-phrase { color: var(--accent); font-weight: 700; font-size: 13px; margin-top: 3px; transition: opacity .2s ease; }
 
 .alert-strip { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
 .alert-chip {
   background: #fff3cd; color: #8a5c14; border: 1px solid #f0d78a;
   padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 700;
+  cursor: pointer; transition: transform .12s ease, background .12s ease;
 }
+.alert-chip:hover { background: #ffe9a8; transform: translateY(-1px); }
 
 .mascot-frame { position: relative; width: 64px; height: 64px; flex-shrink: 0; }
 .mascot-frame img {
@@ -281,6 +284,13 @@ tr:last-child td { border-bottom: none; }
   box-shadow: 0 2px 5px rgba(0,0,0,.2);
 }
 @keyframes mascot-breathe { 0%,100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-4px) scale(1.02); } }
+.mascot-frame img.waving { animation: mascot-wave .9s ease; }
+@keyframes mascot-wave { 0%,100% { transform: rotate(0deg); } 20% { transform: rotate(-8deg); } 40% { transform: rotate(7deg); } 60% { transform: rotate(-6deg); } 80% { transform: rotate(4deg); } }
+
+.truck-lane { position: relative; width: 90px; height: 28px; overflow: hidden; flex-shrink: 0; display: none; }
+@media (min-width: 720px) { .truck-lane { display: block; } }
+.truck-emoji { position: absolute; font-size: 22px; left: -30px; animation: truck-drive 5s linear infinite; }
+@keyframes truck-drive { from { left: -30px; } to { left: 100px; } }
 
 /* cards animados ao entrar + leve elevação no hover */
 .stat-card { transition: transform .15s ease, box-shadow .15s ease; }

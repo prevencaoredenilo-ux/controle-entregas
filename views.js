@@ -35,25 +35,26 @@ export async function renderCentral() {
   const operatorName = getOperatorName();
 
   const alerts = [];
-  if (atrasadas.length) alerts.push(`⚠️ ${atrasadas.length} entrega(s) atrasada(s) há mais de 60 min`);
-  if (prioritarias.length) alerts.push(`⭐ ${prioritarias.length} entrega(s) prioritária(s) aguardando`);
-  if (kmPendente) alerts.push(`⌁ ${kmPendente} veículo(s) sem KM final registrado`);
-  if (reentrega.length) alerts.push(`↻ ${reentrega.length} entrega(s) aguardando reentrega`);
+  if (atrasadas.length) alerts.push({ text: `⚠️ ${atrasadas.length} entrega(s) atrasada(s) há mais de 60 min`, query: 'na_loja' });
+  if (prioritarias.length) alerts.push({ text: `⭐ ${prioritarias.length} entrega(s) prioritária(s) aguardando`, query: 'alta' });
+  if (kmPendente) alerts.push({ text: `⌁ ${kmPendente} veículo(s) sem KM final registrado`, query: '' });
+  if (reentrega.length) alerts.push({ text: `↻ ${reentrega.length} entrega(s) aguardando reentrega`, query: 'reentrega' });
 
   return `
     <div class="greeting-card">
       <div class="mascot-frame">
-        <img src="assets/brand/mascote.png" alt="Mascote Nilo" />
+        <img src="assets/brand/mascote.png" alt="Mascote Nilo" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'mascot-fallback',textContent:'🧑\u200d🌾'}))" />
         <div class="mascot-mood" id="mascotMood">${mood}</div>
       </div>
       <div style="flex:1">
-        <div class="greeting-title">${greet}${operatorName ? ', ' + escapeHtml(operatorName) : ''}! 👋</div>
+        <div class="greeting-title">${greet}<span id="greetName">${operatorName ? ', ' + escapeHtml(operatorName) : ''}</span>! 👋</div>
         <div class="greeting-phrase">${phrase}</div>
         <div style="color:var(--text-muted);font-size:12px;margin-top:2px">${env === 'treino' ? '🎓 Modo Treinamento — nada aqui entra no histórico oficial.' : 'Operação Real'}</div>
       </div>
+      <div class="truck-lane" aria-hidden="true"><span class="truck-emoji">🚚</span></div>
     </div>
 
-    ${alerts.length ? `<div class="alert-strip">${alerts.map((a) => `<span class="alert-chip">${a}</span>`).join('')}</div>` : ''}
+    ${alerts.length ? `<div class="alert-strip">${alerts.map((a) => `<button type="button" class="alert-chip" data-query="${escapeHtml(a.query)}">${a.text}</button>`).join('')}</div>` : ''}
 
     <div class="stat-row">
       <div class="stat-card" data-tip="Compras já lançadas, aguardando formar um ciclo de saída"><small>Na loja</small><strong data-count="${naLoja.length}">0</strong></div>
@@ -93,6 +94,10 @@ async function miniList(rows) {
   return `<div class="table-wrap"><table><thead><tr><th>Compra</th><th>Cliente</th><th>Status</th><th>Prioridade</th><th>Taxa</th></tr></thead><tbody>${trs}</tbody></table></div>`;
 }
 
+let _phraseTimer = null;
+let _waveTimer = null;
+let _nameTimer = null;
+
 export function wireCentralEvents() {
   $$('.row-click').forEach((tr) => tr.addEventListener('click', async () => {
     const rec = await Deliveries.get(tr.dataset.id);
@@ -106,6 +111,54 @@ export function wireCentralEvents() {
     if (!cycles.length) return toast('Não há ciclo aberto no momento.', 'error');
     openCloseCycleModal(cycles[0]);
   });
+  $$('.alert-chip').forEach((chip) => chip.addEventListener('click', () => {
+    if (window.__orbitaGoToSearch) window.__orbitaGoToSearch(chip.dataset.query || '');
+  }));
+
+  // frases motivacionais alternando sozinhas a cada 8s, sem recarregar o card inteiro
+  clearInterval(_phraseTimer);
+  _phraseTimer = setInterval(() => {
+    const el = $('.greeting-phrase');
+    const moodEl = $('#mascotMood');
+    if (!el || !moodEl) { clearInterval(_phraseTimer); return; }
+    el.style.opacity = '0';
+    setTimeout(() => {
+      el.textContent = motivationalPhrase(moodEl.textContent.trim());
+      el.style.opacity = '1';
+    }, 200);
+  }, 8000);
+
+  // mascote acena de tempos em tempos, sem ficar repetitivo demais
+  clearInterval(_waveTimer);
+  _waveTimer = setInterval(() => {
+    const img = $('.mascot-frame img');
+    if (!img) { clearInterval(_waveTimer); return; }
+    img.classList.add('waving');
+    setTimeout(() => img.classList.remove('waving'), 900);
+  }, 6000);
+
+  // como todo mundo pode operar, sem nome fixado a saudação alterna
+  // entre os colaboradores cadastrados em vez de travar num nome só
+  clearInterval(_nameTimer);
+  if (!getOperatorName()) {
+    Collaborators.all().then((list) => {
+      const active = list.filter((c) => c.active !== false);
+      if (!active.length) return;
+      let i = 0;
+      const el = $('#greetName');
+      if (!el) return;
+      _nameTimer = setInterval(() => {
+        const other = $('#greetName');
+        if (!other) { clearInterval(_nameTimer); return; }
+        i = (i + 1) % active.length;
+        other.style.opacity = '0';
+        setTimeout(() => {
+          other.textContent = ', ' + active[i].name;
+          other.style.opacity = '1';
+        }, 200);
+      }, 5000);
+    });
+  }
 }
 
 /* =========================================================
@@ -785,6 +838,19 @@ async function openCostModal() {
   });
 }
 
+function byWeekdayCountOccurrences(rows, weekday) {
+  const datesSeen = new Set();
+  let total = 0;
+  rows.forEach((r) => {
+    const d = new Date(r.entryTime);
+    if (d.getDay() === weekday) {
+      total++;
+      datesSeen.add(d.toISOString().slice(0, 10));
+    }
+  });
+  return { total, occurrences: datesSeen.size };
+}
+
 /* =========================================================
    DASHBOARD (seção 14) — métricas, rankings e gráficos
    ========================================================= */
@@ -835,6 +901,29 @@ export async function renderDashboard() {
   const statusCounts = statusKeys.map((k) => rows.filter((r) => r.status === k).length);
   const statusLabels = statusKeys.map((k) => STATUS_META[k].label);
 
+  // clientes recorrentes (por telefone, quando existe; senão por nome)
+  const clientKey = (r) => (r.phone || r.clientName || '').trim().toLowerCase();
+  const clientCounts = {};
+  rows.forEach((r) => { const k = clientKey(r); if (k) clientCounts[k] = (clientCounts[k] || 0) + 1; });
+  const recurringClients = Object.values(clientCounts).filter((c) => c > 1).length;
+  const uniqueClients = Object.keys(clientCounts).length;
+  const topClients = Object.entries(clientCounts).sort((a, b) => b[1] - a[1]).slice(0, 5)
+    .map(([key, count]) => {
+      const sample = rows.find((r) => clientKey(r) === key);
+      return [sample?.clientName || sample?.phone || 'Cliente sem nome', count];
+    });
+
+  // horário de pico (hora do dia com mais entregas)
+  const byHour = new Array(24).fill(0);
+  rows.forEach((r) => { byHour[new Date(r.entryTime).getHours()]++; });
+  const peakHour = byHour.indexOf(Math.max(...byHour));
+
+  // previsão simples: média histórica do mesmo dia da semana (estimativa, não é IA preditiva)
+  const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowWeekday = tomorrow.getDay();
+  const sameWeekdayCount = byWeekdayCountOccurrences(rows, tomorrowWeekday);
+  const forecastTomorrow = sameWeekdayCount.occurrences ? (sameWeekdayCount.total / sameWeekdayCount.occurrences).toFixed(1) : null;
+
   const rankTable = (title, data, tip) => `
     <div class="stat-card" data-tip="${tip}">
       <small>${title}</small>
@@ -865,6 +954,20 @@ export async function renderDashboard() {
     <h3 style="font-size:14px;margin:22px 0 10px">Distribuição por status</h3>
     <div class="stat-card" data-tip="Quantidade de entregas em cada status atual">
       ${barChartSVG({ labels: statusLabels, values: statusCounts, color: 'var(--accent)' })}
+    </div>
+
+    <h3 style="font-size:14px;margin:22px 0 10px">Clientes e previsão</h3>
+    <div class="stat-row">
+      <div class="stat-card" data-tip="Clientes identificados por telefone ou nome com mais de uma entrega"><small>Clientes recorrentes</small><strong data-count="${recurringClients}">0</strong></div>
+      <div class="stat-card" data-tip="Total de clientes distintos identificados"><small>Clientes únicos</small><strong data-count="${uniqueClients}">0</strong></div>
+      <div class="stat-card" data-tip="Hora do dia com maior volume histórico de entregas"><small>Horário de pico</small><strong>${String(peakHour).padStart(2,'0')}h</strong></div>
+      <div class="stat-card" data-tip="Estimativa simples: média histórica de entregas nesse mesmo dia da semana. Não é uma previsão estatística avançada."><small>Estimativa p/ amanhã</small><strong>${forecastTomorrow ?? '—'}</strong></div>
+    </div>
+    <div class="stat-card" style="margin-bottom:16px" data-tip="Clientes com mais entregas registradas">
+      <small>Clientes mais recorrentes</small>
+      <table style="width:100%;margin-top:8px;font-size:12.5px">
+        ${topClients.length ? topClients.map(([name, count]) => `<tr><td style="padding:3px 0">${escapeHtml(name)}</td><td style="text-align:right;font-weight:800">${count}x</td></tr>`).join('') : '<tr><td style="color:var(--text-muted)">Sem dados suficientes</td></tr>'}
+      </table>
     </div>
 
     <h3 style="font-size:14px;margin:22px 0 10px">Rankings</h3>
@@ -933,12 +1036,20 @@ export async function renderReports() {
         <small>Relatório analítico</small>
         <p style="font-size:12.5px;color:var(--text-muted);margin:8px 0">Um arquivo CSV por área — todos abrem direto no Excel.</p>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn-ghost btn-small export-btn" data-kind="resumo">Resumo executivo</button>
           <button class="btn-ghost btn-small export-btn" data-kind="deliveries">Entregas</button>
           <button class="btn-ghost btn-small export-btn" data-kind="cycles">Ciclos</button>
           <button class="btn-ghost btn-small export-btn" data-kind="km">Quilometragem</button>
           <button class="btn-ghost btn-small export-btn" data-kind="costs">Custos</button>
           <button class="btn-ghost btn-small export-btn" data-kind="audit">Auditoria</button>
-          <button class="btn-primary btn-small" id="exportAllBtn">⇩ Exportar tudo</button>
+          <button class="btn-ghost btn-small export-btn" data-kind="clients">Clientes</button>
+          <button class="btn-ghost btn-small export-btn" data-kind="dias_semana">Dias da semana</button>
+          <button class="btn-ghost btn-small export-btn" data-kind="horarios_pico">Horários de pico</button>
+          <button class="btn-ghost btn-small export-btn" data-kind="status">Status</button>
+          <button class="btn-ghost btn-small export-btn" data-kind="vehicles">Veículos</button>
+          <button class="btn-ghost btn-small export-btn" data-kind="collaborators">Colaboradores</button>
+          <button class="btn-ghost btn-small export-btn" data-kind="neighborhoods">Bairros</button>
+          <button class="btn-primary btn-small" id="exportAllBtn">⇩ Exportar tudo (13 arquivos)</button>
         </div>
       </div>
     </div>
@@ -985,6 +1096,81 @@ async function buildExport(kind, env) {
     const lines = rows.map((e) => [dateTimeBR(e.at), e.entityTable, e.action, e.entityId]);
     return { name: 'auditoria', header, lines };
   }
+  if (kind === 'clients') {
+    const rows = await Deliveries.active(env);
+    const clientKey = (r) => (r.phone || r.clientName || '').trim().toLowerCase();
+    const map = {};
+    rows.forEach((r) => {
+      const k = clientKey(r);
+      if (!k) return;
+      if (!map[k]) map[k] = { name: r.clientName || '', phone: r.phone || '', count: 0, lastNeighborhood: '' };
+      map[k].count++;
+      map[k].lastNeighborhood = nName(r.neighborhoodId);
+    });
+    const header = ['Cliente', 'Telefone', 'Qtd. de entregas', 'Recorrente?', 'Último bairro'];
+    const lines = Object.values(map).sort((a, b) => b.count - a.count).map((c) => [c.name, c.phone, c.count, c.count > 1 ? 'Sim' : 'Não', c.lastNeighborhood]);
+    return { name: 'clientes', header, lines };
+  }
+  if (kind === 'resumo') {
+    const rows = await Deliveries.active(env);
+    const finalized = rows.filter((r) => r.status === 'finalizada');
+    const financial = await computeFinancialSummary(env);
+    const cycles = (await Cycles.all()).filter((c) => c.environment === env && !c.deletedAt);
+    const clientKey = (r) => (r.phone || r.clientName || '').trim().toLowerCase();
+    const clientCounts = {};
+    rows.forEach((r) => { const k = clientKey(r); if (k) clientCounts[k] = (clientCounts[k] || 0) + 1; });
+    const recurring = Object.values(clientCounts).filter((c) => c > 1).length;
+    const header = ['Indicador', 'Valor'];
+    const lines = [
+      ['Ambiente', env === 'treino' ? 'Treinamento' : 'Operação real'],
+      ['Gerado em', dateTimeBR(new Date().toISOString())],
+      ['Total de entregas', rows.length],
+      ['Entregues no cliente', finalized.length],
+      ['Em rota', rows.filter((r) => r.status === 'em_rota').length],
+      ['Na loja', rows.filter((r) => r.status === 'na_loja').length],
+      ['Retorno/Reentrega', rows.filter((r) => ['retorno', 'reentrega'].includes(r.status)).length],
+      ['Retiradas na loja', rows.filter((r) => r.status === 'retirada_loja').length],
+      ['Canceladas', rows.filter((r) => r.status === 'cancelada').length],
+      ['Taxa de sucesso %', rows.length ? Math.round((finalized.length / rows.length) * 100) : 0],
+      ['Clientes recorrentes identificados', recurring],
+      ['Total de taxas', financial.fees],
+      ['Reembolsos de taxa', financial.refunds],
+      ['Custos', financial.costsTotal],
+      ['Saldo operacional', financial.balance],
+      ['KM total', financial.kmTotal.toFixed(1)],
+      ['Ciclos', cycles.length],
+    ];
+    return { name: 'resumo_executivo', header, lines };
+  }
+  if (kind === 'dias_semana') {
+    const rows = await Deliveries.active(env);
+    const names = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+    const counts = new Array(7).fill(0);
+    rows.forEach((r) => { counts[new Date(r.entryTime).getDay()]++; });
+    return { name: 'dias_semana', header: ['Dia da semana', 'Entregas'], lines: names.map((n, i) => [n, counts[i]]) };
+  }
+  if (kind === 'horarios_pico') {
+    const rows = await Deliveries.active(env);
+    const counts = new Array(24).fill(0);
+    rows.forEach((r) => { counts[new Date(r.entryTime).getHours()]++; });
+    return { name: 'horarios_pico', header: ['Faixa horária', 'Entregas'], lines: counts.map((c, h) => [`${String(h).padStart(2,'0')}:00–${String(h).padStart(2,'0')}:59`, c]) };
+  }
+  if (kind === 'status') {
+    const rows = await Deliveries.active(env);
+    return { name: 'status', header: ['Status', 'Quantidade'], lines: Object.entries(STATUS_META).map(([k, v]) => [v.label, rows.filter((r) => r.status === k).length]) };
+  }
+  if (kind === 'vehicles') {
+    const rows = await Vehicles.all();
+    return { name: 'veiculos', header: ['Apelido', 'Fabricante', 'Modelo', 'Placa', 'Ano', 'Tipo', 'Status'], lines: rows.map((v) => [v.label, v.brand || '', v.model || '', v.plate || '', v.year || '', v.type || '', v.active === false ? 'Inativo' : 'Ativo']) };
+  }
+  if (kind === 'collaborators') {
+    const rows = await Collaborators.all();
+    return { name: 'colaboradores', header: ['Nome', 'Função', 'Status'], lines: rows.map((c) => [c.name, c.role || '', c.active === false ? 'Inativo' : 'Ativo']) };
+  }
+  if (kind === 'neighborhoods') {
+    const rows = await Neighborhoods.all();
+    return { name: 'bairros', header: ['Bairro', 'Ordem de rota', 'Status'], lines: rows.map((n) => [n.name, n.routeOrder ?? 0, n.active === false ? 'Inativo' : 'Ativo']) };
+  }
 }
 
 export function wireReportsEvents() {
@@ -997,12 +1183,12 @@ export function wireReportsEvents() {
 
   $('#exportAllBtn')?.addEventListener('click', async () => {
     const env = getEnv();
-    for (const kind of ['deliveries', 'cycles', 'km', 'costs', 'audit']) {
+    for (const kind of ['resumo', 'deliveries', 'cycles', 'km', 'costs', 'audit', 'clients', 'dias_semana', 'horarios_pico', 'status', 'vehicles', 'collaborators', 'neighborhoods']) {
       const { name, header, lines } = await buildExport(kind, env);
       downloadCSV(`orbita-${name}-${env}-${new Date().toISOString().slice(0,10)}.csv`, [header, ...lines]);
       await new Promise((r) => setTimeout(r, 250)); // evita o navegador bloquear downloads múltiplos
     }
-    toast('5 arquivos CSV gerados.', 'success');
+    toast('13 arquivos CSV gerados.', 'success');
   });
 
   $('#printReportBtn')?.addEventListener('click', async () => {
@@ -1049,8 +1235,7 @@ export function wireReportsEvents() {
       <table border="1" cellpadding="6" style="border-collapse:collapse;width:100%">
         <tr><th>Entregador</th><th>Entregas finalizadas</th></tr>
         ${rankingRows || '<tr><td colspan="2">Sem dados suficientes</td></tr>'}
-      </table>`;
-    area.classList.remove('hidden');
+      </table>`;    area.classList.remove('hidden');
     window.print();
   });
 }
@@ -1104,7 +1289,7 @@ export async function renderRegistry(tab = 'vehicles') {
   let listHtml = '';
   if (tab === 'vehicles') listHtml = await vehicleList();
   if (tab === 'drivers') listHtml = await registryList(Drivers, 'name', 'drivers');
-  if (tab === 'collaborators') listHtml = await registryList(Collaborators, 'name', 'collaborators');
+  if (tab === 'collaborators') listHtml = await collaboratorList();
   if (tab === 'neighborhoods') listHtml = await registryList(Neighborhoods, 'name', 'neighborhoods', true);
   if (tab === 'costCategories') listHtml = await registryList(CostCategories, 'name', 'costCategories');
   if (tab === 'returnReasons') listHtml = await registryList(ReturnReasons, 'label', 'returnReasons');
@@ -1124,6 +1309,19 @@ async function registryList(store, field, storeName, showOrder = false) {
       <td><button class="btn-ghost btn-small registry-toggle">${r.active === false ? 'Reativar' : 'Desativar'}</button></td>
     </tr>`).join('');
   return `<div class="table-wrap"><table><thead><tr><th>Nome</th><th>Status</th><th></th></tr></thead><tbody>${trs}</tbody></table></div>`;
+}
+
+async function collaboratorList() {
+  const rows = await Collaborators.all();
+  if (!rows.length) return `<div class="empty-state"><strong>Nenhum colaborador cadastrado</strong>Cadastre aqui qualquer pessoa que deva aparecer na saudação: operadores, líderes, agentes de prevenção etc.</div>`;
+  const trs = rows.map((c) => `
+    <tr data-id="${c.id}" data-store="collaborators">
+      <td><strong>${escapeHtml(c.name)}</strong></td>
+      <td>${escapeHtml(c.role || 'Operador')}</td>
+      <td>${c.active === false ? '<span class="badge problema">Inativo</span>' : '<span class="badge entregue">Ativo</span>'}</td>
+      <td><button class="btn-ghost btn-small registry-toggle">${c.active === false ? 'Reativar' : 'Desativar'}</button></td>
+    </tr>`).join('');
+  return `<div class="table-wrap"><table><thead><tr><th>Nome</th><th>Função</th><th>Status</th><th></th></tr></thead><tbody>${trs}</tbody></table></div>`;
 }
 
 async function vehicleList() {
@@ -1161,6 +1359,7 @@ export function wireRegistryEvents(currentTab, onTabChange) {
 
 function openRegistryAddModal(tab) {
   if (tab === 'vehicles') return openVehicleAddModal();
+  if (tab === 'collaborators') return openCollaboratorAddModal();
   const field = REGISTRY_FIELD[tab];
   const store = REGISTRY_STORES[tab];
   const isNeighborhood = tab === 'neighborhoods';
@@ -1181,6 +1380,38 @@ function openRegistryAddModal(tab) {
         if (isNeighborhood) payload.routeOrder = Number(fd.routeOrder || 0);
         await store.add(payload);
         toast('Cadastrado.', 'success');
+        closeModal();
+        refreshApp();
+      }},
+    ],
+  });
+}
+
+function openCollaboratorAddModal() {
+  openModal({
+    title: 'Novo colaborador',
+    subtitle: 'Qualquer nome cadastrado aqui aparece no seletor "Quem está operando?" da saudação.',
+    body: `
+      <form id="collabForm">
+        <label>Nome *<input name="name" required /></label>
+        <label>Função
+          <select name="role">
+            <option value="Operador">Operador</option>
+            <option value="Líder">Líder</option>
+            <option value="Agente de Prevenção">Agente de Prevenção</option>
+            <option value="Administrador">Administrador</option>
+            <option value="Outro">Outro</option>
+          </select>
+        </label>
+      </form>`,
+    actions: [
+      { label: 'Cancelar', kind: 'ghost', onClick: closeModal },
+      { label: 'Salvar', kind: 'primary', onClick: async () => {
+        const form = $('#collabForm');
+        if (!form.reportValidity()) return;
+        const fd = Object.fromEntries(new FormData(form).entries());
+        await Collaborators.add({ name: fd.name.trim(), role: fd.role, active: true });
+        toast('Colaborador cadastrado.', 'success');
         closeModal();
         refreshApp();
       }},

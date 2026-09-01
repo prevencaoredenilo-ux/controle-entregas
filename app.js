@@ -77,7 +77,7 @@ async function openOperatorPicker() {
         ${list.length ? `<label>Colaborador cadastrado
           <select name="existing">
             <option value="">— Escolher da lista —</option>
-            ${list.map((c) => `<option value="${escapeAttr(c.name)}">${escapeAttr(c.name)}</option>`).join('')}
+            ${list.map((c) => `<option value="${escapeAttr(c.name)}">${escapeAttr(c.name)}${c.role ? ' — ' + escapeAttr(c.role) : ''}</option>`).join('')}
           </select>
         </label>` : '<p style="font-size:12.5px;color:var(--text-muted)">Nenhum colaborador cadastrado ainda — cadastre em Cadastros → Colaboradores, ou digite o nome abaixo.</p>'}
         <label>Ou digite o nome<input name="freeName" placeholder="Seu nome" value="${escapeAttr(operatorName)}" /></label>
@@ -133,6 +133,15 @@ function $_modalBackdropClose() {
 }
 
 export function refreshApp() { render(); }
+
+window.__orbitaGoToSearch = (query) => {
+  currentView = 'search';
+  $$('.nav-item[data-view]').forEach((b) => b.classList.toggle('active', b.dataset.view === 'search'));
+  render().then(() => {
+    const input = $('#searchInput');
+    if (input && query) { input.value = query; input.dispatchEvent(new Event('input')); }
+  });
+};
 
 /* ---------- router ---------- */
 async function render() {
