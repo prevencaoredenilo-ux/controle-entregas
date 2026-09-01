@@ -1349,3 +1349,112 @@ tr:last-child td { border-bottom: none; }
   }
   .knowledge-smartline-hint{padding-left:0}
 }
+
+/* v3.9 — central de monitoramento tecnológica */
+.knowledge-smartline{
+  position:relative;
+  isolation:isolate;
+  grid-template-columns:auto auto minmax(0,1fr) auto;
+  gap:12px;
+  padding:10px 15px;
+  border-radius:13px;
+  border:1px solid rgba(80,170,220,.24)!important;
+  background:
+    linear-gradient(rgba(82,172,221,.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(82,172,221,.035) 1px, transparent 1px),
+    linear-gradient(135deg,#092b45 0%,#103b58 52%,#0c334e 100%)!important;
+  background-size:22px 22px,22px 22px,auto!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.045),0 10px 26px rgba(7,31,52,.16)!important;
+}
+.knowledge-smartline::before{
+  content:'';
+  position:absolute;
+  left:0;
+  top:0;
+  bottom:0;
+  width:3px;
+  background:linear-gradient(180deg,#4fd0ff,#2b86c5);
+  box-shadow:0 0 14px rgba(79,208,255,.45);
+}
+.knowledge-smartline::after{
+  content:'';
+  position:absolute;
+  z-index:-1;
+  inset:0;
+  pointer-events:none;
+  background:linear-gradient(90deg,transparent 0%,rgba(76,203,255,.045) 40%,transparent 70%);
+  animation:knowledge-scan 5.8s linear infinite;
+}
+@keyframes knowledge-scan{
+  from{transform:translateX(-55%)}
+  to{transform:translateX(55%)}
+}
+.knowledge-smartline-kicker{
+  padding:5px 10px;
+  margin-left:3px;
+  border-radius:8px;
+  background:rgba(40,139,190,.11);
+  border:1px solid rgba(91,187,233,.15);
+  color:#a9daf2;
+  font-size:8px;
+  letter-spacing:.16em;
+  backdrop-filter:blur(6px);
+}
+.knowledge-smartline-kicker::before{
+  width:6px;
+  height:6px;
+  background:#58dd8b;
+  box-shadow:0 0 0 4px rgba(88,221,139,.08),0 0 10px rgba(88,221,139,.38);
+}
+.knowledge-smartline-sep{
+  color:rgba(102,196,239,.3);
+  font-size:13px;
+}
+.knowledge-smartline-question{
+  color:#f6d85a;
+  font-size:13.5px;
+  font-weight:850;
+  letter-spacing:.005em;
+  text-shadow:0 0 14px rgba(246,216,90,.06);
+}
+.knowledge-smartline-hint{
+  position:relative;
+  padding:5px 9px;
+  border-radius:8px;
+  border:1px solid rgba(105,188,231,.13);
+  background:rgba(255,255,255,.035);
+  color:#9cc8df;
+  font-size:9px;
+  letter-spacing:.03em;
+}
+.knowledge-smartline-hint::before{
+  content:'⌁';
+  color:#55c8ff;
+  font-size:12px;
+}
+.knowledge-smartline:hover{
+  transform:translateY(-1px);
+  border-color:rgba(80,190,239,.34)!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 14px 30px rgba(7,31,52,.2)!important;
+}
+.knowledge-ticker[data-group="geral"].knowledge-smartline{
+  border-color:rgba(208,177,79,.22)!important;
+  background:
+    linear-gradient(rgba(210,181,81,.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(210,181,81,.03) 1px, transparent 1px),
+    linear-gradient(135deg,#112f43 0%,#184559 52%,#12394b 100%)!important;
+  background-size:22px 22px,22px 22px,auto!important;
+}
+.knowledge-ticker[data-group="geral"].knowledge-smartline::before{
+  background:linear-gradient(180deg,#ffd86a,#c99822);
+  box-shadow:0 0 14px rgba(255,216,106,.3);
+}
+.knowledge-ticker[data-group="geral"] .knowledge-smartline-kicker{
+  background:rgba(221,187,82,.09);
+  border-color:rgba(221,187,82,.14);
+  color:#efd990;
+}
+.knowledge-ticker[data-group="geral"] .knowledge-smartline-question{color:#ffe174}
+@media (prefers-reduced-motion:reduce){
+  .knowledge-smartline::after{animation:none}
+}
