@@ -1,4 +1,4 @@
-# Órbita v3.1 — Retorno à fila + perguntas automáticas
+# Órbita v3.5 — Perguntas no estilo motivacional + fade/marquee
 
 ## Base anterior v3.0
 - O recurso do topo agora mostra **somente perguntas**, uma por vez, misturando Prevenção de Perdas e conhecimentos gerais.

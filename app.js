@@ -1,6 +1,6 @@
-import { ensureSeed, saveAutoBackup } from './db.js?v=3.4';
-import { $, $$, toast, initTooltips, animateStatCards, performanceProfile } from './helpers.js?v=3.4';
-import * as V from './views.js?v=3.4';
+import { ensureSeed, saveAutoBackup } from './db.js?v=3.5';
+import { $, $$, toast, initTooltips, animateStatCards, performanceProfile } from './helpers.js?v=3.5';
+import * as V from './views.js?v=3.5';
 
 let currentView = 'central';
 let currentRegistryTab = 'vehicles';
@@ -112,7 +112,7 @@ function wireNav() {
 }
 
 async function openOperatorPicker() {
-  const { Collaborators } = await import('./db.js?v=3.4');
+  const { Collaborators } = await import('./db.js?v=3.5');
   const list = (await Collaborators.all()).filter((c) => c.active !== false);
   openModal({
     title: 'Quem está operando agora?',
@@ -231,20 +231,29 @@ function showNextTickerQuestion() {
   const btn = $('#funBreakBtn');
   const isGeneral = q.group === 'CURIOSIDADE GERAL';
   if (text) text.textContent = q.q;
-  if (meta) meta.textContent = isGeneral ? 'Curiosidade automática · clique para abrir as respostas.' : 'Prevenção automática · clique para abrir as respostas.';
+  if (meta) meta.textContent = 'clique para responder';
   if (group) group.textContent = q.group;
   if (btn) {
     btn.dataset.group = isGeneral ? 'geral' : 'prev';
+    btn.classList.remove('is-long');
+    if (text) text.style.setProperty('--marquee-shift', '0px');
     btn.classList.remove('ticker-pulse');
     void btn.offsetWidth;
     btn.classList.add('ticker-pulse');
+    requestAnimationFrame(() => {
+      const windowEl = btn.querySelector('.knowledge-question-window');
+      if (!text || !windowEl) return;
+      const overflow = Math.max(0, text.scrollWidth - windowEl.clientWidth);
+      btn.classList.toggle('is-long', overflow > 12);
+      text.style.setProperty('--marquee-shift', `${overflow + 18}px`);
+    });
   }
 }
 
 function startKnowledgeTicker() {
   showNextTickerQuestion();
   if (knowledgeTickerTimer) clearInterval(knowledgeTickerTimer);
-  knowledgeTickerTimer = setInterval(showNextTickerQuestion, 8000);
+  knowledgeTickerTimer = setInterval(showNextTickerQuestion, 12000);
 }
 
 function openFunBreak() {
@@ -357,7 +366,7 @@ async function render() {
 }
 
 async function updateBadges() {
-  const { Deliveries, Cycles } = await import('./db.js?v=3.4');
+  const { Deliveries, Cycles } = await import('./db.js?v=3.5');
   const rows = await Deliveries.active(environment);
   $('#pendingBadge').textContent = rows.filter((r) => r.status === 'na_loja').length;
   const trashed = await Deliveries.trashed(environment);
@@ -380,7 +389,7 @@ if ('serviceWorker' in navigator) {
     refreshingForUpdate = true;
     window.location.reload();
   });
-  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js?v=3.4', { updateViaCache: 'none' }).then((registration) => registration.update()).catch(() => {}));
+  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js?v=3.5', { updateViaCache: 'none' }).then((registration) => registration.update()).catch(() => {}));
 }
 
 boot();
