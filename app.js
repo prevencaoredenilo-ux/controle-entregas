@@ -6,9 +6,32 @@ let currentView = 'central';
 let currentRegistryTab = 'vehicles';
 let environment = localStorage.getItem('orbita_env') || 'real';
 let operatorName = localStorage.getItem('orbita_operator') || '';
+let operatorRole = localStorage.getItem('orbita_operator_role') || 'Administrador';
 
 export function getEnv() { return environment; }
 export function getOperatorName() { return operatorName; }
+export function getOperatorRole() { return operatorRole; }
+
+function roleKey(role=operatorRole){
+  const value=String(role||'').toLowerCase();
+  if(value.includes('admin'))return'administrador';
+  if(value.includes('líder')||value.includes('lider'))return'lider';
+  if(value.includes('consulta'))return'consulta';
+  return'equipe';
+}
+const VIEW_ACCESS={
+  administrador:['central','dashboard','search','cycles','km','costs','reports','audit','trash','registry','settings'],
+  lider:['central','dashboard','search','cycles','km','costs','reports','registry'],
+  equipe:['central','search','cycles','km'],
+  consulta:['central','dashboard','search','reports'],
+};
+export function canAccessView(view){return VIEW_ACCESS[roleKey()]?.includes(view)??false;}
+export function canPerform(action){
+  const role=roleKey();
+  if(role==='administrador'||role==='lider')return true;
+  if(role==='consulta')return false;
+  return ['delivery_edit','cycle','km'].includes(action);
+}
 
 /* ---------- boot ---------- */
 function boot() {
@@ -59,12 +82,16 @@ function startAutoBackup() {
 function renderEnvPill() {
   $('#envPill').textContent = environment === 'treino' ? '🎓 Treinamento' : '● Operação Real';
   $('#envPill').classList.toggle('treino', environment === 'treino');
-  $('#operatorLabel').textContent = operatorName ? `👤 ${operatorName}` : 'Quem está operando?';
+  $('#operatorLabel').textContent = operatorName ? `👤 ${operatorName} · ${operatorRole}` : 'Quem está operando?';
+  document.body.dataset.operatorRole=roleKey();
+  $$('.nav-item[data-view]').forEach((btn)=>btn.classList.toggle('role-hidden',!canAccessView(btn.dataset.view)));
+  $('#newDeliveryBtn')?.classList.toggle('role-hidden',!canPerform('delivery_edit'));
 }
 
 function wireNav() {
   $$('.nav-item[data-view]').forEach((btn) => {
     btn.addEventListener('click', () => {
+      if(!canAccessView(btn.dataset.view))return toast('Seu perfil não possui acesso a esta área.','error');
       currentView = btn.dataset.view;
       $$('.nav-item[data-view]').forEach((b) => b.classList.toggle('active', b === btn));
       $('#sidebar').classList.remove('open');
@@ -99,13 +126,15 @@ async function openOperatorPicker() {
         <label>Ou digite o nome<input name="freeName" placeholder="Seu nome" value="${escapeAttr(operatorName)}" /></label>
       </form>`,
     actions: [
-      { label: 'Sair', kind: 'ghost', onClick: () => { operatorName = ''; localStorage.removeItem('orbita_operator'); renderEnvPill(); closeModal(); render(); } },
+      { label: 'Sair', kind: 'ghost', onClick: () => { operatorName = ''; operatorRole='Administrador';localStorage.removeItem('orbita_operator');localStorage.removeItem('orbita_operator_role'); renderEnvPill(); closeModal(); render(); } },
       { label: 'Confirmar', kind: 'primary', onClick: () => {
         const fd = Object.fromEntries(new FormData($('#operatorForm')).entries());
         const name = (fd.existing || fd.freeName || '').trim();
         if (!name) return toast('Escolha ou digite um nome.', 'error');
         operatorName = name;
+        operatorRole = list.find((c)=>c.name===fd.existing)?.role || 'Líder';
         localStorage.setItem('orbita_operator', name);
+        localStorage.setItem('orbita_operator_role',operatorRole);
         renderEnvPill();
         closeModal();
         render();
@@ -116,7 +145,7 @@ async function openOperatorPicker() {
 function escapeAttr(s) { return String(s ?? '').replace(/"/g, '&quot;'); }
 
 function wireGlobalActions() {
-  $('#newDeliveryBtn').addEventListener('click', () => V.openDeliveryModal());
+  $('#newDeliveryBtn').addEventListener('click', () => canPerform('delivery_edit')?V.openDeliveryModal():toast('Seu perfil possui acesso somente para consulta.','error'));
 }
 
 /* ---------- modal genérico ---------- */
@@ -166,8 +195,8 @@ async function render() {
   const sub = $('#viewSubtitle');
 
   const routes = {
-    central: ['Central Operacional', 'Sala de controle ao vivo: fluxo, ciclos, alertas, SLA e resultado do dia.', V.renderCentral, V.wireCentralEvents],
-    dashboard: ['Centro de Inteligência', 'Tudo medido: operação, tempos, ciclos, frota, financeiro, qualidade e previsões.', V.renderDashboard, V.wireDashboardEvents],
+    central: ['Central Operacional', 'Sala de controle: dois SLAs, riscos, capacidade, ciclos, KM e fechamento do dia.', V.renderCentral, V.wireCentralEvents],
+    dashboard: ['Centro de Inteligência', 'Operação, SLA de saída e chegada, ciclos, frota, financeiro, qualidade e previsões.', V.renderDashboard, V.wireDashboardEvents],
     search: ['Busca geral', 'Pesquise por qualquer campo da entrega.', V.renderSearch, V.wireSearchEvents],
     cycles: ['Ciclos', 'Saídas em andamento e finalizadas.', V.renderCycles, V.wireCyclesEvents],
     km: ['Quilometragem', 'Controle de KM por veículo e expediente.', V.renderKm, V.wireKmEvents],
@@ -179,6 +208,7 @@ async function render() {
     settings: ['Configurações', 'Empresa, backup e restauração.', V.renderSettings, V.wireSettingsEvents],
   };
 
+  if(!canAccessView(currentView)){currentView='central';$$('.nav-item[data-view]').forEach((b)=>b.classList.toggle('active',b.dataset.view==='central'));}
   const [t, s, renderFn, wireFn] = routes[currentView] || routes.central;
   title.textContent = t;
   sub.textContent = s;

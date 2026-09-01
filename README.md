@@ -1,5 +1,18 @@
 # Órbita — Controle de Entregas (v2 completo, client-side)
 
+## Atualização v2.6 — dois SLAs, prevenção e fechamento do dia
+
+- Dois tipos de atraso independentes: **saída/início acima de 2 horas** e **chegada à casa do cliente acima de 3 horas e 30 minutos**, contados desde a entrada da compra ou do horário agendado.
+- Alerta preventivo padrão 30 minutos antes de cada limite; Central separa atraso de saída, atraso de chegada e risco próximo.
+- Histórico preserva o atraso mesmo depois de a saída ou chegada ter sido registrada.
+- Centro de Inteligência mede cumprimento dos dois SLAs, mostra gráficos e permite configurar limites, antecedência e meta percentual.
+- Exportação Excel/CSV e relatório gerencial incluem limites e situação de cada SLA.
+- Capacidade da próxima saída baseada na média real dos ciclos fechados e nos veículos disponíveis com KM liberado.
+- Painéis laterais detalham SLA, financeiro e capacidade sem abandonar a Central.
+- Fechamento guiado verifica ciclos, entregas pendentes, KM final, horários e custos; o fechamento fica persistido e auditado.
+- Perfis locais: **Equipe Operacional, Líder, Consulta e Administrador**, com menus e ações compatíveis com cada função.
+- Novos eventos de auditoria registram operador e função. Como esta versão é local/offline, segurança forte entre vários aparelhos ainda exige um banco com autenticação e regras no servidor.
+
 ## Atualização v2.5 — bloqueio por KM e prontidão operacional
 
 - Nenhum ciclo pode ser iniciado sem **KM inicial registrado no mesmo dia, ambiente e veículo**, com o expediente ainda aberto.

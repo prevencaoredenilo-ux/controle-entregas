@@ -4,7 +4,7 @@
  * "environment" separa Operação Real de Treinamento sem duplicar cadastros.
  */
 const DB_NAME = 'orbita-v2';
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 
 const STORES = {
   deliveries: 'id',
@@ -20,6 +20,7 @@ const STORES = {
   auditLog: 'id',
   counters: 'key',
   autoBackups: 'id',
+  dayClosures: 'id',
 };
 
 let dbPromise = null;
@@ -62,6 +63,8 @@ async function logAudit(entityTable, entityId, action, before, after) {
   const entry = {
     id: uid('aud'),
     entityTable, entityId, action,
+    operator: typeof localStorage !== 'undefined' ? (localStorage.getItem('orbita_operator') || '') : '',
+    operatorRole: typeof localStorage !== 'undefined' ? (localStorage.getItem('orbita_operator_role') || '') : '',
     before: before ? JSON.parse(JSON.stringify(before)) : null,
     after: after ? JSON.parse(JSON.stringify(after)) : null,
     at: new Date().toISOString(),
@@ -174,6 +177,7 @@ export const ReturnReasons = genericStore('returnReasons');
 export const Cycles = genericStore('cycles');
 export const OdometerLogs = genericStore('odometerLogs');
 export const Costs = genericStore('costs');
+export const DayClosures = genericStore('dayClosures');
 
 export const AuditLog = {
   async all() {
@@ -208,11 +212,11 @@ export const Counters = {
 
 /* ---------- backup completo (todas as entidades) ---------- */
 export async function exportAll() {
-  const [deliveries, vehicles, drivers, collaborators, neighborhoods, costCategories, returnReasons, cycles, odometerLogs, costs] = await Promise.all([
+  const [deliveries, vehicles, drivers, collaborators, neighborhoods, costCategories, returnReasons, cycles, odometerLogs, costs, dayClosures] = await Promise.all([
     Deliveries.all(), Vehicles.all(), Drivers.all(), Collaborators.all(), Neighborhoods.all(), CostCategories.all(),
-    ReturnReasons.all(), Cycles.all(), OdometerLogs.all(), Costs.all(),
+    ReturnReasons.all(), Cycles.all(), OdometerLogs.all(), Costs.all(), DayClosures.all(),
   ]);
-  return { version: 2, exportedAt: new Date().toISOString(), deliveries, vehicles, drivers, collaborators, neighborhoods, costCategories, returnReasons, cycles, odometerLogs, costs };
+  return { version: 3, exportedAt: new Date().toISOString(), deliveries, vehicles, drivers, collaborators, neighborhoods, costCategories, returnReasons, cycles, odometerLogs, costs, dayClosures };
 }
 
 export async function importAll(data) {
@@ -226,6 +230,7 @@ export async function importAll(data) {
   await Cycles.replaceAll(data.cycles || []);
   await OdometerLogs.replaceAll(data.odometerLogs || []);
   await Costs.replaceAll(data.costs || []);
+  await DayClosures.replaceAll(data.dayClosures || []);
 }
 
 /* ---------- backup automático (rolling, guarda os últimos 5) ---------- */

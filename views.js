@@ -1,6 +1,33 @@
-import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, AuditLog, Counters } from './db.js';
+import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters } from './db.js';
 import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js';
-import { getEnv, getOperatorName, closeModal, openModal, refreshApp } from './app.js';
+import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js';
+
+const DEFAULT_OPERATIONAL_TARGETS = { startMinutes:120, arrivalMinutes:210, warningMinutes:30, successTarget:90 };
+
+function operationalTargets() {
+  try { return { ...DEFAULT_OPERATIONAL_TARGETS, ...JSON.parse(localStorage.getItem('orbita_operational_targets') || '{}') }; }
+  catch { return { ...DEFAULT_OPERATIONAL_TARGETS }; }
+}
+
+function deliverySla(record, nowMs = Date.now()) {
+  const targets = operationalTargets();
+  const baseValue = record.type === 'agendada' && record.scheduledAt ? record.scheduledAt : record.entryTime;
+  const baseMs = new Date(baseValue).getTime();
+  const active = ['na_loja','em_rota','no_cliente'].includes(record.status);
+  if (!Number.isFinite(baseMs)) return { startLate:false,arrivalLate:false,startRisk:false,arrivalRisk:false,startDeadline:null,arrivalDeadline:null };
+  const startDeadlineMs = baseMs + targets.startMinutes*60000;
+  const arrivalDeadlineMs = baseMs + targets.arrivalMinutes*60000;
+  const warningMs = targets.warningMinutes*60000;
+  const leftMs = record.leftStoreAt ? new Date(record.leftStoreAt).getTime() : null;
+  const arrivalMs = record.clientArrivalAt ? new Date(record.clientArrivalAt).getTime() : null;
+  return {
+    startLate: leftMs ? leftMs > startDeadlineMs : active && nowMs > startDeadlineMs,
+    arrivalLate: arrivalMs ? arrivalMs > arrivalDeadlineMs : active && nowMs > arrivalDeadlineMs,
+    startRisk: !leftMs && active && nowMs >= startDeadlineMs-warningMs && nowMs <= startDeadlineMs,
+    arrivalRisk: !arrivalMs && active && nowMs >= arrivalDeadlineMs-warningMs && nowMs <= arrivalDeadlineMs,
+    startDeadline:new Date(startDeadlineMs).toISOString(), arrivalDeadline:new Date(arrivalDeadlineMs).toISOString(),
+  };
+}
 
 /* =========================================================
    CENTRAL OPERACIONAL
@@ -20,11 +47,14 @@ export async function renderCentral() {
   const prioritarias = rows.filter((r) => r.priority === 'alta' && ['na_loja', 'em_rota', 'no_cliente'].includes(r.status));
   const reentrega = rows.filter((r) => r.status === 'reentrega');
   const agendadas = rows.filter((r) => r.type === 'agendada' && r.status === 'programada');
-  const atrasadas = rows.filter((r) => {
-    if (!['na_loja', 'em_rota', 'no_cliente'].includes(r.status)) return false;
-    const mins = (Date.now() - new Date(r.entryTime).getTime()) / 60000;
-    return mins > 60;
-  });
+  const slaRows = rows.map((record) => ({ record, sla:deliverySla(record) }));
+  const operationalSlaRows = slaRows.filter(({record})=>['na_loja','em_rota','no_cliente'].includes(record.status));
+  const startLateRows = operationalSlaRows.filter(({sla})=>sla.startLate).map(({record})=>record);
+  const arrivalLateRows = operationalSlaRows.filter(({sla})=>sla.arrivalLate).map(({record})=>record);
+  const startRiskRows = operationalSlaRows.filter(({sla})=>sla.startRisk).map(({record})=>record);
+  const arrivalRiskRows = operationalSlaRows.filter(({sla})=>sla.arrivalRisk).map(({record})=>record);
+  const lateIds = new Set([...startLateRows,...arrivalLateRows].map((r)=>r.id));
+  const atrasadas = rows.filter((r)=>lateIds.has(r.id));
   const pendingKmLogs = kmLogs.filter((k) => k.environment === env && k.kmEnd == null);
   const kmPendente = pendingKmLogs.length;
 
@@ -34,9 +64,15 @@ export async function renderCentral() {
     return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
   };
   const todayRows = rows.filter((r) => isToday(r.entryTime));
+  const todaySlaRows = todayRows.map((record)=>({record,sla:deliverySla(record)}));
+  const startLateTodayRows = todaySlaRows.filter(({sla})=>sla.startLate).map(({record})=>record);
+  const arrivalLateTodayRows = todaySlaRows.filter(({sla})=>sla.arrivalLate).map(({record})=>record);
+  const todayLateIds = new Set([...startLateTodayRows,...arrivalLateTodayRows].map((r)=>r.id));
   const completedToday = todayRows.filter((r) => (r.status === 'finalizada' && !!r.deliveredAt) || r.status === 'retirada_loja').length;
   const problemsToday = todayRows.filter((r) => ['retorno', 'reentrega', 'cancelada'].includes(r.status)).length;
-  const lateToday = atrasadas.filter((r) => isToday(r.entryTime)).length;
+  const lateToday = todayLateIds.size;
+  const startLateToday = startLateTodayRows.length;
+  const arrivalLateToday = arrivalLateTodayRows.length;
   const totalToday = todayRows.length;
   const pendingToday = todayRows.filter((r) => ['na_loja','em_rota','no_cliente','programada','reentrega'].includes(r.status)).length;
   const completionPctToday = totalToday ? Math.round((completedToday / totalToday) * 100) : 0;
@@ -62,7 +98,9 @@ export async function renderCentral() {
   const vehiclesClosedToday = activeVehicles.filter((v) => todayKmLogs.some((l) => l.vehicleId === v.id && l.kmEnd != null));
 
   const alerts = [];
-  if (atrasadas.length) alerts.push({ text: `⚠️ ${atrasadas.length} entrega(s) atrasada(s) há mais de 60 min`, query: 'na_loja' });
+  if (startLateRows.length) alerts.push({ text: `⏱ ${startLateRows.length} atraso(s) de saída — limite 2h`, query: 'atraso_inicio' });
+  if (arrivalLateRows.length) alerts.push({ text: `⌂ ${arrivalLateRows.length} atraso(s) de chegada — limite 3h30`, query: 'atraso_chegada' });
+  if (startRiskRows.length || arrivalRiskRows.length) alerts.push({ text: `◷ ${startRiskRows.length + arrivalRiskRows.length} entrega(s) perto do limite`, query: 'risco_sla' });
   if (prioritarias.length) alerts.push({ text: `⭐ ${prioritarias.length} entrega(s) prioritária(s) aguardando`, query: 'alta' });
   if (kmPendente) alerts.push({ text: `⌁ ${kmPendente} veículo(s) sem KM final registrado`, query: '' });
   if (vehiclesMissingInitial.length) alerts.push({ text: `🚫 ${vehiclesMissingInitial.length} veículo(s) sem KM inicial hoje — ciclo bloqueado`, query: '' });
@@ -77,6 +115,14 @@ export async function renderCentral() {
   const avgTodayTotal = averageMinutes(finalizedToday, 'entryTime', 'deliveredAt');
   const avgTodayRoute = averageMinutes(finalizedToday, 'leftStoreAt', 'clientArrivalAt');
   const noCliente = rows.filter((r) => r.status === 'no_cliente');
+  const envClosedCycles = cycles.filter((c)=>c.environment===env&&c.status==='fechado'&&!c.deletedAt);
+  const avgCycleLoad = envClosedCycles.length ? envClosedCycles.reduce((s,c)=>s+(c.deliveryIds||[]).length,0)/envClosedCycles.length : null;
+  const occupiedVehicleIds = new Set(openCycles.map((c)=>c.vehicleId));
+  const availableReadyVehicles = readyKmLogs.filter((l)=>!occupiedVehicleIds.has(l.vehicleId)).length;
+  const nextWaveCapacity = avgCycleLoad == null ? null : Math.max(0,Math.floor(availableReadyVehicles*avgCycleLoad));
+  const tomorrowCentral = new Date(); tomorrowCentral.setDate(tomorrowCentral.getDate()+1);
+  const tomorrowHistory = byWeekdayCountOccurrences(rows,tomorrowCentral.getDay());
+  const tomorrowForecast = tomorrowHistory.occurrences ? tomorrowHistory.total/tomorrowHistory.occurrences : null;
   const liveLaneCard = (r) => `<article class="live-delivery-card" role="button" tabindex="0" data-delivery-id="${r.id}" data-tip="Compra #${r.purchaseNumber} · ${escapeHtml(r.clientName || 'Sem nome')} · Entrada ${timeBR(r.entryTime)} · Saída ${timeBR(r.leftStoreAt)} · Chegada ${timeBR(r.clientArrivalAt)} · Finalização ${timeBR(r.deliveredAt)} · Clique para abrir.">
     <div><strong>#${r.purchaseNumber}</strong>${r.priority === 'alta' ? '<span>ALTA</span>' : ''}</div>
     <p>${escapeHtml(r.clientName || r.street || 'Cliente sem nome')}</p>
@@ -122,7 +168,7 @@ export async function renderCentral() {
           ${[['na_loja','Na loja',naLoja.length],['em_andamento','Em rota',rows.filter(r=>r.status==='em_rota').length],['no_cliente','No cliente',noCliente.length],['finalizada','Finalizadas hoje',completedToday]].map(([key,label,value]) => `<button data-central-filter="${key}" data-tip="Clique para filtrar a fila por ${label.toLowerCase()}."><i></i><strong data-count="${value}">0</strong><small>${label}</small></button>`).join('')}
         </div>
       </article>
-      <article class="ops-pulse-console" id="opsSlaConsole" role="button" tabindex="0" data-tip="Clique para abrir Tempos / SLA no Centro de Inteligência.">
+      <article class="ops-pulse-console" id="opsSlaConsole" role="button" tabindex="0" data-start-late="${startLateToday}" data-arrival-late="${arrivalLateToday}" data-risk="${startRiskRows.length+arrivalRiskRows.length}" data-avg-total="${formatDuration(avgTodayTotal)}" data-avg-route="${formatDuration(avgTodayRoute)}" data-tip="Clique para detalhar os dois tipos de atraso e os riscos do dia.">
         <div class="console-title"><span>VELOCIDADE E SLA</span><strong>hoje</strong></div>
         <div class="pulse-metrics">
           <div data-tip="Tempo médio da entrada até a finalização no cliente."><small>Ciclo completo</small><strong>${formatDuration(avgTodayTotal)}</strong></div>
@@ -131,7 +177,7 @@ export async function renderCentral() {
           <div data-tip="Entregas finalizadas divididas pelas registradas hoje."><small>Conclusão</small><strong>${completionPctToday}%</strong></div>
         </div>
       </article>
-      <article class="ops-finance-console" id="opsFinanceConsole" role="button" tabindex="0" data-tip="Visão financeira operacional somente com lançamentos reais de hoje. Clique para abrir custos e financeiro.">
+      <article class="ops-finance-console" id="opsFinanceConsole" role="button" tabindex="0" data-fees="${todayFees}" data-refunds="${todayRefunds}" data-costs="${todayCosts}" data-result="${todayResult}" data-tip="Visão financeira operacional somente com lançamentos reais de hoje. Clique para detalhar.">
         <div class="console-title"><span>RESULTADO DO DIA</span><strong class="${todayResult < 0 ? 'negative' : ''}">${money(todayResult)}</strong></div>
         <div class="finance-line"><span>Taxas</span><b>${money(todayFees)}</b></div>
         <div class="finance-line"><span>Reembolsos</span><b>− ${money(todayRefunds)}</b></div>
@@ -139,12 +185,25 @@ export async function renderCentral() {
       </article>
     </section>
 
-    <div class="attention-grid">
-      <button data-central-filter="atrasada" class="attention-card ${lateToday ? 'critical' : ''}" data-tip="Entregas abertas há mais de 60 minutos."><span>!</span><div><small>ATRASADAS</small><strong data-count="${atrasadas.length}">0</strong><em>${atrasadas.length ? 'agir agora' : 'nenhuma ocorrência'}</em></div></button>
+    <div class="attention-grid sla-attention-grid">
+      <button data-central-filter="atraso_inicio" class="attention-card ${startLateRows.length ? 'critical' : ''}" data-tip="Compras que não saíram em até 2 horas da entrada, incluindo atrasos históricos já realizados."><span>↗</span><div><small>ATRASO DE SAÍDA</small><strong data-count="${startLateRows.length}">0</strong><em>limite: 2 horas</em></div></button>
+      <button data-central-filter="atraso_chegada" class="attention-card ${arrivalLateRows.length ? 'critical' : ''}" data-tip="Entregas que não chegaram à casa do cliente em até 3 horas e 30 minutos da entrada."><span>⌂</span><div><small>ATRASO DE CHEGADA</small><strong data-count="${arrivalLateRows.length}">0</strong><em>limite: 3h30</em></div></button>
+      <button data-central-filter="risco_sla" class="attention-card ${startRiskRows.length+arrivalRiskRows.length ? 'risk-card' : ''}" data-tip="Entregas a menos de 30 minutos de estourar o limite de saída ou chegada."><span>◷</span><div><small>RISCO NOS PRÓX. 30 MIN</small><strong data-count="${startRiskRows.length+arrivalRiskRows.length}">0</strong><em>agir preventivamente</em></div></button>
       <button data-central-filter="alta" class="attention-card" data-tip="Prioridades altas ainda abertas."><span>★</span><div><small>PRIORIDADE ALTA</small><strong data-count="${prioritarias.length}">0</strong><em>na fila operacional</em></div></button>
       <button data-central-action="close-cycle" class="attention-card" data-tip="Ciclos atualmente em andamento."><span>↻</span><div><small>CICLOS ATIVOS</small><strong data-count="${openCycles.length}">0</strong><em>recursos ocupados</em></div></button>
       <button data-central-action="km" class="attention-card" data-tip="Expedientes abertos que ainda precisam do KM final."><span>⌁</span><div><small>KM FINAL PENDENTE</small><strong data-count="${kmPendente}">0</strong><em>fechar expediente</em></div></button>
     </div>
+
+    <section class="capacity-command" id="capacityCommand" role="button" tabindex="0" data-tip="Capacidade estimada usando apenas a média real de entregas dos ciclos fechados.">
+      <div class="capacity-copy"><span>CAPACIDADE DA PRÓXIMA SAÍDA</span><h2>${nextWaveCapacity == null ? 'Aguardando histórico de ciclos' : `${nextWaveCapacity} entrega(s) estimadas`}</h2><p>${availableReadyVehicles} veículo(s) com KM liberado e disponível · ${naLoja.length} entrega(s) na fila</p></div>
+      <div class="capacity-metrics">
+        <div><small>Veículos disponíveis</small><strong>${availableReadyVehicles}</strong></div>
+        <div><small>Média por ciclo</small><strong>${avgCycleLoad == null ? '—' : avgCycleLoad.toFixed(1)}</strong></div>
+        <div class="${nextWaveCapacity!=null&&naLoja.length>nextWaveCapacity?'pressure':''}"><small>Fila além da capacidade</small><strong>${nextWaveCapacity == null ? '—' : Math.max(0,naLoja.length-nextWaveCapacity)}</strong></div>
+        <div><small>Previsão de amanhã</small><strong>${tomorrowForecast == null ? '—' : tomorrowForecast.toFixed(1)}</strong></div>
+      </div>
+      <b>›</b>
+    </section>
 
     <section class="operation-launcher">
       <div class="section-heading"><div><span>COMANDOS RÁPIDOS</span><h2>Toda a operação em um só lugar</h2></div><div class="heading-signal"><i></i>Atualização automática</div></div>
@@ -155,6 +214,7 @@ export async function renderCentral() {
         <button id="qaCloseCycle" data-tip="Resolve pendências e pergunta a hora exata antes de confirmar o fim."><span>✓</span><strong>Finalizar ciclo</strong></button>
         <button id="qaKm" data-tip="Registrar KM inicial ou final."><span>⌁</span><strong>KM</strong></button>
         <button id="qaCost" data-tip="Lançar custo operacional."><span>R$</span><strong>Custo</strong></button>
+        <button id="qaCloseDay" data-tip="Confere ciclos, entregas, KM e custos antes de registrar o fechamento do dia."><span>☑</span><strong>Fechar dia</strong></button>
       </div>
     </section>
 
@@ -183,16 +243,19 @@ export async function renderCentral() {
 
 async function miniList(rows) {
   if (!rows.length) return `<div class="empty-state"><strong>Nada por aqui agora</strong>As entregas na loja e em rota aparecem nesta lista.</div>`;
-  const trs = rows.slice(0, 30).map((r) => `
-    <tr data-id="${r.id}" class="row-click" data-status="${r.status}" data-priority="${r.priority}" data-late="${((Date.now() - new Date(r.entryTime).getTime()) / 60000) > 60 ? 'true' : 'false'}" data-search="${escapeHtml([r.purchaseNumber, r.coupon, r.pdv, r.doc, r.clientName, r.street].join(' ').toLowerCase())}" data-tip="Compra #${r.purchaseNumber} · ${escapeHtml(r.clientName || 'Cliente sem nome')} · Cupom ${escapeHtml(r.coupon || 'não informado')} · PDV ${escapeHtml(r.pdv || '—')} · DOC ${escapeHtml(r.doc || '—')} · Status ${escapeHtml(STATUS_META[r.status]?.label || r.status)} · Chegada ${timeBR(r.clientArrivalAt)} · Finalização ${timeBR(r.deliveredAt)}">
+  const trs = rows.slice(0, 30).map((r) => {
+    const sla = deliverySla(r);
+    return `
+    <tr data-id="${r.id}" class="row-click" data-status="${r.status}" data-priority="${r.priority}" data-late-start="${sla.startLate}" data-late-arrival="${sla.arrivalLate}" data-risk-sla="${sla.startRisk||sla.arrivalRisk}" data-search="${escapeHtml([r.purchaseNumber, r.coupon, r.pdv, r.doc, r.clientName, r.street].join(' ').toLowerCase())}" data-tip="Compra #${r.purchaseNumber} · ${escapeHtml(r.clientName || 'Cliente sem nome')} · Cupom ${escapeHtml(r.coupon || 'não informado')} · PDV ${escapeHtml(r.pdv || '—')} · DOC ${escapeHtml(r.doc || '—')} · Saída limite ${timeBR(sla.startDeadline)} · Chegada limite ${timeBR(sla.arrivalDeadline)} · Saída real ${timeBR(r.leftStoreAt)} · Chegada real ${timeBR(r.clientArrivalAt)} · Finalização ${timeBR(r.deliveredAt)}">
       <td><strong>#${r.purchaseNumber}</strong></td>
       <td>${escapeHtml(r.clientName || 'Sem nome')}<br><span style="color:var(--text-muted);font-size:11px">${escapeHtml(r.street || '')}</span></td>
       <td><strong>${escapeHtml(r.coupon || '—')}</strong><br><span style="color:var(--text-muted);font-size:11px">PDV ${escapeHtml(r.pdv || '—')} · DOC ${escapeHtml(r.doc || '—')}</span></td>
-      <td>${badge(r.status)}<br><span class="delivery-times">Chegou: ${timeBR(r.clientArrivalAt)} · Final: ${timeBR(r.deliveredAt)}</span></td>
+      <td>${badge(r.status)}${sla.startLate?'<span class="badge problema sla-mini-badge">Saída atrasada</span>':''}${sla.arrivalLate?'<span class="badge problema sla-mini-badge">Chegada atrasada</span>':''}${sla.startRisk||sla.arrivalRisk?'<span class="badge pendente sla-mini-badge">Perto do limite</span>':''}<br><span class="delivery-times">Limites: saída ${timeBR(sla.startDeadline)} · chegada ${timeBR(sla.arrivalDeadline)}</span></td>
       <td>${r.priority === 'alta' ? '<span class="badge problema">Alta</span>' : '—'}</td>
       <td>${money(r.deliveryFee)}</td>
       <td>${r.status === 'em_rota' ? `<button class="btn-primary btn-small arrival-row-btn" data-id="${r.id}">Chegou no cliente</button>` : r.status === 'no_cliente' ? `<button class="btn-primary btn-small completion-row-btn" data-id="${r.id}">Finalizar entrega</button>` : '<span style="color:var(--text-muted)">—</span>'}</td>
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
   return `<div class="table-wrap central-queue"><table><thead><tr><th>Compra</th><th>Cliente / endereço</th><th>Cupom / documento</th><th>Status</th><th>Prioridade</th><th>Taxa</th><th>Ação rápida</th></tr></thead><tbody>${trs}</tbody></table><div class="queue-no-result hidden" id="queueNoResult">Nenhuma entrega corresponde a esse filtro.</div></div>`;
 }
 
@@ -215,6 +278,7 @@ export function wireCentralEvents() {
   $('#qaArrival')?.addEventListener('click', () => openArrivalPicker());
   $('#qaKm')?.addEventListener('click', () => openKmStartModal());
   $('#qaCost')?.addEventListener('click', () => openCostModal());
+  $('#qaCloseDay')?.addEventListener('click', () => openDayCloseAssistant());
   $('#heroKmAction')?.addEventListener('click', async (e) => {
     if (Number(e.currentTarget.dataset.missing || 0) > 0) return openKmStartModal();
     const today = localDateKey();
@@ -232,7 +296,7 @@ export function wireCentralEvents() {
       subtitle:'O termômetro transforma os dados reais do dia em prioridades de ação.',
       body:`<div class="performance-breakdown">
         <div><span>Conclusão · peso 65%</span><strong>${completion}%</strong><i><b style="width:${completion}%"></b></i><small>Finalizar as entregas com os horários corretos tem o maior impacto.</small></div>
-        <div><span>Pontualidade · peso 20%</span><strong>${punctualityScore}%</strong><i><b style="width:${punctualityScore}%"></b></i><small>Resolver primeiro as entregas abertas há mais de 60 minutos.</small></div>
+        <div><span>Pontualidade · peso 20%</span><strong>${punctualityScore}%</strong><i><b style="width:${punctualityScore}%"></b></i><small>Cumprir os limites de saída em 2h e chegada ao cliente em 3h30.</small></div>
         <div><span>Qualidade · peso 15%</span><strong>${qualityScore}%</strong><i><b style="width:${qualityScore}%"></b></i><small>Reduzir retornos, reentregas e cancelamentos melhora este componente.</small></div>
       </div>`,
       actions:[{label:'Entendi',kind:'primary',onClick:closeModal}],
@@ -244,8 +308,20 @@ export function wireCentralEvents() {
     card.addEventListener('keydown', (e) => { if (e.key==='Enter'||e.key===' ') { e.preventDefault(); action(); } });
   };
   activateCard('#opsScoreConsole', () => $('#performanceExplainBtn')?.click());
-  activateCard('#opsSlaConsole', () => document.querySelector('[data-view="dashboard"]')?.click());
-  activateCard('#opsFinanceConsole', () => document.querySelector('[data-view="costs"]')?.click());
+  activateCard('#opsSlaConsole', () => {
+    const card=$('#opsSlaConsole');
+    openCentralInsightDrawer('Tempos e SLA de hoje',`<div class="drawer-kpi-grid"><div><small>Atraso de saída</small><strong>${card.dataset.startLate}</strong><span>limite 2 horas</span></div><div><small>Atraso de chegada</small><strong>${card.dataset.arrivalLate}</strong><span>limite 3h30</span></div><div><small>Perto do limite</small><strong>${card.dataset.risk}</strong><span>aviso 30 min antes</span></div><div><small>Tempo completo médio</small><strong>${card.dataset.avgTotal}</strong><span>entrada até finalização</span></div></div><button class="btn-primary drawer-nav-dashboard">Investigar no Centro de Inteligência</button>`);
+    $('.drawer-nav-dashboard')?.addEventListener('click',()=>{closeCentralInsightDrawer();document.querySelector('[data-view="dashboard"]')?.click();});
+  });
+  activateCard('#opsFinanceConsole', () => {
+    const card=$('#opsFinanceConsole');
+    openCentralInsightDrawer('Resultado financeiro de hoje',`<div class="drawer-finance"><p><span>Taxas</span><strong>${money(card.dataset.fees)}</strong></p><p><span>Reembolsos</span><strong>− ${money(card.dataset.refunds)}</strong></p><p><span>Custos</span><strong>− ${money(card.dataset.costs)}</strong></p><p class="total"><span>Resultado</span><strong>${money(card.dataset.result)}</strong></p></div><button class="btn-primary drawer-nav-costs">Abrir custos e financeiro</button>`);
+    $('.drawer-nav-costs')?.addEventListener('click',()=>{closeCentralInsightDrawer();document.querySelector('[data-view="costs"]')?.click();});
+  });
+  activateCard('#capacityCommand', () => {
+    openCentralInsightDrawer('Capacidade da próxima saída',`<p class="drawer-lead">A estimativa usa a média real de entregas dos ciclos fechados e somente veículos com KM inicial aberto e sem ciclo ativo.</p><div class="drawer-kpi-grid">${$$('#capacityCommand .capacity-metrics > div').map((el)=>`<div>${el.innerHTML}</div>`).join('')}</div><button class="btn-primary drawer-start-cycle">Formar próximo ciclo</button>`);
+    $('.drawer-start-cycle')?.addEventListener('click',()=>{closeCentralInsightDrawer();openStartCycleModal();});
+  });
   $('#panelStartCycle')?.addEventListener('click', () => openStartCycleModal());
   $('#panelKmStart')?.addEventListener('click', () => openKmStartModal());
   $('#qaCloseCycle')?.addEventListener('click', async () => {
@@ -356,13 +432,77 @@ export function wireCentralEvents() {
   mascot?.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); reactMascot(); } });
 }
 
+function closeCentralInsightDrawer() {
+  document.querySelector('.central-drawer-wrap')?.remove();
+}
+
+function openCentralInsightDrawer(title, body) {
+  closeCentralInsightDrawer();
+  const wrap=document.createElement('div');
+  wrap.className='central-drawer-wrap';
+  wrap.innerHTML=`<button class="central-drawer-backdrop" aria-label="Fechar painel"></button><aside class="central-insight-drawer" role="dialog" aria-modal="true" aria-label="${escapeHtml(title)}"><header><div><span>DETALHAMENTO</span><h2>${escapeHtml(title)}</h2></div><button class="drawer-close" aria-label="Fechar">×</button></header><div class="drawer-body">${body}</div></aside>`;
+  document.body.appendChild(wrap);
+  wrap.querySelector('.central-drawer-backdrop')?.addEventListener('click',closeCentralInsightDrawer);
+  wrap.querySelector('.drawer-close')?.addEventListener('click',closeCentralInsightDrawer);
+  wrap.querySelector('.drawer-close')?.focus();
+}
+
+async function openDayCloseAssistant() {
+  if(!canPerform('day_close'))return toast('Somente Líder ou Administrador pode fechar o dia.','error');
+  const env=getEnv(), today=localDateKey();
+  const [rows,cycles,logs,costs,closures]=await Promise.all([Deliveries.active(env),Cycles.all(),OdometerLogs.all(),Costs.all(),DayClosures.all()]);
+  const openCycles=cycles.filter((c)=>c.environment===env&&c.status==='aberto'&&!c.deletedAt);
+  const pending=rows.filter((r)=>['na_loja','em_rota','no_cliente','reentrega'].includes(r.status));
+  const openKm=logs.filter((l)=>l.environment===env&&l.shiftDate===today&&l.kmStart!=null&&l.kmEnd==null);
+  const timeIssues=rows.filter((r)=>r.status==='finalizada'&&(!r.clientArrivalAt||!r.deliveredAt));
+  const todayCosts=costs.filter((c)=>c.environment===env&&!c.deletedAt&&c.date===today);
+  const existing=closures.find((c)=>c.environment===env&&c.date===today);
+  const blockers=openCycles.length+pending.length+openKm.length+timeIssues.length;
+  const check=(ok)=>ok?'<i class="check-ok">✓</i>':'<i class="check-bad">!</i>';
+  openModal({
+    title:'Fechamento guiado do dia',
+    subtitle:existing?`Dia já fechado por ${existing.closedBy||'operador'} às ${timeBR(existing.closedAt)}.`:'Confira cada etapa antes de registrar o encerramento.',
+    body:`<div class="day-close-checklist">
+      <button type="button" id="dayCloseCycles">${check(!openCycles.length)}<span><strong>Ciclos encerrados</strong><small>${openCycles.length} ciclo(s) aberto(s)</small></span><b>›</b></button>
+      <button type="button" id="dayCloseDeliveries">${check(!pending.length)}<span><strong>Entregas resolvidas</strong><small>${pending.length} pendência(s) operacional(is)</small></span><b>›</b></button>
+      <button type="button" id="dayCloseKm">${check(!openKm.length)}<span><strong>KM final informado</strong><small>${openKm.length} expediente(s) aberto(s)</small></span><b>›</b></button>
+      <button type="button" id="dayCloseTimes">${check(!timeIssues.length)}<span><strong>Horários completos</strong><small>${timeIssues.length} inconsistência(s)</small></span><b>›</b></button>
+      <div class="day-close-cost"><span>R$</span><div><strong>Custos lançados hoje</strong><small>${todayCosts.length} lançamento(s) · ${money(todayCosts.reduce((s,c)=>s+Number(c.amount||0),0))}</small></div><button type="button" id="dayCloseCosts">Revisar</button></div>
+    </div>
+    <form id="dayCloseConfirmForm"><label class="check-line"><input type="checkbox" name="costsReviewed" required ${existing?'checked disabled':''}/> Confirmo que os custos e ocorrências do dia foram revisados.</label></form>
+    ${blockers?`<div class="day-close-warning">Existem ${blockers} bloqueio(s). Resolva todos antes de fechar o dia.</div>`:'<div class="day-close-ready">Tudo certo: o dia está pronto para ser encerrado.</div>'}`,
+    actions:[
+      {label:'Cancelar',kind:'ghost',onClick:closeModal},
+      {label:existing?'Dia já fechado':'Confirmar fechamento',kind:'primary',onClick:async()=>{
+        if(existing)return toast('O fechamento de hoje já está registrado.','success');
+        if(blockers)return toast('Fechamento bloqueado: ainda existem pendências.','error');
+        const form=$('#dayCloseConfirmForm');if(!form.reportValidity())return;
+        const duplicate=(await DayClosures.all()).some((c)=>c.environment===env&&c.date===today);
+        if(duplicate)return toast('O fechamento de hoje já foi registrado.','error');
+        await DayClosures.add({environment:env,date:today,closedAt:new Date().toISOString(),closedBy:getOperatorName(),costsReviewed:true,summary:{deliveries:rows.filter(r=>isSameLocalDay(r.entryTime,today)).length,costs:todayCosts.length}});
+        toast('Dia encerrado e registrado na auditoria.','success');closeModal();refreshApp();
+      }},
+    ],
+  });
+  $('#dayCloseCycles')?.addEventListener('click',()=>{if(openCycles.length===1)return openCloseCycleModal(openCycles[0]);if(openCycles.length>1)return openCyclePicker(openCycles);toast('Todos os ciclos estão fechados.','success');});
+  $('#dayCloseDeliveries')?.addEventListener('click',()=>{closeModal();$('.queue-heading')?.scrollIntoView({behavior:'smooth',block:'start'});});
+  $('#dayCloseKm')?.addEventListener('click',()=>{if(openKm.length===1)return openKmEndModal(openKm[0]);if(openKm.length>1)return openKmPicker(openKm);toast('Todos os KM finais foram registrados.','success');});
+  $('#dayCloseTimes')?.addEventListener('click',()=>{if(timeIssues[0])return openDeliveryModal(timeIssues[0]);toast('Todos os horários estão completos.','success');});
+  $('#dayCloseCosts')?.addEventListener('click',()=>{closeModal();document.querySelector('[data-view="costs"]')?.click();});
+}
+
+function isSameLocalDay(value,dayKey){return localDateKey(value)===dayKey;}
+
 function applyCentralFilter(value) {
   const q = String(value || '').trim().toLowerCase();
   const rows = $$('.central-queue tbody tr');
   let visible = 0;
   rows.forEach((row) => {
     const matches = !q
-      || (q === 'atrasada' && row.dataset.late === 'true')
+      || (q === 'atrasada' && (row.dataset.lateStart === 'true' || row.dataset.lateArrival === 'true'))
+      || (q === 'atraso_inicio' && row.dataset.lateStart === 'true')
+      || (q === 'atraso_chegada' && row.dataset.lateArrival === 'true')
+      || (q === 'risco_sla' && row.dataset.riskSla === 'true')
       || (q === 'alta' && row.dataset.priority === 'alta')
       || (q === 'em_andamento' && ['em_rota', 'no_cliente'].includes(row.dataset.status))
       || row.dataset.status === q
@@ -448,6 +588,8 @@ function operationalTimeFields(record) {
 
 export async function openDeliveryModal(record = null) {
   const isEdit = !!record;
+  const readOnly=!canPerform('delivery_edit');
+  if(!record&&readOnly)return toast('Seu perfil não pode cadastrar entregas.','error');
   const env = getEnv();
   const neighborhoods = (await Neighborhoods.all()).filter((n) => n.active);
   const vehicles = (await Vehicles.all()).filter((v) => v.active);
@@ -538,13 +680,13 @@ export async function openDeliveryModal(record = null) {
     </form>
   `;
 
-  const statusActions = isEdit ? deliveryStatusActionsHtml(record) : '';
+  const statusActions = isEdit && !readOnly ? deliveryStatusActionsHtml(record) : '';
 
   openModal({
     title: isEdit ? `Editar entrega #${record.purchaseNumber}` : 'Registrar entrega',
     subtitle: isEdit ? `Status atual: ${STATUS_META[record.status]?.label}` : 'Preencha os campos obrigatórios (*)',
     body: body + statusActions,
-    actions: isEdit
+    actions: readOnly ? [{label:'Fechar',kind:'ghost',onClick:closeModal}] : isEdit
       ? [
           { label: 'Remover (lixeira)', kind: 'danger', onClick: async () => { await Deliveries.softDelete(record.id); toast('Entrega enviada para a lixeira.', 'success'); closeModal(); refreshApp(); } },
           { label: 'Cancelar', kind: 'ghost', onClick: closeModal },
@@ -875,6 +1017,7 @@ export function wireCyclesEvents() {
 }
 
 export async function openStartCycleModal() {
+  if(!canPerform('cycle'))return toast('Seu perfil não pode iniciar ciclos.','error');
   const env = getEnv();
   const todayKey = localDateKey();
   const openCycles = (await Cycles.all()).filter((c) => c.environment === env && c.status === 'aberto' && !c.deletedAt);
@@ -1002,6 +1145,7 @@ export async function openStartCycleModal() {
 
 /* ---------- finalizar ciclo: uma pendência por vez (seção 9) ---------- */
 export async function openCloseCycleModal(cycle) {
+  if(!canPerform('cycle'))return toast('Seu perfil não pode finalizar ciclos.','error');
   const items = await Promise.all((cycle.deliveryIds || []).map((id) => Deliveries.get(id)));
   const pending = items.filter((i) => i && (['em_rota', 'no_cliente'].includes(i.status) || (i.status === 'finalizada' && !i.deliveredAt)));
 
@@ -1147,6 +1291,7 @@ export function wireKmEvents() {
 }
 
 async function openKmStartModal() {
+  if(!canPerform('km'))return toast('Seu perfil não pode registrar quilometragem.','error');
   const vehicles = (await Vehicles.all()).filter((v) => v.active);
   const todayKey = localDateKey();
   const todayLogs = (await OdometerLogs.all()).filter((l) => l.environment === getEnv() && l.shiftDate === todayKey);
@@ -1184,6 +1329,7 @@ async function openKmStartModal() {
 }
 
 function openKmEndModal(log) {
+  if(!canPerform('km'))return toast('Seu perfil não pode registrar quilometragem.','error');
   openModal({
     title: 'Registrar KM final',
     subtitle: `KM inicial: ${log.kmStart}`,
@@ -1257,6 +1403,7 @@ export function wireCostsEvents() {
 }
 
 async function openCostModal() {
+  if(!canPerform('cost'))return toast('Seu perfil não pode lançar custos.','error');
   const categories = (await CostCategories.all()).filter((c) => c.active);
   const vehicles = await Vehicles.all();
   const drivers = await Drivers.all();
@@ -1414,7 +1561,12 @@ export async function renderDashboard() {
   const refunded = rows.filter((r) => r.refunded);
   const closedCycles = cycles.filter((c) => c.status === 'fechado');
   const pending = rows.filter((r) => ['na_loja','em_rota','no_cliente','programada','reentrega'].includes(r.status));
-  const late = rows.filter((r) => ['na_loja','em_rota','no_cliente'].includes(r.status) && (Date.now() - new Date(r.entryTime)) > 3600000);
+  const dashboardSla = rows.map((record)=>({record,sla:deliverySla(record)}));
+  const startLateDashboard = dashboardSla.filter(({sla})=>sla.startLate).map(({record})=>record);
+  const arrivalLateDashboard = dashboardSla.filter(({sla})=>sla.arrivalLate).map(({record})=>record);
+  const riskDashboard = dashboardSla.filter(({sla})=>sla.startRisk||sla.arrivalRisk).map(({record})=>record);
+  const lateDashboardIds = new Set([...startLateDashboard,...arrivalLateDashboard].map((r)=>r.id));
+  const late = rows.filter((r)=>lateDashboardIds.has(r.id));
   const priority = rows.filter((r) => r.priority === 'alta');
   const scheduled = rows.filter((r) => r.type === 'agendada' || r.status === 'programada');
 
@@ -1448,7 +1600,10 @@ export async function renderDashboard() {
   const firstAttempt = finalized.filter((r) => !(r.statusHistory || []).some((h) => ['retorno','reentrega'].includes(h.to))).length;
   const firstAttemptRate = finalized.length ? Math.round(firstAttempt/finalized.length*100) : 0;
   const returnRate = rows.length ? problems.length/rows.length*100 : 0;
-  const onTime60 = totalDurations.length ? Math.round(totalDurations.filter((v)=>v<=60).length/totalDurations.length*100) : 0;
+  const startEvaluated = dashboardSla.filter(({record,sla})=>record.leftStoreAt||sla.startLate);
+  const arrivalEvaluated = dashboardSla.filter(({record,sla})=>record.clientArrivalAt||sla.arrivalLate);
+  const startOnTimeRate = startEvaluated.length ? Math.round(startEvaluated.filter(({record,sla})=>record.leftStoreAt&&!sla.startLate).length/startEvaluated.length*100) : 0;
+  const arrivalOnTimeRate = arrivalEvaluated.length ? Math.round(arrivalEvaluated.filter(({record,sla})=>record.clientArrivalAt&&!sla.arrivalLate).length/arrivalEvaluated.length*100) : 0;
   const marginRate = netRevenue ? (balance/netRevenue)*100 : 0;
   const avgFee = feeRows.length ? grossFees/feeRows.length : 0;
   const deliveriesPerKm = kmTotal ? finalized.length/kmTotal : null;
@@ -1558,6 +1713,7 @@ export async function renderDashboard() {
         <span>até</span>
         <input type="date" id="dashboardEnd" value="${dashboardPeriod.end || currentEnd}" />
         <button class="btn-primary btn-small" id="dashboardApplyPeriod">Aplicar período</button>
+        <button class="btn-ghost btn-small" id="dashboardGoalsBtn" data-tip="Configure os limites operacionais. Padrão atual: saída em 2h e chegada em 3h30.">Metas / SLA</button>
       </div>
     </div>
 
@@ -1573,7 +1729,7 @@ export async function renderDashboard() {
     <section class="decision-brief">
       <header><div><span>LEITURA AUTOMÁTICA</span><strong>O que merece atenção neste período</strong></div><small>clique para investigar</small></header>
       <div>
-        <button data-insight-group="fluxo" class="${late.length?'critical':'positive'}"><i>${late.length?'!':'✓'}</i><span><small>OPERAÇÃO</small><strong>${late.length ? `${late.length} atraso(s) acima de 60 min` : 'Nenhum atraso crítico aberto'}</strong></span><b>›</b></button>
+        <button data-insight-group="fluxo" class="${late.length?'critical':'positive'}"><i>${late.length?'!':'✓'}</i><span><small>OPERAÇÃO</small><strong>${late.length ? `${startLateDashboard.length} saída(s) e ${arrivalLateDashboard.length} chegada(s) atrasadas` : 'Nenhum SLA vencido'}</strong></span><b>›</b></button>
         <button data-insight-group="tempos" class="${bottleneck?'warning':''}"><i>◷</i><span><small>MAIOR GARGALO</small><strong>${bottleneck ? `${bottleneck[0]} · ${formatDuration(bottleneck[1])}` : 'Aguardando horários completos'}</strong></span><b>›</b></button>
         <button data-insight-group="financeiro" class="${balance<0?'critical':'positive'}"><i>R$</i><span><small>RESULTADO</small><strong>${balance<0?'Prejuízo de ':'Saldo de '}${money(Math.abs(balance))}</strong></span><b>›</b></button>
         <button data-insight-group="qualidade" class="${dataCompleteness<95?'warning':'positive'}"><i>◇</i><span><small>CONFIABILIDADE</small><strong>${dataCompleteness}% dos dados críticos completos</strong></span><b>›</b></button>
@@ -1590,7 +1746,9 @@ export async function renderDashboard() {
         ${metric('Registradas', rows.length, 'Todas as entregas que entraram no período.', '', 'demanda total')}
         ${metric('Finalizadas', finalized.length, 'Finalizadas com hora exata no cliente.', 'good', `${successRate}% do volume`)}
         ${metric('Pendentes', pending.length, 'Na loja, em rota, no cliente, programadas ou em reentrega.', pending.length?'warning':'good')}
-        ${metric('Atrasadas +60 min', late.length, 'Entregas abertas há mais de 60 minutos.', late.length?'bad':'good')}
+        ${metric('Atraso de saída', startLateDashboard.length, 'Não saíram em até 2 horas da entrada.', startLateDashboard.length?'bad':'good')}
+        ${metric('Atraso de chegada', arrivalLateDashboard.length, 'Não chegaram ao cliente em até 3 horas e 30 minutos da entrada.', arrivalLateDashboard.length?'bad':'good')}
+        ${metric('Risco nos próximos 30 min', riskDashboard.length, 'Ainda dentro do prazo, mas perto de vencer um dos SLAs.', riskDashboard.length?'warning':'good')}
         ${metric('Saíram da loja', leftStore, 'Entregas com hora de saída registrada.')}
         ${metric('Chegaram no cliente', arrivedClient, 'Entregas com hora de chegada na casa do cliente.')}
         ${metric('Prioridade alta', priority.length, 'Entregas de prioridade alta no período.')}
@@ -1618,7 +1776,8 @@ export async function renderDashboard() {
         ${metric('Entregas grandes', largeDeliveries, 'Entregas classificadas como grandes.')}
         ${metric('Média por ciclo', avgPerCycle, 'Finalizadas divididas pelos ciclos fechados.')}
         ${metric('Média por dia', rows.length ? (rows.length/Math.max(1,new Set(rows.map(r=>dashboardDayKey(r.entryTime))).size)).toFixed(1) : '—', 'Volume médio nos dias que tiveram entrada.')}
-        ${metric('Até 60 minutos', `${onTime60}%`, 'Percentual concluído em até 60 min da entrada até a finalização.')}
+        ${metric('Saídas no prazo', `${startOnTimeRate}%`, 'Percentual avaliado que saiu em até 2 horas.', startOnTimeRate>=operationalTargets().successTarget?'good':'warning')}
+        ${metric('Chegadas no prazo', `${arrivalOnTimeRate}%`, 'Percentual avaliado que chegou em até 3 horas e 30 minutos.', arrivalOnTimeRate>=operationalTargets().successTarget?'good':'warning')}
       </div>
       <div class="dashboard-chart-grid">
         <article class="chart-card"><div class="chart-title"><div><span>SEMANA</span><strong>Demanda por dia</strong></div><small>volume</small></div>${barChartSVG({labels:weekdayNames,values:byWeekday,color:'var(--status-entregue)'})}</article>
@@ -1636,9 +1795,11 @@ export async function renderDashboard() {
         ${metric('Mediana completa', formatDuration(medianTotal), 'Metade das entregas levou até este tempo.')}
         ${metric('P90 completo', formatDuration(p90Total), '90% das entregas levou até este tempo.')}
         ${metric('Maior tempo', formatDuration(maxTotal), 'Maior duração completa registrada.', maxTotal>120?'bad':'')}
-        ${metric('Dentro de 60 min', `${onTime60}%`, 'Percentual concluído em até 60 minutos.', onTime60>=80?'good':'warning')}
+        ${metric('Saídas dentro de 2h', `${startOnTimeRate}%`, 'Percentual das saídas avaliadas que cumpriu o SLA.', startOnTimeRate>=operationalTargets().successTarget?'good':'warning')}
+        ${metric('Chegadas dentro de 3h30', `${arrivalOnTimeRate}%`, 'Percentual das chegadas avaliadas que cumpriu o SLA.', arrivalOnTimeRate>=operationalTargets().successTarget?'good':'warning')}
       </div>
       <article class="chart-card full-chart"><div class="chart-title"><div><span>GARGALOS</span><strong>Tempo médio por etapa</strong></div><small>minutos</small></div>${barChartSVG({labels:['Espera loja','Em rota','No cliente','Total'],values:[avgStoreWait,avgRoute,avgAtClient,avgTotal].map(v=>Math.round(v||0)),color:'var(--status-transito)',unit:' min'})}</article>
+      <article class="chart-card full-chart"><div class="chart-title"><div><span>CUMPRIMENTO DE SLA</span><strong>No prazo versus atrasadas</strong></div><small>entregas</small></div>${barChartSVG({labels:['Saída no prazo','Saída atrasada','Chegada no prazo','Chegada atrasada'],values:[Math.max(0,startEvaluated.length-startLateDashboard.length),startLateDashboard.length,Math.max(0,arrivalEvaluated.length-arrivalLateDashboard.length),arrivalLateDashboard.length],color:'var(--status-pendente)'})}</article>
     </section>
 
     <section class="intel-section" data-dashboard-group="ciclos">
@@ -1720,6 +1881,7 @@ export function wireDashboardEvents() {
     dashboardPeriod = { mode: 'personalizado', start, end };
     refreshApp();
   });
+  $('#dashboardGoalsBtn')?.addEventListener('click',openOperationalTargetsModal);
   $$('[data-dashboard-section]').forEach((btn) => btn.addEventListener('click', () => {
     dashboardSection = btn.dataset.dashboardSection;
     $$('[data-dashboard-section]').forEach((item)=>item.classList.toggle('active',item===btn));
@@ -1731,6 +1893,27 @@ export function wireDashboardEvents() {
     $('.dashboard-scope')?.scrollIntoView({behavior:'smooth',block:'start'});
   }));
   $$('[data-dashboard-group]').forEach((section)=>section.classList.toggle('dashboard-section-hidden',dashboardSection!=='tudo'&&section.dataset.dashboardGroup!==dashboardSection));
+}
+
+function openOperationalTargetsModal(){
+  const targets=operationalTargets();
+  openModal({
+    title:'Metas e limites operacionais',
+    subtitle:'Os atrasos e alertas da Central e do Centro de Inteligência usam estes valores.',
+    body:`<form id="operationalTargetsForm">
+      <div class="sla-rule-summary"><div><span>SAÍDA</span><strong>${formatDuration(targets.startMinutes)}</strong><small>entrada → início do ciclo</small></div><div><span>CHEGADA</span><strong>${formatDuration(targets.arrivalMinutes)}</strong><small>entrada → casa do cliente</small></div></div>
+      <div class="field-row"><label>Limite para iniciar/sair (minutos) *<input type="number" name="startMinutes" min="30" step="30" required value="${targets.startMinutes}" /></label><label>Limite para chegar ao cliente (minutos) *<input type="number" name="arrivalMinutes" min="60" step="30" required value="${targets.arrivalMinutes}" /></label></div>
+      <div class="field-row"><label>Avisar com antecedência (minutos) *<input type="number" name="warningMinutes" min="5" max="120" step="5" required value="${targets.warningMinutes}" /></label><label>Meta de cumprimento (%) *<input type="number" name="successTarget" min="1" max="100" required value="${targets.successTarget}" /></label></div>
+    </form>`,
+    actions:[{label:'Cancelar',kind:'ghost',onClick:closeModal},{label:'Salvar metas',kind:'primary',onClick:()=>{
+      const form=$('#operationalTargetsForm');if(!form.reportValidity())return;
+      const fd=Object.fromEntries(new FormData(form).entries());
+      const next={startMinutes:Number(fd.startMinutes),arrivalMinutes:Number(fd.arrivalMinutes),warningMinutes:Number(fd.warningMinutes),successTarget:Number(fd.successTarget)};
+      if(next.arrivalMinutes<=next.startMinutes)return toast('O limite de chegada precisa ser maior que o limite de saída.','error');
+      localStorage.setItem('orbita_operational_targets',JSON.stringify(next));
+      toast('Metas operacionais atualizadas.','success');closeModal();refreshApp();
+    }}],
+  });
 }
 
 /* =========================================================
@@ -1834,8 +2017,8 @@ async function buildExport(kind, env, period = null) {
 
   if (kind === 'deliveries') {
     const rows = (await Deliveries.active(env)).filter((r) => inReportPeriod(r.entryTime, period));
-    const header = ['Compra','Chegada','Data entrada','PDV','DOC','Cupom','Cliente','Telefone','Endereço','Nº','Complemento','Referência','Bairro','Taxa','Tamanho','Viagens','Prioridade','Tipo','Agendado para','Status','Saída da loja','Chegada na casa do cliente','Finalizada na casa do cliente','Veículo','Entregador','Reembolsado','Observações'];
-    const lines = rows.map((r) => [r.purchaseNumber, r.arrivalNumber, dateTimeBR(r.entryTime), r.pdv, r.doc, r.coupon, r.clientName, r.phone, r.street, r.houseNumber, r.complement, r.reference, nName(r.neighborhoodId), r.deliveryFee, r.size, r.tripCount, r.priority, r.type, r.scheduledAt ? dateTimeBR(r.scheduledAt) : '', STATUS_META[r.status]?.label, r.leftStoreAt ? dateTimeBR(r.leftStoreAt) : '', r.clientArrivalAt ? dateTimeBR(r.clientArrivalAt) : '', r.deliveredAt ? dateTimeBR(r.deliveredAt) : '', vName(r.vehicleId), dName(r.driverId), r.refunded ? 'Sim' : 'Não', r.notes]);
+    const header = ['Compra','Chegada','Data entrada','PDV','DOC','Cupom','Cliente','Telefone','Endereço','Nº','Complemento','Referência','Bairro','Taxa','Tamanho','Viagens','Prioridade','Tipo','Agendado para','Status','Saída da loja','Limite da saída','SLA da saída','Chegada na casa do cliente','Limite da chegada','SLA da chegada','Finalizada na casa do cliente','Veículo','Entregador','Reembolsado','Observações'];
+    const lines = rows.map((r) => {const sla=deliverySla(r);return [r.purchaseNumber, r.arrivalNumber, dateTimeBR(r.entryTime), r.pdv, r.doc, r.coupon, r.clientName, r.phone, r.street, r.houseNumber, r.complement, r.reference, nName(r.neighborhoodId), r.deliveryFee, r.size, r.tripCount, r.priority, r.type, r.scheduledAt ? dateTimeBR(r.scheduledAt) : '', STATUS_META[r.status]?.label, r.leftStoreAt ? dateTimeBR(r.leftStoreAt) : '', dateTimeBR(sla.startDeadline),sla.startLate?'Atrasada':'No prazo',r.clientArrivalAt ? dateTimeBR(r.clientArrivalAt) : '',dateTimeBR(sla.arrivalDeadline),sla.arrivalLate?'Atrasada':'No prazo',r.deliveredAt ? dateTimeBR(r.deliveredAt) : '', vName(r.vehicleId), dName(r.driverId), r.refunded ? 'Sim' : 'Não', r.notes];});
     return { name: 'entregas', header, lines };
   }
   if (kind === 'cycles') {
@@ -1896,6 +2079,9 @@ async function buildExport(kind, env, period = null) {
     const clientCounts = {};
     rows.forEach((r) => { const k = clientKey(r); if (k) clientCounts[k] = (clientCounts[k] || 0) + 1; });
     const recurring = Object.values(clientCounts).filter((c) => c > 1).length;
+    const slaRows=rows.map((record)=>({record,sla:deliverySla(record)}));
+    const startLateCount=slaRows.filter(({sla})=>sla.startLate).length;
+    const arrivalLateCount=slaRows.filter(({sla})=>sla.arrivalLate).length;
     const header = ['Indicador', 'Valor'];
     const lines = [
       ['Ambiente', env === 'treino' ? 'Treinamento' : 'Operação real'],
@@ -1908,6 +2094,8 @@ async function buildExport(kind, env, period = null) {
       ['Retiradas na loja', rows.filter((r) => r.status === 'retirada_loja').length],
       ['Canceladas', rows.filter((r) => r.status === 'cancelada').length],
       ['Taxa de sucesso %', rows.length ? Math.round((finalized.length / rows.length) * 100) : 0],
+      ['Atrasos de saída (limite 2h)',startLateCount],
+      ['Atrasos de chegada (limite 3h30)',arrivalLateCount],
       ['Clientes recorrentes identificados', recurring],
       ['Total de taxas', financial.fees],
       ['Reembolsos de taxa', financial.refunds],
@@ -2004,6 +2192,9 @@ export function wireReportsEvents() {
     const weekdayNames = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
     const byWeekday = new Array(7).fill(0);
     rows.forEach((r) => { byWeekday[new Date(r.entryTime).getDay()]++; });
+    const reportSla=rows.map((record)=>({record,sla:deliverySla(record)}));
+    const reportStartLate=reportSla.filter(({sla})=>sla.startLate).length;
+    const reportArrivalLate=reportSla.filter(({sla})=>sla.arrivalLate).length;
 
     const area = $('#printArea');
     area.innerHTML = `
@@ -2013,6 +2204,8 @@ export function wireReportsEvents() {
         <tr><td>Total de entregas</td><td>${rows.length}</td></tr>
         <tr><td>Finalizadas</td><td>${finalized.length}</td></tr>
         <tr><td>Taxa de sucesso</td><td>${rows.length ? Math.round(finalized.length/rows.length*100) : 0}%</td></tr>
+        <tr><td>Atrasos de saída (limite 2h)</td><td>${reportStartLate}</td></tr>
+        <tr><td>Atrasos de chegada (limite 3h30)</td><td>${reportArrivalLate}</td></tr>
         <tr><td>Ciclos realizados</td><td>${cycles.length}</td></tr>
         <tr><td>KM total rodado</td><td>${financial.kmTotal.toFixed(1)} km</td></tr>
       </table>
@@ -2050,9 +2243,9 @@ export async function renderAudit() {
   const log = await AuditLog.all();
   if (!log.length) return `<div class="empty-state"><strong>Sem eventos ainda</strong></div>`;
   const rows = log.slice(0, 200).map((e) => `
-    <tr><td>${dateTimeBR(e.at)}</td><td>${escapeHtml(e.entityTable)}</td><td>${e.action}</td><td style="font-family:monospace;font-size:11px">${escapeHtml(e.entityId).slice(0,14)}</td></tr>
+    <tr><td>${dateTimeBR(e.at)}</td><td>${escapeHtml(e.operator || 'Não identificado')}<br><small class="delivery-times">${escapeHtml(e.operatorRole || '')}</small></td><td>${escapeHtml(e.entityTable)}</td><td>${e.action}</td><td style="font-family:monospace;font-size:11px">${escapeHtml(e.entityId).slice(0,14)}</td></tr>
   `).join('');
-  return `<div class="table-wrap"><table><thead><tr><th>Quando</th><th>Entidade</th><th>Ação</th><th>ID</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  return `<div class="table-wrap"><table><thead><tr><th>Quando</th><th>Operador</th><th>Entidade</th><th>Ação</th><th>ID</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
 /* =========================================================
@@ -2199,7 +2392,7 @@ function openRegistryAddModal(tab, record = null) {
 }
 
 function openCollaboratorAddModal(record = null) {
-  const roles = ['Operador', 'Líder', 'Agente de Prevenção', 'Administrador', 'Outro'];
+  const roles = ['Equipe Operacional', 'Líder', 'Consulta', 'Administrador'];
   openModal({
     title: record ? 'Editar colaborador' : 'Novo colaborador',
     subtitle: record ? 'O nome atualizado entrará automaticamente no rodízio da saudação.' : 'Qualquer nome cadastrado aqui aparece automaticamente na saudação.',
