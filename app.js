@@ -1,4 +1,4 @@
-import { ensureSeed } from './db.js';
+import { ensureSeed, saveAutoBackup } from './db.js';
 import { $, $$, toast, initTooltips, animateStatCards } from './helpers.js';
 import * as V from './views.js';
 
@@ -37,7 +37,23 @@ function startApp() {
   wireNav();
   wireGlobalActions();
   initTooltips(document);
+  startLiveClock();
+  startAutoBackup();
   render();
+}
+
+function startLiveClock() {
+  const el = $('#liveClockText');
+  const tick = () => { if (el) el.textContent = new Date().toLocaleTimeString('pt-BR'); };
+  tick();
+  setInterval(tick, 1000);
+}
+
+// backup automático: primeiro logo na abertura, depois a cada 10 minutos —
+// silencioso, sem download, guardado no próprio IndexedDB (rolling, últimos 5)
+function startAutoBackup() {
+  saveAutoBackup().catch(() => {});
+  setInterval(() => saveAutoBackup().catch(() => {}), 10 * 60 * 1000);
 }
 
 function renderEnvPill() {

@@ -4,7 +4,7 @@
  * "environment" separa Operação Real de Treinamento sem duplicar cadastros.
  */
 const DB_NAME = 'orbita-v2';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 const STORES = {
   deliveries: 'id',
@@ -19,6 +19,7 @@ const STORES = {
   costs: 'id',
   auditLog: 'id',
   counters: 'key',
+  autoBackups: 'id',
 };
 
 let dbPromise = null;
@@ -224,6 +225,46 @@ export async function importAll(data) {
   await Cycles.replaceAll(data.cycles || []);
   await OdometerLogs.replaceAll(data.odometerLogs || []);
   await Costs.replaceAll(data.costs || []);
+}
+
+/* ---------- backup automático (rolling, guarda os últimos 5) ---------- */
+export async function saveAutoBackup() {
+  const snapshot = await exportAll();
+  const store = await tx('autoBackups', 'readwrite');
+  const entry = { id: uid('bkp'), at: new Date().toISOString(), data: snapshot };
+  return new Promise((resolve, reject) => {
+    const req = store.add(entry);
+    req.onsuccess = async () => {
+      const all = await listAutoBackups();
+      const excess = all.slice(5);
+      const delStore = await tx('autoBackups', 'readwrite');
+      excess.forEach((b) => delStore.delete(b.id));
+      resolve(entry);
+    };
+    req.onerror = () => reject(req.error);
+  });
+}
+
+export async function listAutoBackups() {
+  const store = await tx('autoBackups', 'readonly');
+  return new Promise((resolve, reject) => {
+    const req = store.getAll();
+    req.onsuccess = () => resolve(req.result.sort((a, b) => b.at.localeCompare(a.at)));
+    req.onerror = () => reject(req.error);
+  });
+}
+
+export async function restoreAutoBackup(id) {
+  const store = await tx('autoBackups', 'readonly');
+  return new Promise((resolve, reject) => {
+    const req = store.get(id);
+    req.onsuccess = async () => {
+      if (!req.result) return reject(new Error('Backup não encontrado'));
+      await importAll(req.result.data);
+      resolve();
+    };
+    req.onerror = () => reject(req.error);
+  });
 }
 
 /* ---------- seed inicial (bairros/motivos/categorias padrão) ---------- */

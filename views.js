@@ -1,5 +1,5 @@
 import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, AuditLog, Counters } from './db.js';
-import { $, $$, money, dateBR, dateTimeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, barChartSVG } from './helpers.js';
+import { $, $$, money, dateBR, dateTimeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, barChartSVG, thermometerHTML } from './helpers.js';
 import { getEnv, getOperatorName, closeModal, openModal, refreshApp } from './app.js';
 
 /* =========================================================
@@ -51,7 +51,7 @@ export async function renderCentral() {
         <div class="greeting-phrase">${phrase}</div>
         <div style="color:var(--text-muted);font-size:12px;margin-top:2px">${env === 'treino' ? '🎓 Modo Treinamento — nada aqui entra no histórico oficial.' : 'Operação Real'}</div>
       </div>
-      <div class="truck-lane" aria-hidden="true"><span class="truck-emoji">🚚</span></div>
+      <div class="greeting-thermo">${thermometerHTML(Math.round(ratio * 100), 'Desempenho de hoje')}</div>
     </div>
 
     ${alerts.length ? `<div class="alert-strip">${alerts.map((a) => `<button type="button" class="alert-chip" data-query="${escapeHtml(a.query)}">${a.text}</button>`).join('')}</div>` : ''}
@@ -933,6 +933,7 @@ export async function renderDashboard() {
     </div>`;
 
   return `
+    <div class="stat-card" style="margin-bottom:16px">${thermometerHTML(successRate, 'Desempenho geral (taxa de sucesso)', true)}</div>
     <div class="stat-row">
       <div class="stat-card" data-tip="Todas as entregas ativas no ambiente atual"><small>Total de entregas</small><strong data-count="${rows.length}">0</strong></div>
       <div class="stat-card" data-tip="Percentual de entregas que chegaram ao cliente"><small>Taxa de sucesso</small><strong data-count="${successRate}">0</strong>%</div>
@@ -1463,10 +1464,25 @@ function openVehicleAddModal() {
    ========================================================= */
 export async function renderSettings() {
   const cfg = JSON.parse(localStorage.getItem('orbita_settings') || '{}');
+  const { listAutoBackups } = await import('./db.js');
+  const autoBackups = await listAutoBackups();
+  const autoList = autoBackups.length
+    ? autoBackups.map((b) => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px dashed var(--line)">
+          <span style="font-size:12.5px">${dateTimeBR(b.at)}</span>
+          <button class="btn-ghost btn-small auto-restore-btn" data-id="${b.id}">Restaurar este</button>
+        </div>`).join('')
+    : '<p style="font-size:12px;color:var(--text-muted)">Ainda não rodou nenhum backup automático — o primeiro acontece ao abrir o app.</p>';
+
   return `
     <div class="stat-card" style="margin-bottom:16px">
-      <small>Backup e restauração</small>
-      <p style="font-size:12.5px;color:var(--text-muted);margin:8px 0">O backup gera um snapshot antes de qualquer restauração, para nunca perder dados por engano.</p>
+      <small>Backup automático</small>
+      <p style="font-size:12.5px;color:var(--text-muted);margin:8px 0">Roda sozinho ao abrir o app e a cada 10 minutos — guarda os últimos 5, direto neste aparelho, sem precisar baixar nada.</p>
+      ${autoList}
+    </div>
+    <div class="stat-card" style="margin-bottom:16px">
+      <small>Backup manual e restauração</small>
+      <p style="font-size:12.5px;color:var(--text-muted);margin:8px 0">Gera um arquivo antes de qualquer restauração, para nunca perder dados por engano.</p>
       <div style="display:flex;gap:8px">
         <button class="btn-ghost btn-small" id="settingsBackupBtn">⇩ Backup completo (JSON)</button>
         <label class="btn-ghost btn-small" style="cursor:pointer">⇧ Restaurar<input type="file" id="settingsRestoreInput" accept="application/json" hidden /></label>
@@ -1483,6 +1499,13 @@ export async function renderSettings() {
   `;
 }
 export function wireSettingsEvents() {
+  $$('.auto-restore-btn').forEach((btn) => btn.addEventListener('click', async () => {
+    if (!confirm('Restaurar esse backup automático vai substituir os dados atuais. Continuar?')) return;
+    const { restoreAutoBackup } = await import('./db.js');
+    await restoreAutoBackup(btn.dataset.id);
+    toast('Backup automático restaurado.', 'success');
+    refreshApp();
+  }));
   $('#settingsBackupBtn')?.addEventListener('click', async () => {
     const data = await (await import('./db.js')).exportAll();
     downloadJSON(`orbita-backup-completo-${new Date().toISOString().slice(0,10)}.json`, data);

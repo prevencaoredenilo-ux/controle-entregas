@@ -137,6 +137,23 @@ export function barChartSVG({ labels, values, height = 160, color = 'var(--ink)'
   return `<svg viewBox="0 0 100 ${height}" preserveAspectRatio="none" style="width:100%;height:${height}px" class="chart-svg">${bars}</svg>`;
 }
 
+// termômetro de desempenho — cor muda de vermelho a verde conforme a taxa
+export function thermometerHTML(rate, label = 'Desempenho de hoje', onLight = false) {
+  const pct = Math.max(0, Math.min(100, Math.round(rate)));
+  const color = pct < 40 ? '#d6425f' : pct < 70 ? '#e8a33d' : '#2f9e5b';
+  const mood = pct < 40 ? 'Atenção' : pct < 70 ? 'Regular' : 'Ótimo';
+  return `
+    <div class="thermo ${onLight ? 'thermo-light' : ''}">
+      <div class="thermo-head">
+        <span>${label}</span>
+        <strong style="color:${color}">${pct}% · ${mood}</strong>
+      </div>
+      <div class="thermo-track">
+        <div class="thermo-fill" style="width:${pct}%;background:${color}"></div>
+      </div>
+    </div>`;
+}
+
 export function csvEscape(v) {
   const s = String(v ?? '');
   return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;

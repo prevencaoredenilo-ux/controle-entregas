@@ -287,10 +287,18 @@ tr:last-child td { border-bottom: none; }
 .mascot-frame img.waving { animation: mascot-wave .9s ease; }
 @keyframes mascot-wave { 0%,100% { transform: rotate(0deg); } 20% { transform: rotate(-8deg); } 40% { transform: rotate(7deg); } 60% { transform: rotate(-6deg); } 80% { transform: rotate(4deg); } }
 
-.truck-lane { position: relative; width: 90px; height: 28px; overflow: hidden; flex-shrink: 0; display: none; }
-@media (min-width: 720px) { .truck-lane { display: block; } }
-.truck-emoji { position: absolute; font-size: 22px; left: -30px; animation: truck-drive 5s linear infinite; }
-@keyframes truck-drive { from { left: -30px; } to { left: 100px; } }
+.greeting-thermo { flex: 1; min-width: 200px; max-width: 320px; }
+.thermo { display: grid; gap: 6px; }
+.thermo-head { display: flex; justify-content: space-between; align-items: center; font-size: 11.5px; color: rgba(255,255,255,.75); }
+.thermo-head strong { font-size: 12.5px; }
+.thermo-track { height: 10px; border-radius: 999px; background: rgba(255,255,255,.12); overflow: hidden; }
+.thermo-fill { height: 100%; border-radius: 999px; transition: width .6s ease, background .6s ease; }
+.thermo-light .thermo-head { color: var(--text-muted); }
+.thermo-light .thermo-track { background: var(--paper); }
+
+.live-clock { font-size: 12.5px; color: var(--text-muted); font-variant-numeric: tabular-nums; display: flex; align-items: center; gap: 6px; }
+.live-clock .pulse-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--status-entregue); animation: pulse-dot 2s ease-in-out infinite; }
+@keyframes pulse-dot { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .4; transform: scale(.8); } }
 
 /* cards animados ao entrar + leve elevação no hover */
 .stat-card { transition: transform .15s ease, box-shadow .15s ease; }
