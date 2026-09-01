@@ -1,6 +1,6 @@
-const CACHE = 'orbita-v2-cache-14';
+const CACHE = 'orbita-v2-cache-15';
 const ASSETS = [
-  './', './index.html', './styles.css?v=3.1', './app.js?v=3.1', './db.js?v=3.1', './helpers.js?v=3.1', './views.js?v=3.1', './excel-report.js?v=3.1', './manifest.webmanifest?v=3.1',
+  './', './index.html', './styles.css?v=3.2', './app.js?v=3.2', './db.js?v=3.2', './helpers.js?v=3.2', './views.js?v=3.2', './excel-report.js?v=3.2', './manifest.webmanifest?v=3.2',
   './assets/brand/nilo-logo.png', './assets/brand/mascote.png', './assets/brand/triela-logo.png',
   './icons/icon-192.png', './icons/icon-512.png',
 ];
