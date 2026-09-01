@@ -6,8 +6,8 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <meta name="theme-color" content="#0B2A4A" />
 <meta name="description" content="Órbita — controle de entregas completo, offline-first e instalável." />
-<link rel="manifest" href="manifest.webmanifest?v=3.3" />
-<link rel="stylesheet" href="styles.css?v=3.3" />
+<link rel="manifest" href="manifest.webmanifest?v=3.4" />
+<link rel="stylesheet" href="styles.css?v=3.4" />
 <title>Órbita • Controle de Entregas</title>
 </head>
 <body>
@@ -26,7 +26,7 @@
       <div>
         <div class="brand-logo-chip"><img src="assets/brand/nilo-logo.png" alt="Nilo Supermercado" onerror="this.replaceWith(Object.assign(document.createElement('strong'),{textContent:'NILO',style:'font-size:20px;color:#0B2A4A'}))" /></div>
         <div class="brand-slogan">"No quieto, no quieto,<br>o Nilo vende mais barato"</div>
-        <div class="release-side">VERSÃO 3.3 · TOPO COMPACTO + PERGUNTAS EM DESTAQUE</div>
+        <div class="release-side">VERSÃO 3.4 · PERGUNTA EM LINHA ÚNICA</div>
       </div>
 
       <button class="conn-pill" id="envToggleBtn" style="border:none;cursor:pointer;text-align:left">
@@ -80,21 +80,15 @@
           </div>
           <div class="topbar-actions">
             <div class="live-clock utility-pill" id="liveClock"><span class="pulse-dot"></span><span id="liveClockText">--:--:--</span></div>
-            <span class="release-badge utility-pill">v3.3</span>
+            <span class="release-badge utility-pill">v3.4</span>
             <button class="btn-primary topbar-cta" id="newDeliveryBtn">＋ Registrar entrega</button>
           </div>
         </div>
 
-        <button class="fun-break-btn prevention-focus-btn knowledge-ticker knowledge-strip" id="funBreakBtn" type="button" data-tip="As perguntas aparecem sozinhas e se alternam. Clique somente quando quiser abrir as respostas.">
-          <span class="knowledge-strip-icon" id="knowledgeTickerIcon">🛡️</span>
-          <div class="knowledge-strip-copy">
-            <div class="knowledge-strip-head">
-              <span class="knowledge-strip-kicker" id="knowledgeTickerGroup">PREVENÇÃO DE PERDAS</span>
-              <span class="knowledge-strip-live">pergunta automática</span>
-            </div>
-            <strong id="knowledgeTickerQuestion">Carregando pergunta…</strong>
-            <small id="knowledgeTickerMeta">Clique na pergunta para abrir as respostas.</small>
-          </div>
+        <button class="fun-break-btn prevention-focus-btn knowledge-ticker knowledge-inline" id="funBreakBtn" type="button" data-tip="As perguntas aparecem sozinhas e se alternam. Clique somente quando quiser abrir as respostas.">
+          <span class="knowledge-inline-kicker" id="knowledgeTickerGroup">PREVENÇÃO DE PERDAS</span>
+          <strong id="knowledgeTickerQuestion">Carregando pergunta…</strong>
+          <small id="knowledgeTickerMeta">Clique na pergunta para abrir as respostas.</small>
         </button>
       </header>
       <section id="view" class="view"></section>
@@ -114,6 +108,6 @@
 
   <div class="toast-stack" id="toastStack"></div>
 
-  <script type="module" src="app.js?v=3.3"></script>
+  <script type="module" src="app.js?v=3.4"></script>
 </body>
 </html>
