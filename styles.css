@@ -710,3 +710,16 @@ tr:last-child td { border-bottom: none; }
 .km-reopen-btn:hover{background:#fff1cf!important;transform:translateY(-1px)}
 .km-correction-strip{margin-top:10px;padding-top:10px;border-top:1px dashed rgba(138,90,0,.25);display:flex;align-items:center;gap:7px;flex-wrap:wrap}
 .km-correction-strip>small{font-weight:700;color:#8a5a00;margin-right:2px}
+
+
+/* v3.1 — pergunta automática no topo */
+.knowledge-ticker{max-width:430px;min-width:300px;justify-content:flex-start;text-align:left;overflow:hidden}
+.knowledge-ticker .fun-button-copy{min-width:0;display:block}
+.knowledge-ticker .fun-button-copy strong{display:block;max-width:350px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:10.5px}
+.knowledge-ticker .fun-button-copy small{display:block;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:8px}
+.knowledge-ticker[data-group="geral"]{border-color:#e6d7a6;background:linear-gradient(135deg,#fffaf0,#fffdf8);color:#6d5613}
+.knowledge-ticker[data-group="geral"]>span:first-child{background:linear-gradient(145deg,#8a6a11,#c59c2f)}
+.knowledge-ticker.ticker-pulse .fun-button-copy{animation:knowledge-question-in .5s ease both}
+@keyframes knowledge-question-in{from{opacity:.15;transform:translateY(5px)}to{opacity:1;transform:none}}
+@media(max-width:900px){.knowledge-ticker{min-width:0;max-width:220px}.knowledge-ticker .fun-button-copy strong{max-width:150px}}
+@media(max-width:650px){.knowledge-ticker{max-width:48px;padding-right:7px}.knowledge-ticker .fun-button-copy{display:none}}

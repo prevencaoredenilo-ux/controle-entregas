@@ -1,6 +1,6 @@
-# Órbita v3.0 — Perguntas sem repetição + correção real do KM
+# Órbita v3.1 — Retorno à fila + perguntas automáticas
 
-## Atualização v3.0
+## Base anterior v3.0
 - O recurso do topo agora mostra **somente perguntas**, uma por vez, misturando Prevenção de Perdas e conhecimentos gerais.
 - As perguntas ficam registradas localmente e **não se repetem até todas do banco terem aparecido**; quando o ciclo reinicia, a última pergunta não aparece novamente de imediato.
 - Foram removidos seletor de categorias, placar e sequência de quiz; permanecem pergunta, alternativas, resposta correta e explicação curta.
@@ -192,3 +192,12 @@ Você indicou o repositório `prevencaoredenilo-ux/controle-entregas` (V14.8) co
 | Conflito entre dispositivos | ❌ Não implementado (precisa de backend) |
 | Mobile / Desktop / PWA instalada | ✅ Responsivo e instalável (não testado em aparelho físico por mim) |
 | Relatórios gerencial e Excel | ✅ Implementado |
+
+
+## Versão 3.1 — retorno à fila e perguntas automáticas
+- Entrega registrada como retorno muda imediatamente para **Na loja**.
+- O retorno continua salvo em `returnAttempts` e na auditoria, sem perder motivo, horário ou situação da mercadoria.
+- A entrega retornada volta a ficar disponível para seleção em outro ciclo.
+- Perguntas aparecem automaticamente no topo, alternando rigorosamente entre Prevenção de Perdas e Curiosidades Gerais.
+- As opções de resposta só são abertas quando o operador clica na pergunta visível.
+- Cada categoria evita repetir perguntas até percorrer seu próprio banco.

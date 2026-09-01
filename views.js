@@ -1,7 +1,7 @@
-import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters } from './db.js?v=3.0';
-import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=3.0';
-import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=3.0';
-import { exportFullExcelReport } from './excel-report.js?v=3.0';
+import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters } from './db.js?v=3.1';
+import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=3.1';
+import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=3.1';
+import { exportFullExcelReport } from './excel-report.js?v=3.1';
 
 const DEFAULT_OPERATIONAL_TARGETS = { startMinutes:120, arrivalMinutes:210, warningMinutes:30, successTarget:90 };
 
@@ -47,7 +47,7 @@ export async function renderCentral() {
   const emRota = rows.filter((r) => ['em_rota', 'no_cliente'].includes(r.status));
   const returnEligible = rows.filter((r) => ['em_rota', 'no_cliente'].includes(r.status));
   const prioritarias = rows.filter((r) => r.priority === 'alta' && ['na_loja', 'em_rota', 'no_cliente'].includes(r.status));
-  const reentrega = rows.filter((r) => r.status === 'reentrega');
+  const reentrega = rows.filter((r) => r.status === 'na_loja' && (r.returnAttempts || []).length > 0);
   const agendadas = rows.filter((r) => r.type === 'agendada' && r.status === 'programada');
   const slaRows = rows.map((record) => ({ record, sla:deliverySla(record) }));
   const operationalSlaRows = slaRows.filter(({record})=>['na_loja','em_rota','no_cliente'].includes(record.status));
@@ -71,7 +71,7 @@ export async function renderCentral() {
   const arrivalLateTodayRows = todaySlaRows.filter(({sla})=>sla.arrivalLate).map(({record})=>record);
   const todayLateIds = new Set([...startLateTodayRows,...arrivalLateTodayRows].map((r)=>r.id));
   const completedToday = todayRows.filter((r) => (r.status === 'finalizada' && !!r.deliveredAt) || r.status === 'retirada_loja').length;
-  const problemsToday = todayRows.filter((r) => ['retorno', 'reentrega', 'cancelada'].includes(r.status)).length;
+  const problemsToday = todayRows.filter((r) => r.status === 'cancelada' || (r.returnAttempts || []).length > 0).length;
   const lateToday = todayLateIds.size;
   const startLateToday = startLateTodayRows.length;
   const arrivalLateToday = arrivalLateTodayRows.length;
@@ -107,7 +107,7 @@ export async function renderCentral() {
   if (prioritarias.length) alerts.push({ text: `⭐ ${prioritarias.length} entrega(s) prioritária(s) aguardando`, query: 'alta' });
   if (kmPendente) alerts.push({ text: `⌁ ${kmPendente} veículo(s) sem KM final registrado`, query: '' });
   if (vehiclesMissingInitial.length) alerts.push({ text: `🚫 ${vehiclesMissingInitial.length} veículo(s) sem KM inicial hoje — ciclo bloqueado`, query: '' });
-  if (reentrega.length) alerts.push({ text: `↻ ${reentrega.length} entrega(s) aguardando reentrega`, query: 'reentrega' });
+  if (reentrega.length) alerts.push({ text: `↻ ${reentrega.length} entrega(s) retornaram e já estão disponíveis para novo ciclo`, query: 'na_loja' });
 
   const finalizedToday = todayRows.filter((r) => r.status === 'finalizada' && r.deliveredAt);
   const todayFees = todayRows.filter((r) => r.status === 'finalizada' || (r.status === 'retirada_loja' && !r.refunded)).reduce((s,r) => s + Number(r.deliveryFee || 0), 0);
@@ -477,7 +477,7 @@ async function openDayCloseAssistant() {
   const env=getEnv(), today=localDateKey();
   const [rows,cycles,logs,costs,closures]=await Promise.all([Deliveries.active(env),Cycles.all(),OdometerLogs.all(),Costs.all(),DayClosures.all()]);
   const openCycles=cycles.filter((c)=>c.environment===env&&c.status==='aberto'&&!c.deletedAt);
-  const pending=rows.filter((r)=>['na_loja','em_rota','no_cliente','reentrega'].includes(r.status));
+  const pending=rows.filter((r)=>['na_loja','em_rota','no_cliente'].includes(r.status));
   const openKm=logs.filter((l)=>l.environment===env&&l.shiftDate===today&&l.kmStart!=null&&l.kmEnd==null);
   const timeIssues=rows.filter((r)=>r.status==='finalizada'&&(!r.clientArrivalAt||!r.deliveredAt));
   const todayCosts=costs.filter((c)=>c.environment===env&&!c.deletedAt&&c.date===today);
@@ -1049,7 +1049,7 @@ async function openReturnResolutionFlow(record, { cycle = null, onBack = null, c
           deliveredAt: record.deliveredAt || null,
           registeredBy: getOperatorName(), registeredAt: new Date().toISOString(),
         };
-        const nextStatus = retryPlanned ? 'reentrega' : 'retorno';
+        const nextStatus = 'na_loja';
         const merchandiseLabel = merchandiseSituation === 'completa' ? 'mercadoria completa' : merchandiseSituation === 'parcial' ? 'retorno parcial' : 'sem mercadoria retornada';
         const historyNote = `${reason?.label || 'Motivo não informado'} · retorno ${timeBR(returnedAt)} · ${merchandiseLabel}${retryPlanned ? ` · nova tentativa ${dateTimeBR(retryAt)}` : ' · sem nova tentativa'}${note ? ` · ${note}` : ''}`;
         await Deliveries.changeStatus(record.id, nextStatus, {
@@ -1059,9 +1059,11 @@ async function openReturnResolutionFlow(record, { cycle = null, onBack = null, c
           retryPlanned, nextAttemptAt: retryAt,
           returnAttempts: [...(record.returnAttempts || []), attempt],
           returnRegisteredBy: getOperatorName(), returnRegisteredAt: new Date().toISOString(),
-          ...(retryPlanned ? { type: 'agendada', scheduledAt: retryAt, clientArrivalAt: null, deliveredAt: null } : {}),
+          cycleId: null, vehicleId: null, driverId: null,
+          leftStoreAt: null, clientArrivalAt: null, deliveredAt: null,
+          ...(retryPlanned ? { type: 'agendada', scheduledAt: retryAt } : {}),
         });
-        toast(retryPlanned ? `Retorno registrado. Nova tentativa em ${dateTimeBR(retryAt)}.` : 'Retorno registrado sem nova tentativa.', 'success');
+        toast('Retorno registrado. A entrega voltou para “Na loja” e já está disponível para outro ciclo.', 'success');
         if (cycle && continueClose) return advanceCloseCycle(cycle);
         closeModal(); refreshApp();
       }},
@@ -1149,7 +1151,14 @@ export async function openStartCycleModal() {
   const openCycles = (await Cycles.all()).filter((c) => c.environment === env && c.status === 'aberto' && !c.deletedAt);
   const busyVehicles = new Set(openCycles.map((c) => c.vehicleId));
   const busyDrivers = new Set(openCycles.map((c) => c.driverId));
-  const busyDeliveryIds = new Set(openCycles.flatMap((c) => c.deliveryIds || []));
+  const allActiveDeliveries = await Deliveries.active(env);
+  const deliveryById = new Map(allActiveDeliveries.map((d) => [d.id, d]));
+  const busyDeliveryIds = new Set(openCycles.flatMap((c) => (c.deliveryIds || []).filter((id) => {
+    const delivery = deliveryById.get(id);
+    if (!delivery) return true;
+    const returnedInCycle = (delivery.returnAttempts || []).some((attempt) => attempt.returnedAt && attempt.cycleId === c.id);
+    return !(delivery.status === 'na_loja' && returnedInCycle);
+  })));
 
   const vehicles = (await Vehicles.all()).filter((v) => v.active);
   const drivers = (await Drivers.all()).filter((d) => d.active);
@@ -1158,8 +1167,8 @@ export async function openStartCycleModal() {
   const neighborhoods = await Neighborhoods.all();
   const neighOrder = Object.fromEntries(neighborhoods.map((n) => [n.id, n.routeOrder ?? 0]));
 
-  const candidates = (await Deliveries.active(env))
-    .filter((d) => !busyDeliveryIds.has(d.id) && (d.status === 'na_loja' || (d.status === 'reentrega' && (!d.nextAttemptAt || new Date(d.nextAttemptAt) <= new Date()))))
+  const candidates = allActiveDeliveries
+    .filter((d) => !busyDeliveryIds.has(d.id) && d.status === 'na_loja')
     .sort((a, b) => {
       if (a.priority !== b.priority) return a.priority === 'alta' ? -1 : 1;
       return (neighOrder[a.neighborhoodId] || 0) - (neighOrder[b.neighborhoodId] || 0);
@@ -1273,11 +1282,11 @@ export async function openStartCycleModal() {
 /* ---------- finalizar ciclo: uma pendência por vez (seção 9) ---------- */
 function isCycleDeliveryResolved(delivery, cycle) {
   if (!delivery) return false;
+  const returnedInThisCycle = (delivery.returnAttempts || []).some((attempt) => attempt.returnedAt && (!cycle?.id || attempt.cycleId === cycle.id));
+  if (returnedInThisCycle) return true;
   if (delivery.status === 'finalizada') return !!delivery.clientArrivalAt && !!delivery.deliveredAt;
   if (delivery.status === 'retirada_loja') return true;
-  if (['retorno', 'reentrega', 'programada', 'cancelada'].includes(delivery.status)) {
-    return (delivery.returnAttempts || []).some((attempt) => attempt.returnedAt && (!cycle?.id || attempt.cycleId === cycle.id));
-  }
+  if (['programada', 'cancelada'].includes(delivery.status)) return true;
   return false;
 }
 
@@ -1326,11 +1335,15 @@ async function openCycleEndTimeModal(cycle) {
   const items = await Promise.all((cycle.deliveryIds || []).map((id) => Deliveries.get(id)));
   const unresolved = items.filter((item) => item && !isCycleDeliveryResolved(item, cycle));
   if (unresolved.length) return showPendingOne(cycle, unresolved[0], unresolved.length);
-  const deliveredCycleItems = items.filter((item) => item?.status === 'finalizada' && item.clientArrivalAt && item.deliveredAt);
   const returnedCycleItems = items.filter((item) => (item?.returnAttempts || []).some((attempt) => attempt.cycleId === cycle.id));
-  const retryCycleItems = returnedCycleItems.filter((item) => item.retryPlanned);
+  const deliveredCycleItems = items.filter((item) => {
+    const returnedInCycle = (item?.returnAttempts || []).some((attempt) => attempt.cycleId === cycle.id);
+    return !returnedInCycle && item?.status === 'finalizada' && item.clientArrivalAt && item.deliveredAt;
+  });
+  const retryCycleItems = returnedCycleItems.filter((item) => (item.returnAttempts || []).some((attempt) => attempt.cycleId === cycle.id && attempt.retryPlanned));
   const latestOperationalAt = items.reduce((latest, item) => {
-    const value = item?.returnedAt || item?.deliveredAt || item?.clientArrivalAt || item?.leftStoreAt;
+    const cycleReturn = (item?.returnAttempts || []).find((attempt) => attempt.cycleId === cycle.id && attempt.returnedAt);
+    const value = cycleReturn?.returnedAt || item?.deliveredAt || item?.clientArrivalAt || item?.leftStoreAt;
     return value && new Date(value) > new Date(latest) ? value : latest;
   }, cycle.startedAt);
   openModal({
@@ -1760,10 +1773,10 @@ export async function renderDashboard() {
   const costs = allCosts.filter((c) => c.environment === env && !c.deletedAt && dashboardInRange(c.date, range));
   const kmLogs = allKm.filter((l) => l.environment === env && dashboardInRange(l.shiftDate, range));
   const finalized = rows.filter((r) => r.status === 'finalizada' && r.deliveredAt);
-  const problems = rows.filter((r) => ['retorno', 'reentrega', 'cancelada'].includes(r.status) || (r.returnAttempts || []).length || (r.statusHistory || []).some((h) => ['retorno','reentrega'].includes(h.to)));
+  const problems = rows.filter((r) => r.status === 'cancelada' || (r.returnAttempts || []).length || (r.statusHistory || []).some((h) => ['retorno','reentrega'].includes(h.to)));
   const refunded = rows.filter((r) => r.refunded);
   const closedCycles = cycles.filter((c) => c.status === 'fechado');
-  const pending = rows.filter((r) => ['na_loja','em_rota','no_cliente','programada','reentrega'].includes(r.status));
+  const pending = rows.filter((r) => ['na_loja','em_rota','no_cliente','programada'].includes(r.status));
   const dashboardSla = rows.map((record)=>({record,sla:deliverySla(record)}));
   const startLateDashboard = dashboardSla.filter(({sla})=>sla.startLate).map(({record})=>record);
   const arrivalLateDashboard = dashboardSla.filter(({sla})=>sla.arrivalLate).map(({record})=>record);
@@ -2304,7 +2317,7 @@ async function buildExport(kind, env, period = null) {
       ['Entregues no cliente', finalized.length],
       ['Em rota', rows.filter((r) => r.status === 'em_rota').length],
       ['Na loja', rows.filter((r) => r.status === 'na_loja').length],
-      ['Retorno/Reentrega', rows.filter((r) => ['retorno', 'reentrega'].includes(r.status)).length],
+      ['Retornos registrados', rows.filter((r) => (r.returnAttempts || []).length > 0).length],
       ['Retiradas na loja', rows.filter((r) => r.status === 'retirada_loja').length],
       ['Canceladas', rows.filter((r) => r.status === 'cancelada').length],
       ['Taxa de sucesso %', rows.length ? Math.round((finalized.length / rows.length) * 100) : 0],
@@ -2691,7 +2704,7 @@ function openVehicleAddModal(record = null) {
    ========================================================= */
 export async function renderSettings() {
   const cfg = JSON.parse(localStorage.getItem('orbita_settings') || '{}');
-  const { listAutoBackups } = await import('./db.js?v=3.0');
+  const { listAutoBackups } = await import('./db.js?v=3.1');
   const autoBackups = await listAutoBackups();
   const autoList = autoBackups.length
     ? autoBackups.map((b) => `
@@ -2728,13 +2741,13 @@ export async function renderSettings() {
 export function wireSettingsEvents() {
   $$('.auto-restore-btn').forEach((btn) => btn.addEventListener('click', async () => {
     if (!confirm('Restaurar esse backup automático vai substituir os dados atuais. Continuar?')) return;
-    const { restoreAutoBackup } = await import('./db.js?v=3.0');
+    const { restoreAutoBackup } = await import('./db.js?v=3.1');
     await restoreAutoBackup(btn.dataset.id);
     toast('Backup automático restaurado.', 'success');
     refreshApp();
   }));
   $('#settingsBackupBtn')?.addEventListener('click', async () => {
-    const data = await (await import('./db.js?v=3.0')).exportAll();
+    const data = await (await import('./db.js?v=3.1')).exportAll();
     downloadJSON(`orbita-backup-completo-${new Date().toISOString().slice(0,10)}.json`, data);
     toast('Backup completo gerado.', 'success');
   });
@@ -2742,12 +2755,12 @@ export function wireSettingsEvents() {
     const file = e.target.files[0];
     if (!file) return;
     if (!confirm('Isso vai substituir os dados atuais pelo conteúdo do backup. Um backup de segurança dos dados atuais será baixado antes. Continuar?')) { e.target.value = ''; return; }
-    const currentBackup = await (await import('./db.js?v=3.0')).exportAll();
+    const currentBackup = await (await import('./db.js?v=3.1')).exportAll();
     downloadJSON(`orbita-backup-seguranca-antes-restauracao-${Date.now()}.json`, currentBackup);
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      await (await import('./db.js?v=3.0')).importAll(data);
+      await (await import('./db.js?v=3.1')).importAll(data);
       toast('Backup restaurado.', 'success');
       refreshApp();
     } catch { toast('Arquivo de backup inválido.', 'error'); }

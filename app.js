@@ -1,6 +1,6 @@
-import { ensureSeed, saveAutoBackup } from './db.js?v=3.0';
-import { $, $$, toast, initTooltips, animateStatCards, performanceProfile } from './helpers.js?v=3.0';
-import * as V from './views.js?v=3.0';
+import { ensureSeed, saveAutoBackup } from './db.js?v=3.1';
+import { $, $$, toast, initTooltips, animateStatCards, performanceProfile } from './helpers.js?v=3.1';
+import * as V from './views.js?v=3.1';
 
 let currentView = 'central';
 let currentRegistryTab = 'vehicles';
@@ -59,6 +59,7 @@ function startApp() {
   renderEnvPill();
   wireNav();
   wireGlobalActions();
+  startKnowledgeTicker();
   initTooltips(document);
   startLiveClock();
   startAutoBackup();
@@ -110,7 +111,7 @@ function wireNav() {
 }
 
 async function openOperatorPicker() {
-  const { Collaborators } = await import('./db.js?v=3.0');
+  const { Collaborators } = await import('./db.js?v=3.1');
   const list = (await Collaborators.all()).filter((c) => c.active !== false);
   openModal({
     title: 'Quem está operando agora?',
@@ -149,7 +150,7 @@ function wireGlobalActions() {
   $('#funBreakBtn')?.addEventListener('click', openFunBreak);
 }
 
-/* ---------- Prevenção em Foco: conhecimento rápido + curiosidades ---------- */
+/* ---------- Perguntas automáticas: Prevenção e Curiosidades alternadas ---------- */
 const PREVENTION_QUESTIONS = [
   { q:'Ao identificar divergência entre o cupom e a mercadoria que está saindo, qual é a melhor primeira ação?', options:['Liberar a saída e conferir depois','Pausar a saída, conferir os itens e seguir o procedimento de divergência','Pedir ao cliente para resolver no caixa','Ignorar se a diferença for pequena'], correct:1, note:'Divergências devem ser tratadas antes da saída. A conferência e o registro evitam perda financeira e retrabalho.' },
   { q:'Um produto avariado é encontrado na área de venda. O que fazer?', options:['Deixar no local até o fim do turno','Descartar imediatamente sem registro','Segregar o item, identificar a ocorrência e encaminhar conforme o procedimento','Colocar em promoção sem autorização'], correct:2, note:'Segregar e registrar preserva rastreabilidade e evita que um item impróprio volte à venda.' },
@@ -177,65 +178,93 @@ const GENERAL_CURIOSITIES = [
   { q:'Quantos minutos há em duas horas e meia?', options:['120','130','150','180'], correct:2, note:'Duas horas = 120 minutos; mais 30 minutos = 150.' },
 ];
 
-function openFunBreak() {
-  openModal({
-    title: '🛡️ Pergunta rápida',
-    subtitle: 'Uma pergunta por vez. O sistema não repete nenhuma até passar por todo o banco de perguntas.',
-    body: `<div class="knowledge-quiz" id="knowledgeQuiz">
-      <div class="quiz-card" id="quizCard"></div>
-    </div>`,
-    actions: [{ label: 'Fechar', kind: 'ghost', onClick: closeModal }],
-  });
-  startKnowledgeQuestion();
-}
-
-const QUESTION_HISTORY_KEY = 'orbita_question_history_v3';
-const KNOWLEDGE_QUESTIONS = [
-  ...PREVENTION_QUESTIONS.map((item, i) => ({ ...item, id: `prev-${i + 1}`, group: 'PREVENÇÃO DE PERDAS' })),
-  ...GENERAL_CURIOSITIES.map((item, i) => ({ ...item, id: `geral-${i + 1}`, group: 'CURIOSIDADE GERAL' })),
-];
+const QUESTION_HISTORY_KEYS = {
+  prev: 'orbita_question_history_prev_v31',
+  geral: 'orbita_question_history_geral_v31',
+};
+const QUESTION_NEXT_GROUP_KEY = 'orbita_question_next_group_v31';
+const KNOWLEDGE_GROUPS = {
+  prev: PREVENTION_QUESTIONS.map((item, i) => ({ ...item, id: `prev-${i + 1}`, group: 'PREVENÇÃO DE PERDAS', icon: '🛡️' })),
+  geral: GENERAL_CURIOSITIES.map((item, i) => ({ ...item, id: `geral-${i + 1}`, group: 'CURIOSIDADE GERAL', icon: '💡' })),
+};
 let quizState = { question: null, answered: false };
+let knowledgeTickerState = { question: null };
+let knowledgeTickerTimer = null;
 
-function readQuestionHistory() {
+function readGroupHistory(group) {
   try {
-    const parsed = JSON.parse(localStorage.getItem(QUESTION_HISTORY_KEY) || '[]');
+    const parsed = JSON.parse(localStorage.getItem(QUESTION_HISTORY_KEYS[group]) || '[]');
     return Array.isArray(parsed) ? parsed : [];
   } catch (_) { return []; }
 }
 
-function getNextKnowledgeQuestion() {
-  const validIds = new Set(KNOWLEDGE_QUESTIONS.map((q) => q.id));
-  let history = readQuestionHistory().filter((id) => validIds.has(id));
-  let available = KNOWLEDGE_QUESTIONS.filter((q) => !history.includes(q.id));
-
-  // Só reinicia a sequência depois que TODAS as perguntas já apareceram.
-  // Ao reiniciar, evita repetir imediatamente a última pergunta do ciclo anterior.
+function pickUnseenQuestion(group) {
+  const bank = KNOWLEDGE_GROUPS[group];
+  const validIds = new Set(bank.map((q) => q.id));
+  let history = readGroupHistory(group).filter((id) => validIds.has(id));
+  let available = bank.filter((q) => !history.includes(q.id));
   if (!available.length) {
     const lastId = history.at(-1) || null;
     history = [];
-    available = KNOWLEDGE_QUESTIONS.filter((q) => q.id !== lastId);
-    if (!available.length) available = [...KNOWLEDGE_QUESTIONS];
+    available = bank.filter((q) => q.id !== lastId);
+    if (!available.length) available = [...bank];
   }
-
   const question = available[Math.floor(Math.random() * available.length)];
-  const nextHistory = [...history, question.id];
-  localStorage.setItem(QUESTION_HISTORY_KEY, JSON.stringify(nextHistory));
+  localStorage.setItem(QUESTION_HISTORY_KEYS[group], JSON.stringify([...history, question.id]));
   return question;
 }
 
-function startKnowledgeQuestion() {
-  quizState = { question: getNextKnowledgeQuestion(), answered: false };
+function getNextKnowledgeQuestion() {
+  const group = localStorage.getItem(QUESTION_NEXT_GROUP_KEY) === 'geral' ? 'geral' : 'prev';
+  const question = pickUnseenQuestion(group);
+  localStorage.setItem(QUESTION_NEXT_GROUP_KEY, group === 'prev' ? 'geral' : 'prev');
+  return question;
+}
+
+function showNextTickerQuestion() {
+  knowledgeTickerState.question = getNextKnowledgeQuestion();
+  const q = knowledgeTickerState.question;
+  const text = $('#knowledgeTickerQuestion');
+  const meta = $('#knowledgeTickerMeta');
+  const icon = $('#knowledgeTickerIcon');
+  const btn = $('#funBreakBtn');
+  if (text) text.textContent = q.q;
+  if (meta) meta.textContent = `${q.group} · clique para ver as respostas`;
+  if (icon) icon.textContent = q.icon;
+  if (btn) {
+    btn.dataset.group = q.group === 'PREVENÇÃO DE PERDAS' ? 'prev' : 'geral';
+    btn.classList.remove('ticker-pulse');
+    void btn.offsetWidth;
+    btn.classList.add('ticker-pulse');
+  }
+}
+
+function startKnowledgeTicker() {
+  showNextTickerQuestion();
+  if (knowledgeTickerTimer) clearInterval(knowledgeTickerTimer);
+  knowledgeTickerTimer = setInterval(showNextTickerQuestion, 8000);
+}
+
+function openFunBreak() {
+  const q = knowledgeTickerState.question || getNextKnowledgeQuestion();
+  quizState = { question: q, answered: false };
+  openModal({
+    title: q.group === 'PREVENÇÃO DE PERDAS' ? '🛡️ Prevenção de Perdas' : '💡 Curiosidade Geral',
+    subtitle: 'As respostas só aparecem porque você clicou na pergunta.',
+    body: `<div class="knowledge-quiz" id="knowledgeQuiz"><div class="quiz-card" id="quizCard"></div></div>`,
+    actions: [{ label: 'Fechar', kind: 'ghost', onClick: closeModal }],
+  });
   renderKnowledgeQuestion();
 }
 
 function renderKnowledgeQuestion() {
   const card = $('#quizCard'); if (!card || !quizState.question) return;
   const q = quizState.question;
-  card.innerHTML = `<div class="quiz-progress"><span>${q.group}</span><strong>SEM REPETIR</strong></div>
+  card.innerHTML = `<div class="quiz-progress"><span>${q.group}</span><strong>CLIQUE EM UMA RESPOSTA</strong></div>
     <h3>${escapeAttr(q.q)}</h3>
     <div class="quiz-options">${q.options.map((opt, i) => `<button type="button" class="quiz-option" data-answer="${i}"><i>${String.fromCharCode(65 + i)}</i><span>${escapeAttr(opt)}</span></button>`).join('')}</div>
     <div class="quiz-feedback hidden" id="quizFeedback"></div>
-    <div class="quiz-footer"><span>Uma pergunta de cada vez</span><button type="button" class="btn-primary btn-small hidden" id="quizNextBtn">Outra pergunta ›</button></div>`;
+    <div class="quiz-footer"><span>A próxima pergunta aparecerá automaticamente no topo.</span></div>`;
   $$('.quiz-option').forEach((btn) => btn.addEventListener('click', () => answerKnowledgeQuestion(Number(btn.dataset.answer), q)));
 }
 
@@ -251,10 +280,7 @@ function answerKnowledgeQuestion(selected, q) {
   });
   const feedback = $('#quizFeedback');
   feedback?.classList.remove('hidden');
-  if (feedback) feedback.innerHTML = `<div class="${correct ? 'quiz-hit' : 'quiz-miss'}"><span>${correct ? '✓' : '!'}</span><div><strong>${correct ? 'Resposta correta!' : 'Resposta incorreta — veja a correta.'}</strong><p>${escapeAttr(q.note)}</p></div></div>`;
-  const next = $('#quizNextBtn');
-  next?.classList.remove('hidden');
-  next?.addEventListener('click', startKnowledgeQuestion, { once: true });
+  if (feedback) feedback.innerHTML = `<div class="${correct ? 'quiz-hit' : 'quiz-miss'}"><span>${correct ? '✓' : '!'}</span><div><strong>${correct ? 'Resposta correta!' : 'Resposta incorreta — a correta ficou destacada.'}</strong><p>${escapeAttr(q.note)}</p></div></div>`;
 }
 
 /* ---------- modal genérico ---------- */
@@ -329,7 +355,7 @@ async function render() {
 }
 
 async function updateBadges() {
-  const { Deliveries, Cycles } = await import('./db.js?v=3.0');
+  const { Deliveries, Cycles } = await import('./db.js?v=3.1');
   const rows = await Deliveries.active(environment);
   $('#pendingBadge').textContent = rows.filter((r) => r.status === 'na_loja').length;
   const trashed = await Deliveries.trashed(environment);
@@ -352,7 +378,7 @@ if ('serviceWorker' in navigator) {
     refreshingForUpdate = true;
     window.location.reload();
   });
-  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js?v=3.0', { updateViaCache: 'none' }).then((registration) => registration.update()).catch(() => {}));
+  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js?v=3.1', { updateViaCache: 'none' }).then((registration) => registration.update()).catch(() => {}));
 }
 
 boot();
