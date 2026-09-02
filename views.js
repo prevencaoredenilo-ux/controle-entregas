@@ -1,7 +1,7 @@
-import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters } from './db.js?v=5.4';
-import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=5.4';
-import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=5.4';
-import { exportFullExcelReport } from './excel-report.js?v=5.4';
+import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters } from './db.js?v=5.5';
+import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=5.5';
+import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=5.5';
+import { exportFullExcelReport } from './excel-report.js?v=5.5';
 
 const DEFAULT_OPERATIONAL_TARGETS = { startMinutes:120, arrivalMinutes:210, warningMinutes:30, successTarget:90 };
 
@@ -85,9 +85,23 @@ async function repairNormalPurchaseNumbers({ environment = getEnv(), selectedDay
       return String(a.id).localeCompare(String(b.id));
     });
 
-    for (let i = 0; i < dayRows.length; i += 1) {
-      const row = dayRows[i];
-      const expected = i + 1;
+    const reserved = new Set(
+      dayRows
+        .filter((row) => row.purchaseNumberManual === true && Number.isInteger(Number(row.purchaseNumber)) && Number(row.purchaseNumber) > 0)
+        .map((row) => Number(row.purchaseNumber))
+    );
+    const assigned = new Set();
+    let nextCandidate = 1;
+
+    for (const row of dayRows) {
+      if (row.purchaseNumberManual === true && Number.isInteger(Number(row.purchaseNumber)) && Number(row.purchaseNumber) > 0) {
+        assigned.add(Number(row.purchaseNumber));
+        continue;
+      }
+      while (reserved.has(nextCandidate) || assigned.has(nextCandidate)) nextCandidate += 1;
+      const expected = nextCandidate;
+      assigned.add(expected);
+      nextCandidate += 1;
       if (Number(row.purchaseNumber) === expected) continue;
       const history = [...(row.numberingCorrections || []), {
         previous: row.purchaseNumber,
@@ -96,6 +110,7 @@ async function repairNormalPurchaseNumbers({ environment = getEnv(), selectedDay
         by: getOperatorName(),
         at: new Date().toISOString(),
         reason,
+        mode: 'automatic',
       }];
       await Deliveries.update(row.id, {
         purchaseNumber: expected,
@@ -111,7 +126,7 @@ async function repairNormalPurchaseNumbers({ environment = getEnv(), selectedDay
 }
 
 export async function normalizeExistingDailyPurchaseNumbers() {
-  return repairNormalPurchaseNumbers({ reason: 'Migração automática v5.4: correção dos números já lançados pela data da entrega e ordem de cadastro' });
+  return repairNormalPurchaseNumbers({ reason: 'Migração automática v5.5: correção dos números já lançados pela data da entrega e ordem de cadastro' });
 }
 
 function deliverySla(record, nowMs = Date.now()) {
@@ -230,7 +245,7 @@ export async function renderCentral() {
   const tomorrowCentral = new Date(); tomorrowCentral.setDate(tomorrowCentral.getDate()+1);
   const tomorrowHistory = byWeekdayCountOccurrences(rows,tomorrowCentral.getDay());
   const tomorrowForecast = tomorrowHistory.occurrences ? tomorrowHistory.total/tomorrowHistory.occurrences : null;
-  const liveLaneCard = (r) => `<article class="live-delivery-card" role="button" tabindex="0" data-delivery-id="${r.id}" data-tip="Compra #${r.purchaseNumber} · ${escapeHtml(r.clientName || 'Sem nome')} · Entrada ${timeBR(r.entryTime)} · Saída ${timeBR(r.leftStoreAt)} · Chegada ${timeBR(r.clientArrivalAt)} · Finalização ${timeBR(r.deliveredAt)} · Clique para abrir.">
+  const liveLaneCard = (r) => `<article class="live-delivery-card" role="button" tabindex="0" data-delivery-id="${r.id}" data-tip="Compra #${r.purchaseNumber} · ${escapeHtml(r.clientName || 'Sem nome')} · Entrada ${timeBR(r.entryTime)} · Saída ${timeBR(r.leftStoreAt)} · Chegada ${timeBR(r.clientArrivalAt)} · Finalização ${timeBR(r.deliveredAt)} · Clique para abrir e editar, inclusive o número da entrega.">
     <div><strong>#${r.purchaseNumber}</strong>${r.priority === 'alta' ? '<span>ALTA</span>' : ''}</div>
     <p>${escapeHtml(r.clientName || r.street || 'Cliente sem nome')}</p>
     <small>${timeBR(r.entryTime)} · ${escapeHtml(STATUS_META[r.status]?.label || r.status)}</small>
@@ -384,12 +399,12 @@ async function openRecalculateDayNumbersModal() {
   const today = localDateKey();
   openModal({
     title: 'Recalcular numeração do dia',
-    subtitle: 'Corrige números antigos usando somente a ordem de cadastro no sistema. A hora da compra não interfere.',
+    subtitle: 'Corrige números antigos usando somente a ordem de cadastro no sistema. A hora da compra não interfere e números corrigidos manualmente são preservados.',
     body: `<form id="recalculateNumberingForm" class="recalculate-numbering-form">
       <label>Data a corrigir *<input type="date" name="operationDate" value="${today}" required /></label>
       <div class="numbering-rule-card">
         <span>↻</span>
-        <div><strong>Regra da sequência</strong><p>A numeração segue exclusivamente a ordem em que cada entrega normal foi cadastrada no sistema para a data escolhida. A hora informada da compra não é usada. Ex.: se #10 já existia e uma entrega antiga é cadastrada depois, ela será #11. As agendadas mantêm seus números.</p></div>
+        <div><strong>Regra da sequência</strong><p>A numeração segue exclusivamente a ordem em que cada entrega normal foi cadastrada no sistema para a data escolhida. A hora informada da compra não é usada. Ex.: se #10 já existia e uma entrega antiga é cadastrada depois, ela será #11. As agendadas mantêm seus números e correções manuais não são sobrescritas.</p></div>
       </div>
     </form>`,
     actions: [
@@ -803,9 +818,14 @@ export async function openDeliveryModal(record = null) {
 
   const body = `
     <form id="deliveryForm">
-      <div class="field-row">
-        <label>Nº da compra<input value="${record?.purchaseNumber ?? '(automático ao salvar)'}" disabled /></label>
+      <div class="field-row delivery-number-row">
+        <label>Nº da entrega ${record ? '*' : ''}
+          ${record
+            ? `<input type="number" min="1" step="1" name="purchaseNumberManual" required value="${Number(record.purchaseNumber) || 1}" />`
+            : `<input value="(automático ao salvar)" disabled />`}
+        </label>
         <label>Nº de chegada<input value="${record?.arrivalNumber ?? '(automático ao salvar)'}" disabled /></label>
+        ${record ? '<small class="field-row-help number-edit-help">Pode corrigir manualmente o número da entrega. O sistema bloqueia duplicidade no mesmo dia e registra a alteração na auditoria.</small>' : ''}
       </div>
       <div class="field-row field-row-date-time">
         <label>Data da entrega *
@@ -1046,6 +1066,14 @@ async function saveDeliveryForm(record) {
   const entryTime = new Date(opYear, (opMonth || 1) - 1, opDay || 1, Number(hh), Number(mm), 0, 0);
   if (Number.isNaN(entryTime.getTime())) return toast('Informe uma data e hora válidas para a entrega.', 'error');
 
+  let requestedPurchaseNumber = null;
+  if (record) {
+    requestedPurchaseNumber = Number(fd.purchaseNumberManual);
+    if (!Number.isInteger(requestedPurchaseNumber) || requestedPurchaseNumber < 1) {
+      return toast('O número da entrega deve ser um número inteiro maior que zero.', 'error');
+    }
+  }
+
   if (fd.type === 'agendada' && !fd.scheduledAt) return toast('Informe a data e hora do agendamento.', 'error');
 
   // duplicidade acidental de cupom no mesmo dia/ambiente
@@ -1096,14 +1124,44 @@ async function saveDeliveryForm(record) {
       const nextOperationDay = localDateKey(payload.entryTime);
       const typeChanged = record.type !== fd.type;
       const dayChanged = previousOperationDay !== nextOperationDay;
-      if (typeChanged || dayChanged) {
-        const existingDeliveries = await Deliveries.active(env);
+      const manualNumberChanged = requestedPurchaseNumber !== Number(record.purchaseNumber);
+      const existingDeliveries = await Deliveries.active(env);
+
+      if (manualNumberChanged) {
+        const duplicate = existingDeliveries.find((item) => {
+          if (item.id === record.id || Number(item.purchaseNumber) !== requestedPurchaseNumber) return false;
+          if (fd.type === 'agendada') return item.type === 'agendada';
+          return item.type !== 'agendada' && localDateKey(item.entryTime) === nextOperationDay;
+        });
+        if (duplicate) {
+          const where = fd.type === 'agendada' ? 'entre as entregas agendadas' : `na data ${dateBR(nextOperationDay)}`;
+          return toast(`Já existe a entrega #${requestedPurchaseNumber} ${where}. Escolha outro número.`, 'error');
+        }
+        const numberHistory = [...(record.numberingCorrections || []), {
+          previous: record.purchaseNumber,
+          current: requestedPurchaseNumber,
+          day: nextOperationDay,
+          by: getOperatorName(),
+          at: new Date().toISOString(),
+          reason: 'Correção manual do número da entrega',
+          mode: 'manual',
+        }];
+        payload.purchaseNumber = requestedPurchaseNumber;
+        payload.purchaseNumberManual = true;
+        payload.numberingCorrections = numberHistory;
+        payload.numberingCorrection = numberHistory.at(-1);
+        if (dayChanged) payload.arrivalNumber = nextArrivalNumber(existingDeliveries, payload.entryTime, record.id);
+      } else if (typeChanged || dayChanged) {
         if (fd.type === 'agendada') {
           payload.purchaseNumber = typeChanged ? nextScheduledPurchaseNumber(existingDeliveries, record.id) : record.purchaseNumber;
         } else {
           payload.purchaseNumber = nextDailyPurchaseNumber(existingDeliveries, payload.entryTime, record.id);
         }
         payload.arrivalNumber = nextArrivalNumber(existingDeliveries, payload.entryTime, record.id);
+        payload.purchaseNumberManual = false;
+      } else {
+        payload.purchaseNumber = record.purchaseNumber;
+        payload.purchaseNumberManual = record.purchaseNumberManual === true;
       }
       await Deliveries.update(record.id, payload);
       const targetStatus = payload.deliveredAt ? 'finalizada' : (payload.clientArrivalAt && record.status === 'em_rota' ? 'no_cliente' : null);
@@ -2987,7 +3045,7 @@ function openVehicleAddModal(record = null) {
    ========================================================= */
 export async function renderSettings() {
   const cfg = JSON.parse(localStorage.getItem('orbita_settings') || '{}');
-  const { listAutoBackups } = await import('./db.js?v=5.4');
+  const { listAutoBackups } = await import('./db.js?v=5.5');
   const autoBackups = await listAutoBackups();
   const backupReasonLabel = (reason = '') => reason === 'abertura' ? 'Abertura do sistema' : reason === 'periodico-1min' ? 'Segurança · 1 minuto' : reason ? 'Alteração salva' : 'Automático';
   const autoList = autoBackups.length
@@ -3025,13 +3083,13 @@ export async function renderSettings() {
 export function wireSettingsEvents() {
   $$('.auto-restore-btn').forEach((btn) => btn.addEventListener('click', async () => {
     if (!confirm('Restaurar esse backup automático vai substituir os dados atuais. Continuar?')) return;
-    const { restoreAutoBackup } = await import('./db.js?v=5.4');
+    const { restoreAutoBackup } = await import('./db.js?v=5.5');
     await restoreAutoBackup(btn.dataset.id);
     toast('Backup automático restaurado.', 'success');
     refreshApp();
   }));
   $('#settingsBackupBtn')?.addEventListener('click', async () => {
-    const data = await (await import('./db.js?v=5.4')).exportAll();
+    const data = await (await import('./db.js?v=5.5')).exportAll();
     downloadJSON(`orbita-backup-completo-${new Date().toISOString().slice(0,10)}.json`, data);
     toast('Backup completo gerado.', 'success');
   });
@@ -3039,12 +3097,12 @@ export function wireSettingsEvents() {
     const file = e.target.files[0];
     if (!file) return;
     if (!confirm('Isso vai substituir os dados atuais pelo conteúdo do backup. Um backup de segurança dos dados atuais será baixado antes. Continuar?')) { e.target.value = ''; return; }
-    const currentBackup = await (await import('./db.js?v=5.4')).exportAll();
+    const currentBackup = await (await import('./db.js?v=5.5')).exportAll();
     downloadJSON(`orbita-backup-seguranca-antes-restauracao-${Date.now()}.json`, currentBackup);
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      await (await import('./db.js?v=5.4')).importAll(data);
+      await (await import('./db.js?v=5.5')).importAll(data);
       toast('Backup restaurado.', 'success');
       refreshApp();
     } catch { toast('Arquivo de backup inválido.', 'error'); }
