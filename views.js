@@ -1,7 +1,7 @@
-import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters } from './db.js?v=5.2';
-import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=5.2';
-import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=5.2';
-import { exportFullExcelReport } from './excel-report.js?v=5.2';
+import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters } from './db.js?v=5.3';
+import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=5.3';
+import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=5.3';
+import { exportFullExcelReport } from './excel-report.js?v=5.3';
 
 const DEFAULT_OPERATIONAL_TARGETS = { startMinutes:120, arrivalMinutes:210, warningMinutes:30, successTarget:90 };
 
@@ -52,6 +52,17 @@ function nextScheduledPurchaseNumber(deliveries, excludeId = null) {
   return deliveries
     .filter((item) => item.id !== excludeId && item.type === 'agendada')
     .reduce((max, item) => Math.max(max, Number(item.purchaseNumber) || 0), 0) + 1;
+}
+
+function registrationTimestamp(record) {
+  const created = Date.parse(record?.createdAt || '');
+  if (Number.isFinite(created)) return created;
+  const idPart = String(record?.id || '').split('_')[1];
+  if (idPart) {
+    const parsed = parseInt(idPart, 36);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return Number.MAX_SAFE_INTEGER;
 }
 
 function deliverySla(record, nowMs = Date.now()) {
@@ -324,12 +335,12 @@ async function openRecalculateDayNumbersModal() {
   const today = localDateKey();
   openModal({
     title: 'Recalcular numeração do dia',
-    subtitle: 'Corrige números antigos sem alterar a sequência válida nem a numeração das entregas agendadas.',
+    subtitle: 'Corrige números antigos usando somente a ordem de cadastro no sistema. A hora da compra não interfere.',
     body: `<form id="recalculateNumberingForm" class="recalculate-numbering-form">
       <label>Data a corrigir *<input type="date" name="operationDate" value="${today}" required /></label>
       <div class="numbering-rule-card">
         <span>↻</span>
-        <div><strong>Regra da sequência</strong><p>A sequência segue a ordem em que as entregas normais foram lançadas no sistema para a data escolhida. Se a última válida for #10, uma entrega dessa mesma data lançada depois receberá #11, mesmo que a hora da compra seja anterior. As agendadas mantêm seus números.</p></div>
+        <div><strong>Regra da sequência</strong><p>A numeração segue exclusivamente a ordem em que cada entrega normal foi cadastrada no sistema para a data escolhida. A hora informada da compra não é usada. Ex.: se #10 já existia e uma entrega antiga é cadastrada depois, ela será #11. As agendadas mantêm seus números.</p></div>
       </div>
     </form>`,
     actions: [
@@ -343,8 +354,8 @@ async function openRecalculateDayNumbersModal() {
         const normals = rows
           .filter((r) => r.type !== 'agendada' && localDateKey(r.entryTime) === selectedDay)
           .sort((a,b) => {
-            const createdA = new Date(a.createdAt || a.updatedAt || a.entryTime).getTime();
-            const createdB = new Date(b.createdAt || b.updatedAt || b.entryTime).getTime();
+            const createdA = registrationTimestamp(a);
+            const createdB = registrationTimestamp(b);
             if (createdA !== createdB) return createdA - createdB;
             return String(a.id).localeCompare(String(b.id));
           });
@@ -365,7 +376,7 @@ async function openRecalculateDayNumbersModal() {
               day: selectedDay,
               by: getOperatorName(),
               at: new Date().toISOString(),
-              reason: 'Recálculo manual da sequência diária pela ordem de lançamento no sistema',
+              reason: 'Recálculo manual da sequência diária pela ordem de cadastro no sistema; hora da compra ignorada',
             },
           });
           changed += 1;
@@ -2938,7 +2949,7 @@ function openVehicleAddModal(record = null) {
    ========================================================= */
 export async function renderSettings() {
   const cfg = JSON.parse(localStorage.getItem('orbita_settings') || '{}');
-  const { listAutoBackups } = await import('./db.js?v=5.2');
+  const { listAutoBackups } = await import('./db.js?v=5.3');
   const autoBackups = await listAutoBackups();
   const backupReasonLabel = (reason = '') => reason === 'abertura' ? 'Abertura do sistema' : reason === 'periodico-1min' ? 'Segurança · 1 minuto' : reason ? 'Alteração salva' : 'Automático';
   const autoList = autoBackups.length
@@ -2976,13 +2987,13 @@ export async function renderSettings() {
 export function wireSettingsEvents() {
   $$('.auto-restore-btn').forEach((btn) => btn.addEventListener('click', async () => {
     if (!confirm('Restaurar esse backup automático vai substituir os dados atuais. Continuar?')) return;
-    const { restoreAutoBackup } = await import('./db.js?v=5.2');
+    const { restoreAutoBackup } = await import('./db.js?v=5.3');
     await restoreAutoBackup(btn.dataset.id);
     toast('Backup automático restaurado.', 'success');
     refreshApp();
   }));
   $('#settingsBackupBtn')?.addEventListener('click', async () => {
-    const data = await (await import('./db.js?v=5.2')).exportAll();
+    const data = await (await import('./db.js?v=5.3')).exportAll();
     downloadJSON(`orbita-backup-completo-${new Date().toISOString().slice(0,10)}.json`, data);
     toast('Backup completo gerado.', 'success');
   });
@@ -2990,12 +3001,12 @@ export function wireSettingsEvents() {
     const file = e.target.files[0];
     if (!file) return;
     if (!confirm('Isso vai substituir os dados atuais pelo conteúdo do backup. Um backup de segurança dos dados atuais será baixado antes. Continuar?')) { e.target.value = ''; return; }
-    const currentBackup = await (await import('./db.js?v=5.2')).exportAll();
+    const currentBackup = await (await import('./db.js?v=5.3')).exportAll();
     downloadJSON(`orbita-backup-seguranca-antes-restauracao-${Date.now()}.json`, currentBackup);
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      await (await import('./db.js?v=5.2')).importAll(data);
+      await (await import('./db.js?v=5.3')).importAll(data);
       toast('Backup restaurado.', 'success');
       refreshApp();
     } catch { toast('Arquivo de backup inválido.', 'error'); }
