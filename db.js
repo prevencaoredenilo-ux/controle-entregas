@@ -217,7 +217,8 @@ export const Counters = {
     return new Promise((res, rej) => {
       const g = store.get(key);
       g.onsuccess = () => {
-        const current = g.result?.value || 0;
+        const minimum = Number(options.minimum) || 0;
+        const current = Math.max(g.result?.value || 0, minimum);
         const value = current + 1;
         const p = store.put({ key, value });
         p.onsuccess = () => res(value);

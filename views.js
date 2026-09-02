@@ -1,7 +1,7 @@
-import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters } from './db.js?v=4.7';
-import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=4.7';
-import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=4.7';
-import { exportFullExcelReport } from './excel-report.js?v=4.7';
+import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters } from './db.js?v=4.8';
+import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=4.8';
+import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=4.8';
+import { exportFullExcelReport } from './excel-report.js?v=4.8';
 
 const DEFAULT_OPERATIONAL_TARGETS = { startMinutes:120, arrivalMinutes:210, warningMinutes:30, successTarget:90 };
 
@@ -679,9 +679,13 @@ export async function openDeliveryModal(record = null) {
         <label>Nº de chegada<input value="${record?.arrivalNumber ?? '(automático ao salvar)'}" disabled /></label>
       </div>
       <div class="field-row">
+        <label>Data da entrega *
+          <input type="date" name="operationDate" required value="${record ? localDateKey(record.entryTime) : localDateKey()}" />
+          <small class="field-help">Informe a data real da compra, mesmo que esteja lançando no sistema em outro dia.${record ? ' Se alterar a data, a numeração será recalculada para o dia escolhido.' : ''}</small>
+        </label>
         <label>Hora de entrada *<input type="time" name="entryTimeOnly" required value="${record ? new Date(record.entryTime).toTimeString().slice(0,5) : new Date().toTimeString().slice(0,5)}" /></label>
-        <label>PDV/Caixa *<input name="pdv" required value="${escapeHtml(record?.pdv || '')}" /></label>
       </div>
+      <label>PDV/Caixa *<input name="pdv" required value="${escapeHtml(record?.pdv || '')}" /></label>
       <div class="field-row">
         <label>DOC *<input name="doc" required value="${escapeHtml(record?.doc || '')}" /></label>
         <label>Cupom<input name="coupon" value="${escapeHtml(record?.coupon || '')}" /></label>
@@ -907,8 +911,9 @@ async function saveDeliveryForm(record) {
 
   let fee = fd.feeOption === 'livre' ? Number(fd.feeCustom || 0) : Number(fd.feeOption);
   const [hh, mm] = (fd.entryTimeOnly || '00:00').split(':');
-  const entryTime = new Date();
-  entryTime.setHours(Number(hh), Number(mm), 0, 0);
+  const [opYear, opMonth, opDay] = String(fd.operationDate || localDateKey()).split('-').map(Number);
+  const entryTime = new Date(opYear, (opMonth || 1) - 1, opDay || 1, Number(hh), Number(mm), 0, 0);
+  if (Number.isNaN(entryTime.getTime())) return toast('Informe uma data e hora válidas para a entrega.', 'error');
 
   if (fd.type === 'agendada' && !fd.scheduledAt) return toast('Informe a data e hora do agendamento.', 'error');
 
@@ -956,15 +961,54 @@ async function saveDeliveryForm(record) {
 
   try {
     if (record) {
+      const previousOperationDay = localDateKey(record.entryTime);
+      const nextOperationDay = localDateKey(payload.entryTime);
+      const typeChanged = record.type !== fd.type;
+      const dayChanged = previousOperationDay !== nextOperationDay;
+      if (typeChanged || dayChanged) {
+        const existingDeliveries = (await Deliveries.active(env)).filter((item) => item.id !== record.id);
+        if (fd.type === 'agendada') {
+          if (typeChanged) {
+            const scheduledMax = existingDeliveries
+              .filter((item) => item.type === 'agendada')
+              .reduce((max, item) => Math.max(max, Number(item.purchaseNumber) || 0), 0);
+            payload.purchaseNumber = await Counters.next(env, 'compra', { scope: 'agendada', daily: false, minimum: scheduledMax });
+          } else {
+            payload.purchaseNumber = record.purchaseNumber;
+          }
+        } else {
+          const dayMax = existingDeliveries
+            .filter((item) => item.type !== 'agendada' && localDateKey(item.entryTime) === nextOperationDay)
+            .reduce((max, item) => Math.max(max, Number(item.purchaseNumber) || 0), 0);
+          payload.purchaseNumber = await Counters.next(env, 'compra', { daily: true, date: payload.entryTime, minimum: dayMax });
+        }
+        const arrivalMax = existingDeliveries
+          .filter((item) => localDateKey(item.entryTime) === nextOperationDay)
+          .reduce((max, item) => Math.max(max, Number(item.arrivalNumber) || 0), 0);
+        payload.arrivalNumber = await Counters.next(env, 'chegada', { daily: true, date: payload.entryTime, minimum: arrivalMax });
+      }
       await Deliveries.update(record.id, payload);
       const targetStatus = payload.deliveredAt ? 'finalizada' : (payload.clientArrivalAt && record.status === 'em_rota' ? 'no_cliente' : null);
       if (targetStatus && targetStatus !== record.status) await Deliveries.changeStatus(record.id, targetStatus, { note: 'Horários operacionais informados na edição.' });
       toast('Entrega atualizada.', 'success');
     } else {
-      payload.purchaseNumber = fd.type === 'agendada'
-        ? await Counters.next(env, 'compra', { scope: 'agendada', daily: false })
-        : await Counters.next(env, 'compra', { daily: true, date: payload.entryTime });
-      payload.arrivalNumber = await Counters.next(env, 'chegada', { daily: true, date: payload.entryTime });
+      const existingDeliveries = await Deliveries.active(env);
+      const operationDayKey = localDateKey(payload.entryTime);
+      if (fd.type === 'agendada') {
+        const scheduledMax = existingDeliveries
+          .filter((item) => item.type === 'agendada')
+          .reduce((max, item) => Math.max(max, Number(item.purchaseNumber) || 0), 0);
+        payload.purchaseNumber = await Counters.next(env, 'compra', { scope: 'agendada', daily: false, minimum: scheduledMax });
+      } else {
+        const dayMax = existingDeliveries
+          .filter((item) => item.type !== 'agendada' && localDateKey(item.entryTime) === operationDayKey)
+          .reduce((max, item) => Math.max(max, Number(item.purchaseNumber) || 0), 0);
+        payload.purchaseNumber = await Counters.next(env, 'compra', { daily: true, date: payload.entryTime, minimum: dayMax });
+      }
+      const arrivalMax = existingDeliveries
+        .filter((item) => localDateKey(item.entryTime) === operationDayKey)
+        .reduce((max, item) => Math.max(max, Number(item.arrivalNumber) || 0), 0);
+      payload.arrivalNumber = await Counters.next(env, 'chegada', { daily: true, date: payload.entryTime, minimum: arrivalMax });
       payload.status = fd.type === 'agendada' ? 'programada' : 'na_loja';
       payload.statusHistory = [];
       payload.reschedules = [];
@@ -1196,13 +1240,17 @@ export async function openStartCycleModal() {
   const neighOrder = Object.fromEntries(neighborhoods.map((n) => [n.id, n.routeOrder ?? 0]));
 
   const candidates = allActiveDeliveries
-    .filter((d) => !busyDeliveryIds.has(d.id) && d.status === 'na_loja')
+    .filter((d) => !busyDeliveryIds.has(d.id) && ['na_loja', 'programada'].includes(d.status))
     .sort((a, b) => {
       if (a.priority !== b.priority) return a.priority === 'alta' ? -1 : 1;
+      if (a.status !== b.status) return a.status === 'na_loja' ? -1 : 1;
+      if (a.status === 'programada' && b.status === 'programada') {
+        return new Date(a.scheduledAt || a.entryTime).getTime() - new Date(b.scheduledAt || b.entryTime).getTime();
+      }
       return (neighOrder[a.neighborhoodId] || 0) - (neighOrder[b.neighborhoodId] || 0);
     });
 
-  if (!candidates.length) return toast('Não há entregas "Na loja" para formar um ciclo.', 'error');
+  if (!candidates.length) return toast('Não há entregas disponíveis na loja ou agendadas para formar um ciclo.', 'error');
 
   const body = `
     <form id="startCycleForm">
@@ -1240,18 +1288,22 @@ export async function openStartCycleModal() {
         <div><strong>${activeKmByVehicle.size ? 'Há veículo com KM inicial liberado' : 'Nenhum veículo pode sair ainda'}</strong><small>O ciclo só será confirmado para um veículo com KM inicial registrado hoje e expediente ainda aberto.</small></div>
         <button type="button" class="btn-ghost btn-small" id="cycleRegisterKmBtn">Registrar KM inicial</button>
       </div>
-      <label>Entregas do ciclo (ordem sugerida: prioridade e bairro — arraste com os botões)</label>
+      <label>Entregas do ciclo (ordem sugerida: prioridade e bairro — arraste com os botões)</label><p class="cycle-scheduled-help">As entregas agendadas aparecem nesta lista também. Elas iniciam desmarcadas para evitar saída antecipada; marque a agendada quando ela fizer parte deste ciclo.</p>
       <div id="cycleItemsList" style="display:grid;gap:6px">
-        ${candidates.map((d, i) => `
-          <div class="cycle-item" data-id="${d.id}" style="display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:8px;padding:8px 10px">
-            <input type="checkbox" checked />
-            <div style="flex:1">
-              <strong style="font-size:12.5px">#${d.purchaseNumber} · ${escapeHtml(d.clientName || d.street)}</strong>
-              <div style="font-size:11px;color:var(--text-muted)">${d.priority === 'alta' ? 'Prioridade alta · ' : ''}${escapeHtml(neighborhoods.find(n=>n.id===d.neighborhoodId)?.name || '')}</div>
+        ${candidates.map((d, i) => {
+          const scheduled = d.status === 'programada';
+          const scheduledLabel = scheduled ? `Agendada ${dateTimeBR(d.scheduledAt || d.entryTime)}` : '';
+          return `
+          <div class="cycle-item ${scheduled ? 'cycle-item-scheduled' : ''}" data-id="${d.id}">
+            <input type="checkbox" ${scheduled ? '' : 'checked'} />
+            <div class="cycle-item-copy">
+              <div class="cycle-item-title"><strong>#${d.purchaseNumber} · ${escapeHtml(d.clientName || d.street)}</strong>${scheduled ? '<span class="cycle-scheduled-badge">AGENDADA</span>' : ''}</div>
+              <div class="cycle-item-meta">${d.priority === 'alta' ? 'Prioridade alta · ' : ''}${escapeHtml(neighborhoods.find(n=>n.id===d.neighborhoodId)?.name || '')}${scheduledLabel ? ` · ${escapeHtml(scheduledLabel)}` : ''}</div>
             </div>
             <button type="button" class="btn-ghost btn-small move-up">↑</button>
             <button type="button" class="btn-ghost btn-small move-down">↓</button>
-          </div>`).join('')}
+          </div>`;
+        }).join('')}
       </div>
     </form>`;
 
@@ -2827,7 +2879,7 @@ function openVehicleAddModal(record = null) {
    ========================================================= */
 export async function renderSettings() {
   const cfg = JSON.parse(localStorage.getItem('orbita_settings') || '{}');
-  const { listAutoBackups } = await import('./db.js?v=4.7');
+  const { listAutoBackups } = await import('./db.js?v=4.8');
   const autoBackups = await listAutoBackups();
   const backupReasonLabel = (reason = '') => reason === 'abertura' ? 'Abertura do sistema' : reason === 'periodico-1min' ? 'Segurança · 1 minuto' : reason ? 'Alteração salva' : 'Automático';
   const autoList = autoBackups.length
@@ -2865,13 +2917,13 @@ export async function renderSettings() {
 export function wireSettingsEvents() {
   $$('.auto-restore-btn').forEach((btn) => btn.addEventListener('click', async () => {
     if (!confirm('Restaurar esse backup automático vai substituir os dados atuais. Continuar?')) return;
-    const { restoreAutoBackup } = await import('./db.js?v=4.7');
+    const { restoreAutoBackup } = await import('./db.js?v=4.8');
     await restoreAutoBackup(btn.dataset.id);
     toast('Backup automático restaurado.', 'success');
     refreshApp();
   }));
   $('#settingsBackupBtn')?.addEventListener('click', async () => {
-    const data = await (await import('./db.js?v=4.7')).exportAll();
+    const data = await (await import('./db.js?v=4.8')).exportAll();
     downloadJSON(`orbita-backup-completo-${new Date().toISOString().slice(0,10)}.json`, data);
     toast('Backup completo gerado.', 'success');
   });
@@ -2879,12 +2931,12 @@ export function wireSettingsEvents() {
     const file = e.target.files[0];
     if (!file) return;
     if (!confirm('Isso vai substituir os dados atuais pelo conteúdo do backup. Um backup de segurança dos dados atuais será baixado antes. Continuar?')) { e.target.value = ''; return; }
-    const currentBackup = await (await import('./db.js?v=4.7')).exportAll();
+    const currentBackup = await (await import('./db.js?v=4.8')).exportAll();
     downloadJSON(`orbita-backup-seguranca-antes-restauracao-${Date.now()}.json`, currentBackup);
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      await (await import('./db.js?v=4.7')).importAll(data);
+      await (await import('./db.js?v=4.8')).importAll(data);
       toast('Backup restaurado.', 'success');
       refreshApp();
     } catch { toast('Arquivo de backup inválido.', 'error'); }
