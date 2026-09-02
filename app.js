@@ -1,6 +1,6 @@
-import { ensureSeed, saveAutoBackup, enableWriteThroughAutoBackup } from './db.js?v=5.6';
-import { $, $$, toast, initTooltips, animateStatCards, performanceProfile } from './helpers.js?v=5.6';
-import * as V from './views.js?v=5.6';
+import { ensureSeed, saveAutoBackup, enableWriteThroughAutoBackup } from './db.js?v=5.7';
+import { $, $$, toast, initTooltips, animateStatCards, performanceProfile } from './helpers.js?v=5.7';
+import * as V from './views.js?v=5.7';
 
 let currentView = 'central';
 let currentRegistryTab = 'vehicles';
@@ -60,16 +60,12 @@ async function startApp() {
   wireNav();
   wireGlobalActions();
   await V.normalizeReturnQueueStatus?.();
-  const numberingRepair = await V.normalizeExistingDailyPurchaseNumbers?.();
   enableWriteThroughAutoBackup();
   startKnowledgeTicker();
   initTooltips(document);
   startLiveClock();
   startAutoBackup();
   render();
-  if (numberingRepair?.changed) {
-    toast(`${numberingRepair.changed} entrega(s) antiga(s) tiveram a numeração corrigida automaticamente.`, 'success');
-  }
 }
 
 function startLiveClock() {
@@ -119,7 +115,7 @@ function wireNav() {
 }
 
 async function openOperatorPicker() {
-  const { Collaborators } = await import('./db.js?v=5.6');
+  const { Collaborators } = await import('./db.js?v=5.7');
   const list = (await Collaborators.all()).filter((c) => c.active !== false);
   openModal({
     title: 'Quem está operando agora?',
@@ -369,7 +365,7 @@ async function render() {
 }
 
 async function updateBadges() {
-  const { Deliveries, Cycles } = await import('./db.js?v=5.6');
+  const { Deliveries, Cycles } = await import('./db.js?v=5.7');
   const rows = await Deliveries.active(environment);
   $('#pendingBadge').textContent = rows.filter((r) => r.status === 'na_loja').length;
   const trashed = await Deliveries.trashed(environment);
@@ -392,7 +388,7 @@ if ('serviceWorker' in navigator) {
     refreshingForUpdate = true;
     window.location.reload();
   });
-  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js?v=5.6', { updateViaCache: 'none' }).then((registration) => registration.update()).catch(() => {}));
+  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js?v=5.7', { updateViaCache: 'none' }).then((registration) => registration.update()).catch(() => {}));
 }
 
 boot();

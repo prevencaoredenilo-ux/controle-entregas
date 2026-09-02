@@ -1,5 +1,5 @@
-import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, Cycles, OdometerLogs, Costs, DayClosures } from './db.js?v=5.6';
-import { STATUS_META } from './helpers.js?v=5.6';
+import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, Cycles, OdometerLogs, Costs, DayClosures } from './db.js?v=5.7';
+import { STATUS_META } from './helpers.js?v=5.7';
 
 const DEFAULT_TARGETS = { startMinutes:120, arrivalMinutes:210, warningMinutes:30, successTarget:90 };
 const DAY_NAMES = ['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'];
@@ -27,7 +27,7 @@ function groupBy(rows,keyFn){ const out=new Map(); rows.forEach((r)=>{const k=ke
 function statusLabel(r){ return STATUS_META[r.status]?.label || r.status || ''; }
 function hasProblem(r){ return ['retorno','reentrega','cancelada'].includes(r.status) || (r.returnAttempts||[]).length>0; }
 function isFinal(r){ return r.status==='finalizada'; }
-function isRevenue(r){ return r.status==='finalizada' || (r.status==='retirada_loja' && !r.refunded); }
+function isRevenue(r){ return !!r; }
 function startLate(r){ if(!r.entryTime)return false; const end=r.leftStoreAt?new Date(r.leftStoreAt).getTime():Date.now(); return end-new Date(r.entryTime).getTime()>targets().startMinutes*60000; }
 function arrivalLate(r){ if(!r.entryTime)return false; const end=r.clientArrivalAt?new Date(r.clientArrivalAt).getTime():(r.deliveredAt?new Date(r.deliveredAt).getTime():Date.now()); return end-new Date(r.entryTime).getTime()>targets().arrivalMinutes*60000; }
 function inPeriod(v,period){ const k=dayKey(v); if(!k)return false; return (!period?.start||k>=period.start)&&(!period?.end||k<=period.end); }

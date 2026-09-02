@@ -216,3 +216,12 @@ Você indicou o repositório `prevencaoredenilo-ux/controle-entregas` (V14.8) co
 - Entregas normais usam a data operacional escolhida e recebem o próximo número disponível daquele dia.
 - Entrega retroativa: se o dia terminou em #10, a próxima lançada para esse mesmo dia recebe #11, independentemente da hora informada.
 - O recálculo diário usa a ordem real de criação dos registros no sistema e não altera a numeração das agendadas.
+
+## v5.7 — ajustes operacionais solicitados
+- Numeração única diária pela data real da compra, incluindo entregas agendadas na mesma sequência.
+- A data agendada não interfere no Nº da entrega.
+- Nº da entrega aparece automaticamente no formulário antes de salvar; Nº de chegada deixou de aparecer porque representava a mesma sequência.
+- Um único horário de entrega ao cliente; o sistema não pede chegada e finalização separadamente.
+- Seleção do ciclo reorganizada em cards compactos, com checkbox corrigido e informações alinhadas.
+- Taxa de entrega entra como receita no momento do cadastro; reembolsos são descontados separadamente.
+- Nenhuma renumeração automática de registros antigos na abertura.

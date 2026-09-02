@@ -1,7 +1,7 @@
-import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters } from './db.js?v=5.6';
-import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=5.6';
-import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=5.6';
-import { exportFullExcelReport } from './excel-report.js?v=5.6';
+import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters } from './db.js?v=5.7';
+import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=5.7';
+import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=5.7';
+import { exportFullExcelReport } from './excel-report.js?v=5.7';
 
 const DEFAULT_OPERATIONAL_TARGETS = { startMinutes:120, arrivalMinutes:210, warningMinutes:30, successTarget:90 };
 
@@ -36,22 +36,11 @@ function formatPerKm(value) {
 
 function nextDailyPurchaseNumber(deliveries, entryTime, excludeId = null) {
   const dayKey = localDateKey(entryTime);
-  return deliveries
-    .filter((item) => item.id !== excludeId && item.type !== 'agendada' && localDateKey(item.entryTime) === dayKey)
-    .reduce((max, item) => Math.max(max, Number(item.purchaseNumber) || 0), 0) + 1;
-}
-
-function nextArrivalNumber(deliveries, entryTime, excludeId = null) {
-  const dayKey = localDateKey(entryTime);
-  return deliveries
-    .filter((item) => item.id !== excludeId && localDateKey(item.entryTime) === dayKey)
-    .reduce((max, item) => Math.max(max, Number(item.arrivalNumber) || 0), 0) + 1;
-}
-
-function nextScheduledPurchaseNumber(deliveries, excludeId = null) {
-  return deliveries
-    .filter((item) => item.id !== excludeId && item.type === 'agendada')
-    .reduce((max, item) => Math.max(max, Number(item.purchaseNumber) || 0), 0) + 1;
+  const dayRows = deliveries.filter((item) => item.id !== excludeId && localDateKey(item.entryTime) === dayKey);
+  const used = new Set(dayRows.map((item) => Number(item.purchaseNumber)).filter((value) => Number.isInteger(value) && value > 0));
+  let candidate = dayRows.length + 1;
+  while (used.has(candidate)) candidate += 1;
+  return candidate;
 }
 
 function registrationTimestamp(record) {
@@ -67,9 +56,9 @@ function registrationTimestamp(record) {
 
 async function repairNormalPurchaseNumbers({ environment = getEnv(), selectedDay = null, reason = 'Correção automática da numeração diária pela ordem de cadastro' } = {}) {
   const rows = await Deliveries.active(environment);
-  const normals = rows.filter((r) => r.type !== 'agendada' && (!selectedDay || localDateKey(r.entryTime) === selectedDay));
+  const numberedRows = rows.filter((r) => !selectedDay || localDateKey(r.entryTime) === selectedDay);
   const groups = new Map();
-  normals.forEach((row) => {
+  numberedRows.forEach((row) => {
     const day = localDateKey(row.entryTime);
     if (!groups.has(day)) groups.set(day, []);
     groups.get(day).push(row);
@@ -126,7 +115,8 @@ async function repairNormalPurchaseNumbers({ environment = getEnv(), selectedDay
 }
 
 export async function normalizeExistingDailyPurchaseNumbers() {
-  return repairNormalPurchaseNumbers({ reason: 'Migração automática v5.6: correção dos números já lançados pela data da entrega e ordem de cadastro' });
+  // v5.7: não altera registros antigos automaticamente ao abrir.
+  return { changed: 0, days: [] };
 }
 
 function deliverySla(record, nowMs = Date.now()) {
@@ -229,7 +219,7 @@ export async function renderCentral() {
   if (reentrega.length) alerts.push({ text: `↻ ${reentrega.length} entrega(s) retornaram e já estão disponíveis para novo ciclo`, query: 'na_loja' });
 
   const finalizedToday = todayRows.filter((r) => r.status === 'finalizada' && r.deliveredAt);
-  const todayFees = todayRows.filter((r) => r.status === 'finalizada' || (r.status === 'retirada_loja' && !r.refunded)).reduce((s,r) => s + Number(r.deliveryFee || 0), 0);
+  const todayFees = todayRows.reduce((s,r) => s + Number(r.deliveryFee || 0), 0);
   const todayRefunds = todayRows.filter((r) => r.refunded).reduce((s,r) => s + Number(r.deliveryFee || 0), 0);
   const todayCosts = costs.filter((c) => c.environment === env && !c.deletedAt && isToday(c.date)).reduce((s,c) => s + Number(c.amount || 0), 0);
   const todayResult = todayFees - todayRefunds - todayCosts;
@@ -245,7 +235,7 @@ export async function renderCentral() {
   const tomorrowCentral = new Date(); tomorrowCentral.setDate(tomorrowCentral.getDate()+1);
   const tomorrowHistory = byWeekdayCountOccurrences(rows,tomorrowCentral.getDay());
   const tomorrowForecast = tomorrowHistory.occurrences ? tomorrowHistory.total/tomorrowHistory.occurrences : null;
-  const liveLaneCard = (r) => `<article class="live-delivery-card" role="button" tabindex="0" data-delivery-id="${r.id}" data-tip="Compra #${r.purchaseNumber} · ${escapeHtml(r.clientName || 'Sem nome')} · Entrada ${timeBR(r.entryTime)} · Saída ${timeBR(r.leftStoreAt)} · Chegada ${timeBR(r.clientArrivalAt)} · Finalização ${timeBR(r.deliveredAt)} · Clique para abrir e editar, inclusive o número da entrega.">
+  const liveLaneCard = (r) => `<article class="live-delivery-card" role="button" tabindex="0" data-delivery-id="${r.id}" data-tip="Compra #${r.purchaseNumber} · ${escapeHtml(r.clientName || 'Sem nome')} · Entrada ${timeBR(r.entryTime)} · Saída ${timeBR(r.leftStoreAt)} · Entrega ao cliente ${timeBR(r.deliveredAt || r.clientArrivalAt)} · Clique para abrir e editar, inclusive o número da entrega.">
     <div><strong>#${r.purchaseNumber}</strong>${r.priority === 'alta' ? '<span>ALTA</span>' : ''}</div>
     <p>${escapeHtml(r.clientName || r.street || 'Cliente sem nome')}</p>
     <small>${timeBR(r.entryTime)} · ${escapeHtml(STATUS_META[r.status]?.label || r.status)}</small>
@@ -339,7 +329,7 @@ export async function renderCentral() {
       <div class="command-dock">
         <button class="primary-command" id="qaNewDelivery" data-tip="Cadastrar uma nova compra e colocá-la na fila."><span class="cmd-ico">🛒</span><strong>Nova entrega</strong></button>
         <button id="qaStartCycle" data-tip="Pergunta a hora exata de saída antes de confirmar o início."><span class="cmd-ico">🚚</span><strong>Iniciar ciclo</strong></button>
-        <button id="qaArrival" data-tip="Registrar a hora exata em que chegou na casa do cliente."><span class="cmd-ico">📍</span><strong>Chegou no cliente</strong></button>
+        <button id="qaArrival" data-tip="Registrar uma única vez o horário em que a entrega foi feita ao cliente."><span class="cmd-ico">📍</span><strong>Entregue ao cliente</strong></button>
         <button id="qaReturn" data-tip="Registrar quando uma entrega retornou à loja, o motivo e a próxima tentativa."><span class="cmd-ico">↩︎</span><strong>Entrega retornou</strong></button>
         <button id="qaCloseCycle" data-tip="Resolve pendências e pergunta a hora exata antes de confirmar o fim."><span class="cmd-ico">✅</span><strong>Finalizar ciclo</strong></button>
         <button id="qaKm" data-tip="Registrar KM inicial ou final."><span class="cmd-ico">🛣️</span><strong>KM do dia</strong></button>
@@ -377,14 +367,14 @@ async function miniList(rows) {
   const trs = rows.slice(0, 30).map((r) => {
     const sla = deliverySla(r);
     return `
-    <tr data-id="${r.id}" class="row-click" data-status="${r.status}" data-priority="${r.priority}" data-late-start="${sla.startLate}" data-late-arrival="${sla.arrivalLate}" data-risk-sla="${sla.startRisk||sla.arrivalRisk}" data-search="${escapeHtml([r.purchaseNumber, r.coupon, r.pdv, r.doc, r.clientName, r.street].join(' ').toLowerCase())}" data-tip="Compra #${r.purchaseNumber} · ${escapeHtml(r.clientName || 'Cliente sem nome')} · Cupom ${escapeHtml(r.coupon || 'não informado')} · PDV ${escapeHtml(r.pdv || '—')} · DOC ${escapeHtml(r.doc || '—')} · Saída limite ${timeBR(sla.startDeadline)} · Chegada limite ${timeBR(sla.arrivalDeadline)} · Saída real ${timeBR(r.leftStoreAt)} · Chegada real ${timeBR(r.clientArrivalAt)} · Finalização ${timeBR(r.deliveredAt)}">
+    <tr data-id="${r.id}" class="row-click" data-status="${r.status}" data-priority="${r.priority}" data-late-start="${sla.startLate}" data-late-arrival="${sla.arrivalLate}" data-risk-sla="${sla.startRisk||sla.arrivalRisk}" data-search="${escapeHtml([r.purchaseNumber, r.coupon, r.pdv, r.doc, r.clientName, r.street].join(' ').toLowerCase())}" data-tip="Compra #${r.purchaseNumber} · ${escapeHtml(r.clientName || 'Cliente sem nome')} · Cupom ${escapeHtml(r.coupon || 'não informado')} · PDV ${escapeHtml(r.pdv || '—')} · DOC ${escapeHtml(r.doc || '—')} · Saída limite ${timeBR(sla.startDeadline)} · Chegada limite ${timeBR(sla.arrivalDeadline)} · Saída real ${timeBR(r.leftStoreAt)} · Entrega ao cliente ${timeBR(r.deliveredAt || r.clientArrivalAt)}">
       <td><strong>#${r.purchaseNumber}</strong></td>
       <td>${escapeHtml(r.clientName || 'Sem nome')}<br><span style="color:var(--text-muted);font-size:11px">${escapeHtml(r.street || '')}</span></td>
       <td><strong>${escapeHtml(r.coupon || '—')}</strong><br><span style="color:var(--text-muted);font-size:11px">PDV ${escapeHtml(r.pdv || '—')} · DOC ${escapeHtml(r.doc || '—')}</span></td>
       <td>${badge(r.status)}${sla.startLate?'<span class="badge problema sla-mini-badge">Saída atrasada</span>':''}${sla.arrivalLate?'<span class="badge problema sla-mini-badge">Chegada atrasada</span>':''}${sla.startRisk||sla.arrivalRisk?'<span class="badge pendente sla-mini-badge">Perto do limite</span>':''}<br><span class="delivery-times">Limites: saída ${timeBR(sla.startDeadline)} · chegada ${timeBR(sla.arrivalDeadline)}</span></td>
       <td>${r.priority === 'alta' ? '<span class="badge problema">Alta</span>' : '—'}</td>
       <td>${money(r.deliveryFee)}</td>
-      <td>${r.status === 'em_rota' ? `<div class="queue-actions"><button class="btn-primary btn-small arrival-row-btn" data-id="${r.id}">Chegou</button><button class="btn-ghost btn-small return-row-btn" data-id="${r.id}">Retornou</button></div>` : r.status === 'no_cliente' ? `<div class="queue-actions"><button class="btn-primary btn-small completion-row-btn" data-id="${r.id}">Finalizar</button><button class="btn-ghost btn-small return-row-btn" data-id="${r.id}">Retornou</button></div>` : '<span style="color:var(--text-muted)">—</span>'}</td>
+      <td>${r.status === 'em_rota' ? `<div class="queue-actions"><button class="btn-primary btn-small arrival-row-btn" data-id="${r.id}">Entregue</button><button class="btn-ghost btn-small return-row-btn" data-id="${r.id}">Retornou</button></div>` : r.status === 'no_cliente' ? `<div class="queue-actions"><button class="btn-primary btn-small completion-row-btn" data-id="${r.id}">Confirmar entrega</button><button class="btn-ghost btn-small return-row-btn" data-id="${r.id}">Retornou</button></div>` : '<span style="color:var(--text-muted)">—</span>'}</td>
     </tr>`;
   }).join('');
   return `<div class="table-wrap central-queue"><table><thead><tr><th>Compra</th><th>Cliente / endereço</th><th>Cupom / documento</th><th>Status</th><th>Prioridade</th><th>Taxa</th><th>Ação rápida</th></tr></thead><tbody>${trs}</tbody></table><div class="queue-no-result hidden" id="queueNoResult">Nenhuma entrega corresponde a esse filtro.</div></div>`;
@@ -399,12 +389,12 @@ async function openRecalculateDayNumbersModal() {
   const today = localDateKey();
   openModal({
     title: 'Recalcular numeração do dia',
-    subtitle: 'Corrige números antigos usando somente a ordem de cadastro no sistema. A hora da compra não interfere e números corrigidos manualmente são preservados.',
+    subtitle: 'Corrige a sequência do dia pela ordem de cadastro. Entregas normais e agendadas usam juntas a data da compra; a data agendada não altera o número.',
     body: `<form id="recalculateNumberingForm" class="recalculate-numbering-form">
       <label>Data a corrigir *<input type="date" name="operationDate" value="${today}" required /></label>
       <div class="numbering-rule-card">
         <span>↻</span>
-        <div><strong>Regra da sequência</strong><p>A numeração segue exclusivamente a ordem em que cada entrega normal foi cadastrada no sistema para a data escolhida. A hora informada da compra não é usada. Ex.: se #10 já existia e uma entrega antiga é cadastrada depois, ela será #11. As agendadas mantêm seus números e correções manuais não são sobrescritas.</p></div>
+        <div><strong>Regra da sequência</strong><p>A sequência usa a data real da compra e a ordem de cadastro no sistema. Normal e agendada participam da mesma numeração diária. Ex.: se a próxima compra de 02/09 é #21, uma compra de 02/09 agendada para 03/09 também recebe #21.</p></div>
       </div>
     </form>`,
     actions: [
@@ -424,9 +414,9 @@ async function openRecalculateDayNumbersModal() {
         const fd = Object.fromEntries(new FormData(form).entries());
         const selectedDay = fd.operationDate;
         const rows = await Deliveries.active(env);
-        const hasNormals = rows.some((r) => r.type !== 'agendada' && localDateKey(r.entryTime) === selectedDay);
-        if (!hasNormals) {
-          toast('Não há entregas normais nessa data para renumerar.', 'error');
+        const hasRows = rows.some((r) => localDateKey(r.entryTime) === selectedDay);
+        if (!hasRows) {
+          toast('Não há entregas nessa data para renumerar.', 'error');
           return;
         }
         const result = await repairNormalPurchaseNumbers({
@@ -527,7 +517,7 @@ export function wireCentralEvents() {
   $$('.arrival-row-btn').forEach((btn) => btn.addEventListener('click', async (e) => {
     e.stopPropagation();
     const record = await Deliveries.get(btn.dataset.id);
-    if (record) openClientArrivalFlow(record);
+    if (record) openDeliveryCompletionFlow(record);
   }));
   $$('.completion-row-btn').forEach((btn) => btn.addEventListener('click', async (e) => {
     e.stopPropagation();
@@ -647,7 +637,7 @@ async function openDayCloseAssistant() {
   const openCycles=cycles.filter((c)=>c.environment===env&&c.status==='aberto'&&!c.deletedAt);
   const pending=rows.filter((r)=>['na_loja','em_rota','no_cliente'].includes(r.status));
   const openKm=logs.filter((l)=>l.environment===env&&l.shiftDate===today&&l.kmStart!=null&&l.kmEnd==null);
-  const timeIssues=rows.filter((r)=>r.status==='finalizada'&&(!r.clientArrivalAt||!r.deliveredAt));
+  const timeIssues=rows.filter((r)=>r.status==='finalizada'&&!(r.deliveredAt||r.clientArrivalAt));
   const todayCosts=costs.filter((c)=>c.environment===env&&!c.deletedAt&&c.date===today);
   const existing=closures.find((c)=>c.environment===env&&c.date===today&&!c.superseded);
   const blockers=openCycles.length+pending.length+openKm.length+timeIssues.length;
@@ -736,16 +726,16 @@ async function openKmPicker(logs) {
 
 async function openArrivalPicker() {
   const rows = (await Deliveries.active(getEnv())).filter((r) => r.status === 'em_rota');
-  if (!rows.length) return toast('Não há entrega em rota aguardando registro de chegada.', 'error');
+  if (!rows.length) return toast('Não há entrega em rota aguardando confirmação de entrega.', 'error');
   openModal({
-    title: 'Registrar chegada no cliente',
-    subtitle: 'Escolha qual entrega chegou à casa do cliente.',
+    title: 'Registrar entrega ao cliente',
+    subtitle: 'Escolha a entrega e informe uma única vez o horário em que ela foi entregue ao cliente.',
     body: `<div class="picker-list">${rows.map((r) => `<button class="picker-row arrival-picker-row" data-id="${r.id}"><strong>#${r.purchaseNumber} · ${escapeHtml(r.clientName || r.street || 'Sem nome')}</strong><span>Cupom ${escapeHtml(r.coupon || '—')} · PDV ${escapeHtml(r.pdv || '—')} · DOC ${escapeHtml(r.doc || '—')}</span></button>`).join('')}</div>`,
     actions: [{ label: 'Cancelar', kind: 'ghost', onClick: closeModal }],
   });
   $$('.arrival-picker-row').forEach((btn) => btn.addEventListener('click', async () => {
     const record = await Deliveries.get(btn.dataset.id);
-    if (record) openClientArrivalFlow(record);
+    if (record) openDeliveryCompletionFlow(record);
   }));
 }
 
@@ -795,15 +785,13 @@ function localDateKey(value = new Date()) {
 
 function operationalTimeFields(record) {
   if (!record) return '';
+  const clientDeliveredAt = record.deliveredAt || record.clientArrivalAt;
   return `
     <fieldset class="operational-times-card">
       <legend>Horários da entrega</legend>
-      <p>Todos podem ser corrigidos depois. As alterações ficam registradas na auditoria.</p>
+      <p>Os horários podem ser corrigidos depois. As alterações ficam registradas na auditoria.</p>
       <label>Saída da loja<input type="datetime-local" name="leftStoreAt" value="${localDateTimeValue(record.leftStoreAt)}" /></label>
-      <div class="field-row">
-        <label>Chegada na casa do cliente<input type="datetime-local" name="clientArrivalAt" value="${localDateTimeValue(record.clientArrivalAt)}" /></label>
-        <label>Finalizada na casa do cliente<input type="datetime-local" name="deliveredAt" value="${localDateTimeValue(record.deliveredAt)}" /></label>
-      </div>
+      <label>Hora da entrega ao cliente<input type="datetime-local" name="clientDeliveredAt" value="${localDateTimeValue(clientDeliveredAt)}" /></label>
     </fieldset>`;
 }
 
@@ -815,17 +803,19 @@ export async function openDeliveryModal(record = null) {
   const neighborhoods = (await Neighborhoods.all()).filter((n) => n.active);
   const vehicles = (await Vehicles.all()).filter((v) => v.active);
   const drivers = (await Drivers.all()).filter((d) => d.active);
+  const existingDeliveries = await Deliveries.active(env);
+  const previewPurchaseNumber = record ? Number(record.purchaseNumber) || 1 : nextDailyPurchaseNumber(existingDeliveries, new Date());
 
   const body = `
     <form id="deliveryForm">
-      <div class="field-row delivery-number-row">
-        <label>Nº da entrega ${record ? '*' : ''}
+      <div class="delivery-number-preview-card ${record ? 'is-edit' : ''}">
+        <div>
+          <small>Nº DA ENTREGA</small>
           ${record
-            ? `<input type="number" min="1" step="1" name="purchaseNumberManual" required value="${Number(record.purchaseNumber) || 1}" />`
-            : `<input value="(automático ao salvar)" disabled />`}
-        </label>
-        <label>Nº de chegada<input value="${record?.arrivalNumber ?? '(automático ao salvar)'}" disabled /></label>
-        ${record ? '<small class="field-row-help number-edit-help">Pode corrigir manualmente o número da entrega. O sistema bloqueia duplicidade no mesmo dia e registra a alteração na auditoria.</small>' : ''}
+            ? `<input class="delivery-number-edit-input" type="number" min="1" step="1" name="purchaseNumberManual" required value="${Number(record.purchaseNumber) || 1}" />`
+            : `<strong id="purchaseNumberPreview">#${previewPurchaseNumber}</strong>`}
+        </div>
+        <p>${record ? 'Você pode corrigir manualmente se necessário.' : 'Número calculado automaticamente pela data da compra e pela sequência de cadastro.'}</p>
       </div>
       <div class="field-row field-row-date-time">
         <label>Data da entrega *
@@ -834,7 +824,7 @@ export async function openDeliveryModal(record = null) {
         <label>Hora de entrada *
           <input type="time" name="entryTimeOnly" required value="${record ? new Date(record.entryTime).toTimeString().slice(0,5) : new Date().toTimeString().slice(0,5)}" />
         </label>
-        <small class="field-row-help">Informe a data real da compra, mesmo que esteja lançando no sistema em outro dia.${record ? ' Se alterar a data, a numeração será recalculada para o dia escolhido.' : ''}</small>
+        <small class="field-row-help">Informe a data real da compra. É essa data — e não a data agendada — que define a sequência do Nº da entrega.</small>
       </div>
       <label>PDV/Caixa *<input name="pdv" required value="${escapeHtml(record?.pdv || '')}" /></label>
       <div class="field-row">
@@ -936,6 +926,17 @@ export async function openDeliveryModal(record = null) {
   $('#typeSelect')?.addEventListener('change', (e) => {
     $('#scheduledWrap').classList.toggle('hidden', e.target.value !== 'agendada');
   });
+  if (!record) {
+    const updateNumberPreview = () => {
+      const value = $('input[name="operationDate"]')?.value;
+      const preview = $('#purchaseNumberPreview');
+      if (!value || !preview) return;
+      const [year, month, day] = value.split('-').map(Number);
+      const referenceDate = new Date(year, (month || 1) - 1, day || 1, 12, 0, 0, 0);
+      preview.textContent = `#${nextDailyPurchaseNumber(existingDeliveries, referenceDate)}`;
+    };
+    $('input[name="operationDate"]')?.addEventListener('change', updateNumberPreview);
+  }
   wireDeliveryStatusActions(record);
   wirePhoneMask($('#modalBody'));
 }
@@ -944,18 +945,17 @@ function deliveryStatusActionsHtml(record) {
   const buttons = [];
   if (record.status === 'na_loja') buttons.push('<button type="button" class="btn-ghost btn-small" data-action="formar_ciclo">Adicionar em um ciclo</button>');
   if (record.status === 'em_rota') {
-    buttons.push('<button type="button" class="btn-ghost btn-small" data-action="chegou_cliente">Chegou ao cliente</button>');
-    buttons.push('<button type="button" class="btn-primary btn-small" data-action="finalizada">Finalizar na casa do cliente</button>');
+    buttons.push('<button type="button" class="btn-primary btn-small" data-action="finalizada">Entregue ao cliente</button>');
     buttons.push('<button type="button" class="btn-ghost btn-small" data-action="retorno">Registrar retorno à loja</button>');
     buttons.push('<button type="button" class="btn-ghost btn-small" data-action="retirada">Retirada na loja</button>');
   }
   if (record.status === 'no_cliente') {
-    buttons.push('<button type="button" class="btn-primary btn-small" data-action="finalizada">Finalizar na casa do cliente</button>');
+    buttons.push('<button type="button" class="btn-primary btn-small" data-action="finalizada">Confirmar entrega ao cliente</button>');
     buttons.push('<button type="button" class="btn-ghost btn-small" data-action="retorno">Registrar retorno à loja</button>');
   }
   if (record.status === 'na_loja') buttons.push('<button type="button" class="btn-ghost btn-small" data-action="retirada">Retirada na loja</button>');
   if (record.status === 'finalizada') {
-    buttons.push('<button type="button" class="btn-ghost btn-small" data-action="editar_horarios">Editar horários</button>');
+    buttons.push('<button type="button" class="btn-ghost btn-small" data-action="editar_horarios">Editar horário</button>');
     buttons.push('<button type="button" class="btn-ghost btn-small" data-action="retorno">Registrar retorno</button>');
   }
   if (record.type === 'agendada' || record.status === 'programada') {
@@ -978,7 +978,6 @@ function wireDeliveryStatusActions(record) {
     guardClick(btn, async () => {
       const action = btn.dataset.action;
       if (action === 'formar_ciclo') { closeModal(); openStartCycleModal(); }
-      if (action === 'chegou_cliente') openClientArrivalFlow(record);
       if (action === 'finalizada') openDeliveryCompletionFlow(record);
       if (action === 'editar_horarios') openDeliveryCompletionFlow(record, { editing: true });
       if (action === 'retirada') openRetiradaFlow(record);
@@ -988,98 +987,56 @@ function wireDeliveryStatusActions(record) {
   });
 }
 
-function openClientArrivalFlow(record) {
-  openModal({
-    title: 'Chegada na casa do cliente',
-    subtitle: `Entrega #${record.purchaseNumber} · registre o horário real da chegada.`,
-    body: `
-      <form id="clientArrivalForm">
-        <label>Data e hora da chegada *<input type="datetime-local" name="clientArrivalAt" required value="${localDateTimeValue(record.clientArrivalAt || new Date())}" /></label>
-      </form>`,
-    actions: [
-      { label: 'Cancelar', kind: 'ghost', onClick: closeModal },
-      { label: 'Confirmar chegada', kind: 'primary', onClick: async () => {
-        const form = $('#clientArrivalForm');
-        if (!form.reportValidity()) return;
-        const fd = Object.fromEntries(new FormData(form).entries());
-        const clientArrivalAt = new Date(fd.clientArrivalAt).toISOString();
-        if (record.leftStoreAt && new Date(clientArrivalAt) < new Date(record.leftStoreAt)) return toast('A chegada não pode ser anterior à saída da loja.', 'error');
-        await Deliveries.changeStatus(record.id, 'no_cliente', { clientArrivalAt, arrivalRegisteredBy: getOperatorName(), note: 'Chegada registrada na casa do cliente.' });
-        toast(`Chegada registrada às ${timeBR(clientArrivalAt)}.`, 'success');
-        closeModal();
-        refreshApp();
-      }},
-    ],
-  });
-}
-
 function openDeliveryCompletionFlow(record, { cycle = null, editing = false } = {}) {
-  const hasArrival = !!record.clientArrivalAt;
-  const arrivalDefault = record.clientArrivalAt || new Date();
-  const deliveredDefault = record.deliveredAt || new Date();
+  const existingClientTime = record.deliveredAt || record.clientArrivalAt || null;
+  const defaultTime = existingClientTime || new Date();
+  const alreadyHasTime = !!existingClientTime;
 
-  const timingFields = editing ? `
-        <label>Chegada na casa do cliente *
-          <input type="datetime-local" name="clientArrivalAt" required value="${localDateTimeValue(arrivalDefault)}" />
-        </label>
-        <label>Hora da entrega ao cliente *
-          <input type="datetime-local" name="deliveredAt" required value="${localDateTimeValue(deliveredDefault)}" />
-        </label>` : hasArrival ? `
-        <div class="arrival-confirmed-card">
+  const timingField = alreadyHasTime && !editing ? `
+        <div class="arrival-confirmed-card single-client-time-card">
           <span>✓</span>
           <div>
-            <small>CHEGADA JÁ REGISTRADA</small>
-            <strong>${dateTimeBR(record.clientArrivalAt)}</strong>
-            <p>Não é necessário informar este horário novamente.</p>
+            <small>HORÁRIO DA ENTREGA AO CLIENTE</small>
+            <strong>${dateTimeBR(existingClientTime)}</strong>
+            <p>Este é o único horário usado para chegada/conclusão no cliente. Basta confirmar.</p>
           </div>
-        </div>
+        </div>` : `
         <label>Hora da entrega ao cliente *
-          <input type="datetime-local" name="deliveredAt" required value="${localDateTimeValue(deliveredDefault)}" />
-          <small class="field-help">Informe o horário em que a entrega foi realmente concluída com o cliente.</small>
-        </label>` : `
-        <div class="completion-guidance">
-          <strong>Faltam dois momentos desta entrega</strong>
-          <small>Como a chegada ainda não foi registrada, informe a chegada ao endereço e depois o horário em que a entrega foi concluída.</small>
-        </div>
-        <label>Chegada na casa do cliente *
-          <input type="datetime-local" name="clientArrivalAt" required value="${localDateTimeValue(arrivalDefault)}" />
-        </label>
-        <label>Hora da entrega ao cliente *
-          <input type="datetime-local" name="deliveredAt" required value="${localDateTimeValue(deliveredDefault)}" />
+          <input type="datetime-local" name="clientDeliveredAt" required value="${localDateTimeValue(defaultTime)}" />
+          <small class="field-help">Informe uma única vez o horário em que a entrega chegou/foi entregue ao cliente.</small>
         </label>`;
 
   openModal({
-    title: editing ? 'Editar horários da entrega' : 'Concluir entrega',
+    title: editing ? 'Editar horário da entrega' : 'Concluir entrega',
     subtitle: editing
-      ? `Entrega #${record.purchaseNumber} · corrija os horários registrados.`
-      : hasArrival
-        ? `Entrega #${record.purchaseNumber} · a chegada já foi registrada. Falta apenas confirmar a entrega.`
-        : `Entrega #${record.purchaseNumber} · informe os horários que ainda faltam.`,
+      ? `Entrega #${record.purchaseNumber} · corrija o único horário registrado no cliente.`
+      : alreadyHasTime
+        ? `Entrega #${record.purchaseNumber} · o horário já está registrado; confirme a conclusão.`
+        : `Entrega #${record.purchaseNumber} · informe somente a hora da entrega ao cliente.`,
     body: `
       <form id="deliveryCompletionForm" class="delivery-completion-form">
-        ${timingFields}
+        ${timingField}
         <label>Observação da conclusão<textarea name="completionNote" rows="2" placeholder="Opcional"></textarea></label>
       </form>`,
     actions: [
       { label: 'Cancelar', kind: 'ghost', onClick: closeModal },
-      { label: editing ? 'Salvar horários' : 'Confirmar entrega', kind: 'primary', onClick: async () => {
+      { label: editing ? 'Salvar horário' : 'Confirmar entrega', kind: 'primary', onClick: async () => {
         const form = $('#deliveryCompletionForm');
         if (!form.reportValidity()) return;
         const fd = Object.fromEntries(new FormData(form).entries());
-        const clientArrivalAt = hasArrival && !editing
-          ? record.clientArrivalAt
-          : new Date(fd.clientArrivalAt).toISOString();
-        const deliveredAt = new Date(fd.deliveredAt).toISOString();
-        if (record.leftStoreAt && new Date(clientArrivalAt) < new Date(record.leftStoreAt)) return toast('A chegada não pode ser anterior à saída da loja.', 'error');
-        if (new Date(deliveredAt) < new Date(clientArrivalAt)) return toast('A hora da entrega não pode ser anterior à chegada no cliente.', 'error');
+        const clientDeliveredAt = alreadyHasTime && !editing
+          ? existingClientTime
+          : new Date(fd.clientDeliveredAt).toISOString();
+        if (record.leftStoreAt && new Date(clientDeliveredAt) < new Date(record.leftStoreAt)) return toast('A hora da entrega ao cliente não pode ser anterior à saída da loja.', 'error');
         await Deliveries.changeStatus(record.id, 'finalizada', {
-          clientArrivalAt, deliveredAt,
+          clientArrivalAt: clientDeliveredAt,
+          deliveredAt: clientDeliveredAt,
           arrivalRegisteredBy: record.arrivalRegisteredBy || getOperatorName(),
           completionRegisteredBy: getOperatorName(),
           completionUpdatedAt: new Date().toISOString(),
-          note: fd.completionNote?.trim() || (editing ? 'Horários de conclusão corrigidos.' : `Entrega concluída no cliente às ${timeBR(deliveredAt)}.`),
+          note: fd.completionNote?.trim() || (editing ? 'Horário da entrega ao cliente corrigido.' : `Entrega concluída no cliente às ${timeBR(clientDeliveredAt)}.`),
         });
-        toast(`Entrega concluída às ${timeBR(deliveredAt)}.`, 'success');
+        toast(`Entrega concluída às ${timeBR(clientDeliveredAt)}.`, 'success');
         if (cycle) return advanceCloseCycle(cycle);
         closeModal();
         refreshApp();
@@ -1147,33 +1104,24 @@ async function saveDeliveryForm(record) {
 
   if (record) {
     payload.leftStoreAt = fd.leftStoreAt ? new Date(fd.leftStoreAt).toISOString() : null;
-    payload.clientArrivalAt = fd.clientArrivalAt ? new Date(fd.clientArrivalAt).toISOString() : null;
-    payload.deliveredAt = fd.deliveredAt ? new Date(fd.deliveredAt).toISOString() : null;
-    if (payload.deliveredAt && !payload.clientArrivalAt) return toast('Informe também a hora de chegada na casa do cliente.', 'error');
+    const clientDeliveredAt = fd.clientDeliveredAt ? new Date(fd.clientDeliveredAt).toISOString() : null;
+    payload.clientArrivalAt = clientDeliveredAt;
+    payload.deliveredAt = clientDeliveredAt;
     if (payload.leftStoreAt && !record.leftStoreAt && !record.cycleId) return toast('A saída da loja só pode ser criada ao iniciar um ciclo com KM inicial liberado.', 'error');
-    if (payload.clientArrivalAt && payload.deliveredAt && new Date(payload.deliveredAt) < new Date(payload.clientArrivalAt)) return toast('A finalização não pode ser anterior à chegada no cliente.', 'error');
-    if (record.status === 'finalizada' && !payload.deliveredAt) return toast('Uma entrega finalizada precisa ter a hora de finalização na casa do cliente.', 'error');
+    if (record.status === 'finalizada' && !clientDeliveredAt) return toast('Uma entrega finalizada precisa ter a hora da entrega ao cliente.', 'error');
   }
 
   try {
     if (record) {
       const previousOperationDay = localDateKey(record.entryTime);
       const nextOperationDay = localDateKey(payload.entryTime);
-      const typeChanged = record.type !== fd.type;
       const dayChanged = previousOperationDay !== nextOperationDay;
       const manualNumberChanged = requestedPurchaseNumber !== Number(record.purchaseNumber);
       const existingDeliveries = await Deliveries.active(env);
 
       if (manualNumberChanged) {
-        const duplicate = existingDeliveries.find((item) => {
-          if (item.id === record.id || Number(item.purchaseNumber) !== requestedPurchaseNumber) return false;
-          if (fd.type === 'agendada') return item.type === 'agendada';
-          return item.type !== 'agendada' && localDateKey(item.entryTime) === nextOperationDay;
-        });
-        if (duplicate) {
-          const where = fd.type === 'agendada' ? 'entre as entregas agendadas' : `na data ${dateBR(nextOperationDay)}`;
-          return toast(`Já existe a entrega #${requestedPurchaseNumber} ${where}. Escolha outro número.`, 'error');
-        }
+        const duplicate = existingDeliveries.find((item) => item.id !== record.id && Number(item.purchaseNumber) === requestedPurchaseNumber && localDateKey(item.entryTime) === nextOperationDay);
+        if (duplicate) return toast(`Já existe a entrega #${requestedPurchaseNumber} na data ${dateBR(nextOperationDay)}. Escolha outro número.`, 'error');
         const numberHistory = [...(record.numberingCorrections || []), {
           previous: record.purchaseNumber,
           current: requestedPurchaseNumber,
@@ -1187,31 +1135,24 @@ async function saveDeliveryForm(record) {
         payload.purchaseNumberManual = true;
         payload.numberingCorrections = numberHistory;
         payload.numberingCorrection = numberHistory.at(-1);
-        if (dayChanged) payload.arrivalNumber = nextArrivalNumber(existingDeliveries, payload.entryTime, record.id);
-      } else if (typeChanged || dayChanged) {
-        if (fd.type === 'agendada') {
-          payload.purchaseNumber = typeChanged ? nextScheduledPurchaseNumber(existingDeliveries, record.id) : record.purchaseNumber;
-        } else {
-          payload.purchaseNumber = nextDailyPurchaseNumber(existingDeliveries, payload.entryTime, record.id);
-        }
-        payload.arrivalNumber = nextArrivalNumber(existingDeliveries, payload.entryTime, record.id);
+        payload.arrivalNumber = requestedPurchaseNumber;
+      } else if (dayChanged) {
+        payload.purchaseNumber = nextDailyPurchaseNumber(existingDeliveries, payload.entryTime, record.id);
+        payload.arrivalNumber = payload.purchaseNumber;
         payload.purchaseNumberManual = false;
       } else {
         payload.purchaseNumber = record.purchaseNumber;
+        payload.arrivalNumber = record.purchaseNumber;
         payload.purchaseNumberManual = record.purchaseNumberManual === true;
       }
       await Deliveries.update(record.id, payload);
-      const targetStatus = payload.deliveredAt ? 'finalizada' : (payload.clientArrivalAt && record.status === 'em_rota' ? 'no_cliente' : null);
+      const targetStatus = payload.deliveredAt ? 'finalizada' : null;
       if (targetStatus && targetStatus !== record.status) await Deliveries.changeStatus(record.id, targetStatus, { note: 'Horários operacionais informados na edição.' });
       toast('Entrega atualizada.', 'success');
     } else {
       const existingDeliveries = await Deliveries.active(env);
-      if (fd.type === 'agendada') {
-        payload.purchaseNumber = nextScheduledPurchaseNumber(existingDeliveries);
-      } else {
-        payload.purchaseNumber = nextDailyPurchaseNumber(existingDeliveries, payload.entryTime);
-      }
-      payload.arrivalNumber = nextArrivalNumber(existingDeliveries, payload.entryTime);
+      payload.purchaseNumber = nextDailyPurchaseNumber(existingDeliveries, payload.entryTime);
+      payload.arrivalNumber = payload.purchaseNumber;
       payload.status = fd.type === 'agendada' ? 'programada' : 'na_loja';
       payload.statusHistory = [];
       payload.reschedules = [];
@@ -1491,20 +1432,31 @@ export async function openStartCycleModal() {
         <div><strong>${activeKmByVehicle.size ? 'Há veículo com KM inicial liberado' : 'Nenhum veículo pode sair ainda'}</strong><small>O ciclo só será confirmado para um veículo com KM inicial registrado hoje e expediente ainda aberto.</small></div>
         <button type="button" class="btn-ghost btn-small" id="cycleRegisterKmBtn">Registrar KM inicial</button>
       </div>
-      <label>Entregas do ciclo (ordem sugerida: prioridade e bairro — arraste com os botões)</label><p class="cycle-scheduled-help">As entregas agendadas aparecem nesta lista também. Elas iniciam desmarcadas para evitar saída antecipada; marque a agendada quando ela fizer parte deste ciclo.</p>
-      <div id="cycleItemsList" style="display:grid;gap:6px">
-        ${candidates.map((d, i) => {
+      <div class="cycle-selection-head">
+        <div><strong>Selecione as entregas do ciclo</strong><small>Normais já vêm marcadas. Agendadas ficam desmarcadas até você escolher.</small></div>
+        <span>${candidates.length} disponível(is)</span>
+      </div>
+      <div id="cycleItemsList" class="cycle-items-list">
+        ${candidates.map((d) => {
           const scheduled = d.status === 'programada';
-          const scheduledLabel = scheduled ? `Agendada ${dateTimeBR(d.scheduledAt || d.entryTime)}` : '';
+          const neighborhoodName = neighborhoods.find(n=>n.id===d.neighborhoodId)?.name || 'Bairro não informado';
+          const scheduledLabel = scheduled ? dateTimeBR(d.scheduledAt || d.entryTime) : '';
           return `
           <div class="cycle-item ${scheduled ? 'cycle-item-scheduled' : ''}" data-id="${d.id}">
-            <input type="checkbox" ${scheduled ? '' : 'checked'} />
+            <input class="cycle-item-check" type="checkbox" ${scheduled ? '' : 'checked'} aria-label="Selecionar entrega #${d.purchaseNumber}" />
             <div class="cycle-item-copy">
-              <div class="cycle-item-title"><strong>#${d.purchaseNumber} · ${escapeHtml(d.clientName || d.street)}</strong>${scheduled ? '<span class="cycle-scheduled-badge">AGENDADA</span>' : ''}</div>
-              <div class="cycle-item-meta">${d.priority === 'alta' ? 'Prioridade alta · ' : ''}${escapeHtml(neighborhoods.find(n=>n.id===d.neighborhoodId)?.name || '')}${scheduledLabel ? ` · ${escapeHtml(scheduledLabel)}` : ''}</div>
+              <div class="cycle-item-title">
+                <strong class="cycle-item-number">#${d.purchaseNumber}</strong>
+                <b>${escapeHtml(d.clientName || d.street || 'Sem nome')}</b>
+                ${d.priority === 'alta' ? '<span class="cycle-priority-badge">ALTA</span>' : ''}
+                ${scheduled ? '<span class="cycle-scheduled-badge">AGENDADA</span>' : ''}
+              </div>
+              <div class="cycle-item-meta"><span>📍 ${escapeHtml(neighborhoodName)}</span>${scheduledLabel ? `<span>🗓 ${escapeHtml(scheduledLabel)}</span>` : ''}</div>
             </div>
-            <button type="button" class="btn-ghost btn-small move-up">↑</button>
-            <button type="button" class="btn-ghost btn-small move-down">↓</button>
+            <div class="cycle-item-order" aria-label="Alterar ordem">
+              <button type="button" class="btn-ghost btn-small move-up" title="Subir">↑</button>
+              <button type="button" class="btn-ghost btn-small move-down" title="Descer">↓</button>
+            </div>
           </div>`;
         }).join('')}
       </div>
@@ -1567,7 +1519,7 @@ function isCycleDeliveryResolved(delivery, cycle) {
   if (!delivery) return false;
   const returnedInThisCycle = (delivery.returnAttempts || []).some((attempt) => attempt.returnedAt && (!cycle?.id || attempt.cycleId === cycle.id));
   if (returnedInThisCycle) return true;
-  if (delivery.status === 'finalizada') return !!delivery.clientArrivalAt && !!delivery.deliveredAt;
+  if (delivery.status === 'finalizada') return !!(delivery.deliveredAt || delivery.clientArrivalAt);
   if (delivery.status === 'retirada_loja') return true;
   if (['programada', 'cancelada'].includes(delivery.status)) return true;
   return false;
@@ -1593,7 +1545,7 @@ function showPendingOne(cycle, delivery, remainingCount) {
   openModal({
     title: `Finalizar ciclo — ${remainingCount} pendente(s)`,
     subtitle: `Entrega #${delivery.purchaseNumber} · ${escapeHtml(delivery.clientName || delivery.street)}`,
-    body: `<div class="cycle-pending-alert"><span>!</span><div><strong>Esta entrega está sem horário de chegada ou finalização no cliente</strong><p>O ciclo permanece bloqueado até você informar o que aconteceu.</p></div></div><div class="cycle-return-question"><span>↩</span><div><strong>Esta entrega voltou? SIM ou NÃO?</strong><small>SIM registra o retorno à loja. NÃO exige chegada e finalização no cliente. Uma pendência por vez.</small></div></div>`,
+    body: `<div class="cycle-pending-alert"><span>!</span><div><strong>Esta entrega está sem horário de entrega ao cliente</strong><p>O ciclo permanece bloqueado até você informar o que aconteceu.</p></div></div><div class="cycle-return-question"><span>↩</span><div><strong>Esta entrega voltou? SIM ou NÃO?</strong><small>SIM registra o retorno à loja. NÃO exige informar apenas o horário da entrega ao cliente. Uma pendência por vez.</small></div></div>`,
     actions: [
       { label: 'Sim, voltou', kind: 'ghost', onClick: async () => {
         openReturnResolutionFlow(delivery, { cycle, continueClose: true, onBack: () => showPendingOne(cycle, delivery, remainingCount) });
@@ -1621,7 +1573,7 @@ async function openCycleEndTimeModal(cycle) {
   const returnedCycleItems = items.filter((item) => (item?.returnAttempts || []).some((attempt) => attempt.cycleId === cycle.id));
   const deliveredCycleItems = items.filter((item) => {
     const returnedInCycle = (item?.returnAttempts || []).some((attempt) => attempt.cycleId === cycle.id);
-    return !returnedInCycle && item?.status === 'finalizada' && item.clientArrivalAt && item.deliveredAt;
+    return !returnedInCycle && item?.status === 'finalizada' && !!(item.deliveredAt || item.clientArrivalAt);
   });
   const retryCycleItems = returnedCycleItems.filter((item) => (item.returnAttempts || []).some((attempt) => attempt.cycleId === cycle.id && attempt.retryPlanned));
   const latestOperationalAt = items.reduce((latest, item) => {
@@ -1982,8 +1934,8 @@ export async function renderCosts() {
 
 async function computeFinancialSummary(env) {
   const deliveries = await Deliveries.active(env);
-  const finalized = deliveries.filter((d) => d.status === 'finalizada' || (d.status === 'retirada_loja' && !d.refunded));
-  const fees = finalized.reduce((s, d) => s + (Number(d.deliveryFee) || 0), 0);
+  const finalized = deliveries.filter((d) => d.status === 'finalizada');
+  const fees = deliveries.reduce((s, d) => s + (Number(d.deliveryFee) || 0), 0);
   const refunds = deliveries.filter((d) => d.refunded).reduce((s, d) => s + (Number(d.deliveryFee) || 0), 0);
   const costsTotal = (await Costs.all()).filter((c) => c.environment === env && !c.deletedAt).reduce((s, c) => s + Number(c.amount || 0), 0);
   const kmTotal = (await OdometerLogs.all()).filter((l) => l.environment === env && l.kmEnd != null).reduce((s, l) => s + (l.kmEnd - l.kmStart), 0);
@@ -2163,7 +2115,7 @@ export async function renderDashboard() {
   const priority = rows.filter((r) => r.priority === 'alta');
   const scheduled = rows.filter((r) => r.type === 'agendada' || r.status === 'programada');
 
-  const feeRows = rows.filter((r) => r.status === 'finalizada' || (r.status === 'retirada_loja' && !r.refunded));
+  const feeRows = rows;
   const grossFees = feeRows.reduce((s,r) => s + Number(r.deliveryFee || 0), 0);
   const refunds = refunded.reduce((s,r) => s + Number(r.deliveryFee || 0), 0);
   const netRevenue = grossFees - refunds;
@@ -2177,7 +2129,7 @@ export async function renderDashboard() {
   const avgPerCycle = closedCycles.length ? (finalized.length / closedCycles.length).toFixed(1) : '—';
   const avgStoreWait = averageMinutes(rows, 'entryTime', 'leftStoreAt');
   const avgRoute = averageMinutes(rows, 'leftStoreAt', 'clientArrivalAt');
-  const avgAtClient = averageMinutes(rows, 'clientArrivalAt', 'deliveredAt');
+  const avgAtClient = null;
   const avgTotal = averageMinutes(rows, 'entryTime', 'deliveredAt');
   const bottleneck = [['Espera na loja',avgStoreWait,'tempos'],['Tempo em rota',avgRoute,'tempos'],['Atendimento no cliente',avgAtClient,'tempos']].filter(([,value])=>value!=null).sort((a,b)=>b[1]-a[1])[0] || null;
   const totalDurations = durationValues(rows, 'entryTime', 'deliveredAt');
@@ -2208,7 +2160,7 @@ export async function renderDashboard() {
   const previousRows = previousRange ? allRows.filter((r) => dashboardInRange(r.entryTime, previousRange)) : [];
   const previousFinalized = previousRows.filter((r) => r.status === 'finalizada' && r.deliveredAt);
   const previousCosts = previousRange ? allCosts.filter((c) => c.environment === env && !c.deletedAt && dashboardInRange(c.date, previousRange)) : [];
-  const previousGross = previousRows.filter((r) => r.status === 'finalizada' || (r.status === 'retirada_loja' && !r.refunded)).reduce((s,r)=>s+Number(r.deliveryFee||0),0);
+  const previousGross = previousRows.reduce((s,r)=>s+Number(r.deliveryFee||0),0);
   const previousRefunds = previousRows.filter((r)=>r.refunded).reduce((s,r)=>s+Number(r.deliveryFee||0),0);
   const previousBalance = previousGross-previousRefunds-previousCosts.reduce((s,c)=>s+Number(c.amount||0),0);
   const volumeChange = changePercent(rows.length, previousRows.length);
@@ -2395,7 +2347,7 @@ export async function renderDashboard() {
       <div class="intel-metric-grid">
         ${metric('Espera na loja', formatDuration(avgStoreWait), 'Entrada da compra até saída da loja.')}
         ${metric('Tempo em rota', formatDuration(avgRoute), 'Saída da loja até chegada ao cliente.')}
-        ${metric('Tempo no cliente', formatDuration(avgAtClient), 'Chegada até finalização no cliente.')}
+        ${metric('Tempo no cliente', '—', 'A v5.7 usa um único horário de entrega ao cliente; esse intervalo não é medido separadamente.')}
         ${metric('Tempo completo médio', formatDuration(avgTotal), 'Entrada até finalização.')}
         ${metric('Mediana completa', formatDuration(medianTotal), 'Metade das entregas levou até este tempo.')}
         ${metric('P90 completo', formatDuration(p90Total), '90% das entregas levou até este tempo.')}
@@ -2669,7 +2621,7 @@ async function buildExport(kind, env, period = null) {
   if (kind === 'resumo') {
     const rows = (await Deliveries.active(env)).filter((r) => inReportPeriod(r.entryTime, period));
     const finalized = rows.filter((r) => r.status === 'finalizada');
-    const countedFees = rows.filter((d) => d.status === 'finalizada' || (d.status === 'retirada_loja' && !d.refunded));
+    const countedFees = rows;
     const periodCosts = (await Costs.all()).filter((c) => c.environment === env && !c.deletedAt && inReportPeriod(c.date, period));
     const periodKm = (await OdometerLogs.all()).filter((l) => l.environment === env && l.kmEnd != null && inReportPeriod(l.shiftDate, period));
     const financial = {
@@ -2785,7 +2737,7 @@ export function wireReportsEvents() {
     const rows = (await Deliveries.active(env)).filter((r) => inReportPeriod(r.entryTime, period));
     const allCosts = (await Costs.all()).filter((c) => c.environment === env && !c.deletedAt && inReportPeriod(c.date, period));
     const allKm = (await OdometerLogs.all()).filter((l) => l.environment === env && l.kmEnd != null && inReportPeriod(l.shiftDate, period));
-    const finalizedForFinance = rows.filter((d) => d.status === 'finalizada' || (d.status === 'retirada_loja' && !d.refunded));
+    const finalizedForFinance = rows;
     const financial = {
       fees: finalizedForFinance.reduce((s,d) => s + Number(d.deliveryFee || 0), 0),
       refunds: rows.filter((d) => d.refunded).reduce((s,d) => s + Number(d.deliveryFee || 0), 0),
@@ -3082,7 +3034,7 @@ function openVehicleAddModal(record = null) {
    ========================================================= */
 export async function renderSettings() {
   const cfg = JSON.parse(localStorage.getItem('orbita_settings') || '{}');
-  const { listAutoBackups } = await import('./db.js?v=5.6');
+  const { listAutoBackups } = await import('./db.js?v=5.7');
   const autoBackups = await listAutoBackups();
   const backupReasonLabel = (reason = '') => reason === 'abertura' ? 'Abertura do sistema' : reason === 'periodico-1min' ? 'Segurança · 1 minuto' : reason ? 'Alteração salva' : 'Automático';
   const autoList = autoBackups.length
@@ -3120,13 +3072,13 @@ export async function renderSettings() {
 export function wireSettingsEvents() {
   $$('.auto-restore-btn').forEach((btn) => btn.addEventListener('click', async () => {
     if (!confirm('Restaurar esse backup automático vai substituir os dados atuais. Continuar?')) return;
-    const { restoreAutoBackup } = await import('./db.js?v=5.6');
+    const { restoreAutoBackup } = await import('./db.js?v=5.7');
     await restoreAutoBackup(btn.dataset.id);
     toast('Backup automático restaurado.', 'success');
     refreshApp();
   }));
   $('#settingsBackupBtn')?.addEventListener('click', async () => {
-    const data = await (await import('./db.js?v=5.6')).exportAll();
+    const data = await (await import('./db.js?v=5.7')).exportAll();
     downloadJSON(`orbita-backup-completo-${new Date().toISOString().slice(0,10)}.json`, data);
     toast('Backup completo gerado.', 'success');
   });
@@ -3134,12 +3086,12 @@ export function wireSettingsEvents() {
     const file = e.target.files[0];
     if (!file) return;
     if (!confirm('Isso vai substituir os dados atuais pelo conteúdo do backup. Um backup de segurança dos dados atuais será baixado antes. Continuar?')) { e.target.value = ''; return; }
-    const currentBackup = await (await import('./db.js?v=5.6')).exportAll();
+    const currentBackup = await (await import('./db.js?v=5.7')).exportAll();
     downloadJSON(`orbita-backup-seguranca-antes-restauracao-${Date.now()}.json`, currentBackup);
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      await (await import('./db.js?v=5.6')).importAll(data);
+      await (await import('./db.js?v=5.7')).importAll(data);
       toast('Backup restaurado.', 'success');
       refreshApp();
     } catch { toast('Arquivo de backup inválido.', 'error'); }
