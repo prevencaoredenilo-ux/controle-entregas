@@ -207,10 +207,13 @@ export const AuditLog = {
 
 /* ---------- contadores diários (número de compra contínuo / chegada diário) ---------- */
 export const Counters = {
-  async next(environment, kind) {
+  async next(environment, kind, options = {}) {
     const store = await tx('counters', 'readwrite');
-    const today = new Date().toISOString().slice(0, 10);
-    const key = kind === 'chegada' ? `${environment}:${kind}:${today}` : `${environment}:${kind}`;
+    const baseDate = options.date ? new Date(options.date) : new Date();
+    const day = new Date(baseDate.getTime() - baseDate.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+    const daily = options.daily ?? (kind === 'chegada');
+    const scope = options.scope ? `:${options.scope}` : '';
+    const key = daily ? `${environment}:${kind}${scope}:${day}` : `${environment}:${kind}${scope}`;
     return new Promise((res, rej) => {
       const g = store.get(key);
       g.onsuccess = () => {

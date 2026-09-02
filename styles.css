@@ -2297,3 +2297,45 @@ tr:last-child td { border-bottom: none; }
   .km-toolbar>.btn-primary{width:100%}
   .km-history-edit-note{min-width:0;max-width:none}
 }
+
+/* v4.6 — correção dos comandos rápidos sem corte */
+.command-dock {
+  display: grid !important;
+  grid-template-columns: repeat(8, minmax(118px, 1fr));
+  align-items: stretch;
+  gap: 10px;
+}
+.command-dock button {
+  min-width: 0;
+  width: 100%;
+  justify-content: flex-start;
+  padding: 11px 12px !important;
+  gap: 10px !important;
+}
+.command-dock button strong {
+  white-space: normal !important;
+  line-height: 1.2;
+  text-align: left;
+}
+.command-dock .cmd-ico,
+.command-dock span {
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  font-size: 15px;
+}
+@media (max-width: 1250px) {
+  .command-dock {
+    grid-template-columns: repeat(4, minmax(150px, 1fr)) !important;
+  }
+}
+@media (max-width: 860px) {
+  .command-dock {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+@media (max-width: 500px) {
+  .command-dock {
+    grid-template-columns: 1fr !important;
+  }
+}
