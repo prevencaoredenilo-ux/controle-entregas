@@ -1,7 +1,7 @@
-import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters } from './db.js?v=4.8';
-import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=4.8';
-import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=4.8';
-import { exportFullExcelReport } from './excel-report.js?v=4.8';
+import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters } from './db.js?v=4.9';
+import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=4.9';
+import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=4.9';
+import { exportFullExcelReport } from './excel-report.js?v=4.9';
 
 const DEFAULT_OPERATIONAL_TARGETS = { startMinutes:120, arrivalMinutes:210, warningMinutes:30, successTarget:90 };
 
@@ -678,12 +678,14 @@ export async function openDeliveryModal(record = null) {
         <label>Nº da compra<input value="${record?.purchaseNumber ?? '(automático ao salvar)'}" disabled /></label>
         <label>Nº de chegada<input value="${record?.arrivalNumber ?? '(automático ao salvar)'}" disabled /></label>
       </div>
-      <div class="field-row">
+      <div class="field-row field-row-date-time">
         <label>Data da entrega *
           <input type="date" name="operationDate" required value="${record ? localDateKey(record.entryTime) : localDateKey()}" />
-          <small class="field-help">Informe a data real da compra, mesmo que esteja lançando no sistema em outro dia.${record ? ' Se alterar a data, a numeração será recalculada para o dia escolhido.' : ''}</small>
         </label>
-        <label>Hora de entrada *<input type="time" name="entryTimeOnly" required value="${record ? new Date(record.entryTime).toTimeString().slice(0,5) : new Date().toTimeString().slice(0,5)}" /></label>
+        <label>Hora de entrada *
+          <input type="time" name="entryTimeOnly" required value="${record ? new Date(record.entryTime).toTimeString().slice(0,5) : new Date().toTimeString().slice(0,5)}" />
+        </label>
+        <small class="field-row-help">Informe a data real da compra, mesmo que esteja lançando no sistema em outro dia.${record ? ' Se alterar a data, a numeração será recalculada para o dia escolhido.' : ''}</small>
       </div>
       <label>PDV/Caixa *<input name="pdv" required value="${escapeHtml(record?.pdv || '')}" /></label>
       <div class="field-row">
@@ -2879,7 +2881,7 @@ function openVehicleAddModal(record = null) {
    ========================================================= */
 export async function renderSettings() {
   const cfg = JSON.parse(localStorage.getItem('orbita_settings') || '{}');
-  const { listAutoBackups } = await import('./db.js?v=4.8');
+  const { listAutoBackups } = await import('./db.js?v=4.9');
   const autoBackups = await listAutoBackups();
   const backupReasonLabel = (reason = '') => reason === 'abertura' ? 'Abertura do sistema' : reason === 'periodico-1min' ? 'Segurança · 1 minuto' : reason ? 'Alteração salva' : 'Automático';
   const autoList = autoBackups.length
@@ -2917,13 +2919,13 @@ export async function renderSettings() {
 export function wireSettingsEvents() {
   $$('.auto-restore-btn').forEach((btn) => btn.addEventListener('click', async () => {
     if (!confirm('Restaurar esse backup automático vai substituir os dados atuais. Continuar?')) return;
-    const { restoreAutoBackup } = await import('./db.js?v=4.8');
+    const { restoreAutoBackup } = await import('./db.js?v=4.9');
     await restoreAutoBackup(btn.dataset.id);
     toast('Backup automático restaurado.', 'success');
     refreshApp();
   }));
   $('#settingsBackupBtn')?.addEventListener('click', async () => {
-    const data = await (await import('./db.js?v=4.8')).exportAll();
+    const data = await (await import('./db.js?v=4.9')).exportAll();
     downloadJSON(`orbita-backup-completo-${new Date().toISOString().slice(0,10)}.json`, data);
     toast('Backup completo gerado.', 'success');
   });
@@ -2931,12 +2933,12 @@ export function wireSettingsEvents() {
     const file = e.target.files[0];
     if (!file) return;
     if (!confirm('Isso vai substituir os dados atuais pelo conteúdo do backup. Um backup de segurança dos dados atuais será baixado antes. Continuar?')) { e.target.value = ''; return; }
-    const currentBackup = await (await import('./db.js?v=4.8')).exportAll();
+    const currentBackup = await (await import('./db.js?v=4.9')).exportAll();
     downloadJSON(`orbita-backup-seguranca-antes-restauracao-${Date.now()}.json`, currentBackup);
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      await (await import('./db.js?v=4.8')).importAll(data);
+      await (await import('./db.js?v=4.9')).importAll(data);
       toast('Backup restaurado.', 'success');
       refreshApp();
     } catch { toast('Arquivo de backup inválido.', 'error'); }

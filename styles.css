@@ -2402,3 +2402,57 @@ tr:last-child td { border-bottom: none; }
   font-size:9.5px;
   line-height:1.4;
 }
+
+/* v4.9 — alinhamento do formulário de registro */
+.modal {
+  width: min(760px, 100%);
+}
+.modal-body {
+  gap: 14px;
+}
+.modal-body form {
+  display: grid;
+  gap: 14px;
+}
+.modal-body label {
+  align-content: start;
+}
+.field-row {
+  align-items: start;
+}
+.field-row > label {
+  min-width: 0;
+}
+.field-row-date-time {
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.field-row-help {
+  grid-column: 1 / -1;
+  margin-top: -2px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.modal-body input,
+.modal-body select,
+.modal-body textarea {
+  min-height: 42px;
+  width: 100%;
+  box-sizing: border-box;
+}
+.modal-body textarea {
+  min-height: 90px;
+}
+@media (max-width: 760px) {
+  .modal {
+    width: min(100%, 100%);
+  }
+}
+@media (max-width: 620px) {
+  .field-row,
+  .field-row-date-time {
+    grid-template-columns: 1fr;
+  }
+}
