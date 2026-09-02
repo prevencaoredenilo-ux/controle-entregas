@@ -1,7 +1,7 @@
-import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters } from './db.js?v=5.0';
-import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=5.0';
-import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=5.0';
-import { exportFullExcelReport } from './excel-report.js?v=5.0';
+import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters } from './db.js?v=5.1';
+import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=5.1';
+import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=5.1';
+import { exportFullExcelReport } from './excel-report.js?v=5.1';
 
 const DEFAULT_OPERATIONAL_TARGETS = { startMinutes:120, arrivalMinutes:210, warningMinutes:30, successTarget:90 };
 
@@ -286,7 +286,7 @@ export async function renderCentral() {
     </div>
 
     <section class="live-board-section">
-      <div class="section-heading"><div><span>MAPA OPERACIONAL</span><h2>Onde cada entrega está agora</h2></div><div class="heading-signal"><i></i>dados reais</div></div>
+      <div class="section-heading"><div><span>MAPA OPERACIONAL</span><h2>Onde cada entrega está agora</h2></div><div class="section-heading-actions"><button type="button" class="numbering-repair-btn" id="recalculateDayNumbersBtn">↻ Recalcular numeração</button><div class="heading-signal"><i></i>dados reais</div></div></div>
       <div class="live-board live-board-5">
         ${[['Na loja',naLoja],['Em rota',rows.filter(r=>r.status==='em_rota')],['No cliente',noCliente],['Agendadas',agendadas],['Ocorrências',rows.filter(r=>['retorno','reentrega','cancelada'].includes(r.status))]].map(([label,list]) => `<div class="live-lane"><header><strong>${label}</strong><span>${list.length}</span></header><div>${list.slice(0,5).map(liveLaneCard).join('') || '<p class="lane-empty">Nenhuma entrega</p>'}</div></div>`).join('')}
       </div>
@@ -319,6 +319,65 @@ let _phraseTimer = null;
 let _waveTimer = null;
 let _nameTimer = null;
 
+async function openRecalculateDayNumbersModal() {
+  const env = getEnv();
+  const today = localDateKey();
+  openModal({
+    title: 'Recalcular numeração do dia',
+    subtitle: 'Corrige números antigos sem alterar a numeração das entregas agendadas.',
+    body: `<form id="recalculateNumberingForm" class="recalculate-numbering-form">
+      <label>Data a corrigir *<input type="date" name="operationDate" value="${today}" required /></label>
+      <div class="numbering-rule-card">
+        <span>↻</span>
+        <div><strong>Como funciona</strong><p>As entregas normais da data escolhida serão ordenadas pela hora de entrada e receberão #1, #2, #3... As entregas agendadas manterão seus números atuais.</p></div>
+      </div>
+    </form>`,
+    actions: [
+      { label: 'Cancelar', kind: 'ghost', onClick: closeModal },
+      { label: 'Recalcular numeração', kind: 'primary', onClick: async () => {
+        const form = $('#recalculateNumberingForm');
+        if (!form?.reportValidity()) return;
+        const fd = Object.fromEntries(new FormData(form).entries());
+        const selectedDay = fd.operationDate;
+        const rows = await Deliveries.active(env);
+        const normals = rows
+          .filter((r) => r.type !== 'agendada' && localDateKey(r.entryTime) === selectedDay)
+          .sort((a,b) => {
+            const ta = new Date(a.entryTime).getTime();
+            const tb = new Date(b.entryTime).getTime();
+            if (ta !== tb) return ta - tb;
+            return String(a.createdAt || a.id).localeCompare(String(b.createdAt || b.id));
+          });
+        if (!normals.length) {
+          toast('Não há entregas normais nessa data para renumerar.', 'error');
+          return;
+        }
+        let changed = 0;
+        for (let i = 0; i < normals.length; i += 1) {
+          const expected = i + 1;
+          const row = normals[i];
+          if (Number(row.purchaseNumber) === expected) continue;
+          await Deliveries.update(row.id, {
+            purchaseNumber: expected,
+            numberingCorrection: {
+              previous: row.purchaseNumber,
+              current: expected,
+              day: selectedDay,
+              by: getOperatorName(),
+              at: new Date().toISOString(),
+              reason: 'Recálculo manual da numeração diária',
+            },
+          });
+          changed += 1;
+        }
+        closeModal();
+        toast(changed ? `${changed} entrega(s) renumerada(s) em ${dateBR(selectedDay)}.` : 'A numeração deste dia já estava correta.', 'success');
+        refreshApp();
+      }},
+    ],
+  });
+}
+
 export function wireCentralEvents() {
   $$('.row-click').forEach((tr) => tr.addEventListener('click', async () => {
     const rec = await Deliveries.get(tr.dataset.id);
@@ -330,6 +389,7 @@ export function wireCentralEvents() {
     card.addEventListener('keydown', (e) => { if (e.key==='Enter'||e.key===' ') { e.preventDefault(); open(); } });
   });
   $('#qaNewDelivery')?.addEventListener('click', () => openDeliveryModal());
+  $('#recalculateDayNumbersBtn')?.addEventListener('click', () => openRecalculateDayNumbersModal());
   $('#qaStartCycle')?.addEventListener('click', () => openStartCycleModal());
   $('#qaArrival')?.addEventListener('click', () => openArrivalPicker());
   $('#qaReturn')?.addEventListener('click', () => openReturnPicker());
@@ -2878,7 +2938,7 @@ function openVehicleAddModal(record = null) {
    ========================================================= */
 export async function renderSettings() {
   const cfg = JSON.parse(localStorage.getItem('orbita_settings') || '{}');
-  const { listAutoBackups } = await import('./db.js?v=5.0');
+  const { listAutoBackups } = await import('./db.js?v=5.1');
   const autoBackups = await listAutoBackups();
   const backupReasonLabel = (reason = '') => reason === 'abertura' ? 'Abertura do sistema' : reason === 'periodico-1min' ? 'Segurança · 1 minuto' : reason ? 'Alteração salva' : 'Automático';
   const autoList = autoBackups.length
@@ -2916,13 +2976,13 @@ export async function renderSettings() {
 export function wireSettingsEvents() {
   $$('.auto-restore-btn').forEach((btn) => btn.addEventListener('click', async () => {
     if (!confirm('Restaurar esse backup automático vai substituir os dados atuais. Continuar?')) return;
-    const { restoreAutoBackup } = await import('./db.js?v=5.0');
+    const { restoreAutoBackup } = await import('./db.js?v=5.1');
     await restoreAutoBackup(btn.dataset.id);
     toast('Backup automático restaurado.', 'success');
     refreshApp();
   }));
   $('#settingsBackupBtn')?.addEventListener('click', async () => {
-    const data = await (await import('./db.js?v=5.0')).exportAll();
+    const data = await (await import('./db.js?v=5.1')).exportAll();
     downloadJSON(`orbita-backup-completo-${new Date().toISOString().slice(0,10)}.json`, data);
     toast('Backup completo gerado.', 'success');
   });
@@ -2930,12 +2990,12 @@ export function wireSettingsEvents() {
     const file = e.target.files[0];
     if (!file) return;
     if (!confirm('Isso vai substituir os dados atuais pelo conteúdo do backup. Um backup de segurança dos dados atuais será baixado antes. Continuar?')) { e.target.value = ''; return; }
-    const currentBackup = await (await import('./db.js?v=5.0')).exportAll();
+    const currentBackup = await (await import('./db.js?v=5.1')).exportAll();
     downloadJSON(`orbita-backup-seguranca-antes-restauracao-${Date.now()}.json`, currentBackup);
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      await (await import('./db.js?v=5.0')).importAll(data);
+      await (await import('./db.js?v=5.1')).importAll(data);
       toast('Backup restaurado.', 'success');
       refreshApp();
     } catch { toast('Arquivo de backup inválido.', 'error'); }
