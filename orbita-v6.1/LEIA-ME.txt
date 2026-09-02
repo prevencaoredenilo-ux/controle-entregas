@@ -1,0 +1,13 @@
+ÓRBITA v6.1 — FLUXO OPERACIONAL SIMPLIFICADO
+
+Principais ajustes:
+- Entregas agendadas usam a mesma sequência da DATA DA COMPRA.
+- O Nº da entrega aparece automaticamente antes de salvar.
+- Nº da entrega e Nº de chegada passam a representar a mesma sequência nos novos registros.
+- Um único horário é informado no cliente; ele finaliza a entrega.
+- Lista de seleção do ciclo redesenhada e compactada.
+- A taxa de entrega passa a ser contabilizada como receita assim que a compra é registrada, mesmo antes da finalização; reembolsos são descontados separadamente.
+- O botão Recalcular numeração inclui normais e agendadas do mesmo dia da compra.
+
+SEGURANÇA DE DADOS:
+Esta versão não executa renumeração/migração automática ao abrir. Históricos e backups existentes não são regravados automaticamente. Correções antigas só ocorrem por ação explícita do operador.

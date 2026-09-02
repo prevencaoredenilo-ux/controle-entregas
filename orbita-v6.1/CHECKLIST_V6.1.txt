@@ -1,0 +1,19 @@
+ÓRBITA v6.1 — AJUSTES OPERACIONAIS
+
+IMPLEMENTADO
+1. Numeração única por DATA DA COMPRA, incluindo compras agendadas.
+2. A data/hora agendada para entrega não muda o Nº da entrega.
+3. O próximo Nº da entrega aparece no formulário antes de salvar.
+4. Nº da entrega e Nº de chegada passam a usar a mesma sequência; a tela mostra apenas Nº da entrega.
+5. Um único horário no cliente: "Hora da entrega ao cliente". Não é mais necessário preencher chegada e finalização separadamente.
+6. Seletor de entregas do ciclo redesenhado, compacto, alinhado e com checkbox próprio.
+7. Taxa de entrega contabilizada como receita assim que a compra é registrada, independentemente da finalização. Reembolsos são descontados separadamente.
+8. Botão Recalcular numeração considera normais e agendadas na mesma sequência da data da compra.
+9. Nenhuma migração ou renumeração automática é executada ao abrir o sistema.
+10. Históricos e backups existentes permanecem preservados.
+
+VALIDAÇÕES
+- JavaScript: sintaxe validada.
+- CSS: parsing sem erros.
+- HTML: sem IDs duplicados.
+- Cache da versão atualizado para v6.1.

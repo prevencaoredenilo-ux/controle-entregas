@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<meta name="theme-color" content="#0B2A4A" />
+<meta name="description" content="Órbita — controle de entregas completo, offline-first e instalável." />
+<link rel="manifest" href="manifest.webmanifest?v=6.1" />
+<link rel="stylesheet" href="styles.css?v=6.1" />
+<title>Órbita • Controle de Entregas</title>
+</head>
+<body>
+
+  <div id="bootScreen" class="boot-screen">
+    <div class="boot-card">
+      <div class="brand-logo-chip" style="padding:14px 18px"><img src="assets/brand/nilo-logo.png" alt="Nilo Supermercado" onerror="this.replaceWith(Object.assign(document.createElement('strong'),{textContent:'NILO',style:'font-size:20px;color:#0B2A4A'}))" /></div>
+      <h1>Órbita</h1>
+      <p>Preparando sua operação…</p>
+      <div class="boot-bar"><span></span></div>
+    </div>
+  </div>
+
+  <div id="appShell" class="shell hidden">
+    <aside class="sidebar" id="sidebar">
+      <div>
+        <div class="brand-logo-chip"><img src="assets/brand/nilo-logo.png" alt="Nilo Supermercado" onerror="this.replaceWith(Object.assign(document.createElement('strong'),{textContent:'NILO',style:'font-size:20px;color:#0B2A4A'}))" /></div>
+        <div class="brand-slogan">"No quieto, no quieto,<br>o Nilo vende mais barato"</div>
+        <div class="release-side">VERSÃO 6.1 · FLUXO OPERACIONAL SIMPLIFICADO</div>
+      </div>
+
+      <button class="conn-pill" id="envToggleBtn" style="border:none;cursor:pointer;text-align:left">
+        <span class="conn-dot online" id="envDot"></span>
+        <span id="envPill">● Operação Real</span>
+      </button>
+      <button class="conn-pill" id="operatorBtn" style="border:none;cursor:pointer;text-align:left">
+        <span class="conn-dot online"></span>
+        <span id="operatorLabel">Quem está operando?</span>
+      </button>
+      <div class="conn-pill">
+        <span class="conn-dot" id="connDot"></span>
+        <span id="connLabel">Verificando conexão…</span>
+      </div>
+
+      <nav class="main-nav">
+        <p class="nav-group-label">Operação</p>
+        <button class="nav-item active" data-view="central"><span class="ico">🏠</span><span>Central Operacional</span><span class="badge" id="pendingBadge">0</span></button>
+        <button class="nav-item" data-view="dashboard"><span class="ico">📊</span><span>Central de Inteligência</span></button>
+        <button class="nav-item" data-view="search"><span class="ico">🔎</span><span>Busca geral</span></button>
+        <button class="nav-item" data-view="cycles"><span class="ico">🚚</span><span>Ciclos</span><span class="badge" id="cyclesBadge">0</span></button>
+        <button class="nav-item" data-view="km"><span class="ico">🛣️</span><span>Quilometragem</span></button>
+        <button class="nav-item" data-view="costs"><span class="ico">💰</span><span>Custos/Financeiro</span></button>
+        <button class="nav-item" data-view="reports"><span class="ico">🧾</span><span>Relatórios</span></button>
+
+        <p class="nav-group-label">Administração</p>
+        <button class="nav-item" data-view="registry"><span class="ico">📚</span><span>Cadastros</span></button>
+        <button class="nav-item" data-view="audit"><span class="ico">🛡️</span><span>Auditoria</span></button>
+        <button class="nav-item" data-view="trash"><span class="ico">🗑️</span><span>Lixeira</span><span class="badge" id="trashBadge">0</span></button>
+        <button class="nav-item" data-view="settings"><span class="ico">⚙️</span><span>Configurações</span></button>
+      </nav>
+
+      <button class="mini" id="installBtn" hidden style="background:rgba(255,255,255,.08);color:#fff;padding:8px;border-radius:8px;font-size:12px">⇩ Instalar aplicativo</button>
+
+      <div class="dev-footer">
+        <img src="assets/brand/triela-logo.png" alt="Triela Soluções" onerror="this.style.display='none'" />
+        <span>desenvolvido por Triela Soluções</span>
+      </div>
+    </aside>
+
+    <div class="main">
+      <header class="topbar topbar-spotlight">
+        <div class="topbar-main-row">
+          <div class="topbar-title-wrap">
+            <button class="menu-btn" id="menuBtn">☰</button>
+            <div class="topbar-title-block">
+              <span class="topbar-kicker">CENTRAL OPERACIONAL</span>
+              <h1 id="viewTitle">Central Operacional</h1>
+              <p id="viewSubtitle">Sala de controle: SLAs, ciclos, retornos assistidos, KM e fechamento do dia.</p>
+            </div>
+          </div>
+          <div class="topbar-actions">
+            <div class="live-clock utility-pill" id="liveClock"><span class="pulse-dot"></span><span id="liveClockText">--:--:--</span></div>
+            <span class="release-badge utility-pill">v6.1</span>
+            <button class="btn-primary topbar-cta" id="newDeliveryBtn">＋ Registrar entrega</button>
+          </div>
+        </div>
+
+        <div class="nilo-quiz-zone">
+          <button class="nilo-quiz-strip" id="funBreakBtn" type="button" data-tip="A pergunta muda automaticamente. Clique para abrir as respostas.">
+            <span class="nq-icon" id="knowledgeTickerIcon" aria-hidden="true">🛡️</span>
+            <span class="nq-category" id="knowledgeTickerGroup">PREVENÇÃO DE PERDAS</span>
+            <strong class="nq-question" id="knowledgeTickerQuestion">Carregando pergunta…</strong>
+            <span class="nq-action" id="knowledgeTickerMeta">Responder <b>›</b></span>
+            <span class="nq-progress" aria-hidden="true"><i></i></span>
+          </button>
+        </div>
+      </header>
+      <section id="view" class="view"></section>
+    </div>
+  </div>
+
+  <div class="modal-wrap hidden" id="modalWrap" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <div class="modal-head">
+        <div><h2 id="modalTitle"></h2><p id="modalSubtitle"></p></div>
+        <button class="modal-close" id="modalClose">✕</button>
+      </div>
+      <div id="modalBody" class="modal-body"></div>
+      <div class="modal-actions" id="modalActions"></div>
+    </div>
+  </div>
+
+  <div class="toast-stack" id="toastStack"></div>
+
+  <script type="module" src="app.js?v=6.1"></script>
+</body>
+</html>
