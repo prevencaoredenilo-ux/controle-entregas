@@ -1,7 +1,7 @@
-import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters } from './db.js?v=5.5';
-import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=5.5';
-import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=5.5';
-import { exportFullExcelReport } from './excel-report.js?v=5.5';
+import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters } from './db.js?v=5.6';
+import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=5.6';
+import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=5.6';
+import { exportFullExcelReport } from './excel-report.js?v=5.6';
 
 const DEFAULT_OPERATIONAL_TARGETS = { startMinutes:120, arrivalMinutes:210, warningMinutes:30, successTarget:90 };
 
@@ -126,7 +126,7 @@ async function repairNormalPurchaseNumbers({ environment = getEnv(), selectedDay
 }
 
 export async function normalizeExistingDailyPurchaseNumbers() {
-  return repairNormalPurchaseNumbers({ reason: 'Migração automática v5.5: correção dos números já lançados pela data da entrega e ordem de cadastro' });
+  return repairNormalPurchaseNumbers({ reason: 'Migração automática v5.6: correção dos números já lançados pela data da entrega e ordem de cadastro' });
 }
 
 function deliverySla(record, nowMs = Date.now()) {
@@ -1014,35 +1014,72 @@ function openClientArrivalFlow(record) {
 }
 
 function openDeliveryCompletionFlow(record, { cycle = null, editing = false } = {}) {
+  const hasArrival = !!record.clientArrivalAt;
   const arrivalDefault = record.clientArrivalAt || new Date();
   const deliveredDefault = record.deliveredAt || new Date();
+
+  const timingFields = editing ? `
+        <label>Chegada na casa do cliente *
+          <input type="datetime-local" name="clientArrivalAt" required value="${localDateTimeValue(arrivalDefault)}" />
+        </label>
+        <label>Hora da entrega ao cliente *
+          <input type="datetime-local" name="deliveredAt" required value="${localDateTimeValue(deliveredDefault)}" />
+        </label>` : hasArrival ? `
+        <div class="arrival-confirmed-card">
+          <span>✓</span>
+          <div>
+            <small>CHEGADA JÁ REGISTRADA</small>
+            <strong>${dateTimeBR(record.clientArrivalAt)}</strong>
+            <p>Não é necessário informar este horário novamente.</p>
+          </div>
+        </div>
+        <label>Hora da entrega ao cliente *
+          <input type="datetime-local" name="deliveredAt" required value="${localDateTimeValue(deliveredDefault)}" />
+          <small class="field-help">Informe o horário em que a entrega foi realmente concluída com o cliente.</small>
+        </label>` : `
+        <div class="completion-guidance">
+          <strong>Faltam dois momentos desta entrega</strong>
+          <small>Como a chegada ainda não foi registrada, informe a chegada ao endereço e depois o horário em que a entrega foi concluída.</small>
+        </div>
+        <label>Chegada na casa do cliente *
+          <input type="datetime-local" name="clientArrivalAt" required value="${localDateTimeValue(arrivalDefault)}" />
+        </label>
+        <label>Hora da entrega ao cliente *
+          <input type="datetime-local" name="deliveredAt" required value="${localDateTimeValue(deliveredDefault)}" />
+        </label>`;
+
   openModal({
-    title: editing ? 'Editar horários da entrega' : 'Finalizar na casa do cliente',
-    subtitle: `Entrega #${record.purchaseNumber} · a finalização exige os dois horários.`,
+    title: editing ? 'Editar horários da entrega' : 'Concluir entrega',
+    subtitle: editing
+      ? `Entrega #${record.purchaseNumber} · corrija os horários registrados.`
+      : hasArrival
+        ? `Entrega #${record.purchaseNumber} · a chegada já foi registrada. Falta apenas confirmar a entrega.`
+        : `Entrega #${record.purchaseNumber} · informe os horários que ainda faltam.`,
     body: `
-      <form id="deliveryCompletionForm">
-        <label>Chegada na casa do cliente *<input type="datetime-local" name="clientArrivalAt" required value="${localDateTimeValue(arrivalDefault)}" /></label>
-        <label>Finalizada na casa do cliente *<input type="datetime-local" name="deliveredAt" required value="${localDateTimeValue(deliveredDefault)}" /></label>
+      <form id="deliveryCompletionForm" class="delivery-completion-form">
+        ${timingFields}
         <label>Observação da conclusão<textarea name="completionNote" rows="2" placeholder="Opcional"></textarea></label>
       </form>`,
     actions: [
       { label: 'Cancelar', kind: 'ghost', onClick: closeModal },
-      { label: editing ? 'Salvar horários' : 'Confirmar finalização', kind: 'primary', onClick: async () => {
+      { label: editing ? 'Salvar horários' : 'Confirmar entrega', kind: 'primary', onClick: async () => {
         const form = $('#deliveryCompletionForm');
         if (!form.reportValidity()) return;
         const fd = Object.fromEntries(new FormData(form).entries());
-        const clientArrivalAt = new Date(fd.clientArrivalAt).toISOString();
+        const clientArrivalAt = hasArrival && !editing
+          ? record.clientArrivalAt
+          : new Date(fd.clientArrivalAt).toISOString();
         const deliveredAt = new Date(fd.deliveredAt).toISOString();
         if (record.leftStoreAt && new Date(clientArrivalAt) < new Date(record.leftStoreAt)) return toast('A chegada não pode ser anterior à saída da loja.', 'error');
-        if (new Date(deliveredAt) < new Date(clientArrivalAt)) return toast('A hora de finalização não pode ser anterior à chegada.', 'error');
+        if (new Date(deliveredAt) < new Date(clientArrivalAt)) return toast('A hora da entrega não pode ser anterior à chegada no cliente.', 'error');
         await Deliveries.changeStatus(record.id, 'finalizada', {
           clientArrivalAt, deliveredAt,
           arrivalRegisteredBy: record.arrivalRegisteredBy || getOperatorName(),
           completionRegisteredBy: getOperatorName(),
           completionUpdatedAt: new Date().toISOString(),
-          note: fd.completionNote?.trim() || (editing ? 'Horários de conclusão corrigidos.' : `Finalizada na casa do cliente às ${timeBR(deliveredAt)}.`),
+          note: fd.completionNote?.trim() || (editing ? 'Horários de conclusão corrigidos.' : `Entrega concluída no cliente às ${timeBR(deliveredAt)}.`),
         });
-        toast(`Entrega finalizada às ${timeBR(deliveredAt)}.`, 'success');
+        toast(`Entrega concluída às ${timeBR(deliveredAt)}.`, 'success');
         if (cycle) return advanceCloseCycle(cycle);
         closeModal();
         refreshApp();
@@ -3045,7 +3082,7 @@ function openVehicleAddModal(record = null) {
    ========================================================= */
 export async function renderSettings() {
   const cfg = JSON.parse(localStorage.getItem('orbita_settings') || '{}');
-  const { listAutoBackups } = await import('./db.js?v=5.5');
+  const { listAutoBackups } = await import('./db.js?v=5.6');
   const autoBackups = await listAutoBackups();
   const backupReasonLabel = (reason = '') => reason === 'abertura' ? 'Abertura do sistema' : reason === 'periodico-1min' ? 'Segurança · 1 minuto' : reason ? 'Alteração salva' : 'Automático';
   const autoList = autoBackups.length
@@ -3083,13 +3120,13 @@ export async function renderSettings() {
 export function wireSettingsEvents() {
   $$('.auto-restore-btn').forEach((btn) => btn.addEventListener('click', async () => {
     if (!confirm('Restaurar esse backup automático vai substituir os dados atuais. Continuar?')) return;
-    const { restoreAutoBackup } = await import('./db.js?v=5.5');
+    const { restoreAutoBackup } = await import('./db.js?v=5.6');
     await restoreAutoBackup(btn.dataset.id);
     toast('Backup automático restaurado.', 'success');
     refreshApp();
   }));
   $('#settingsBackupBtn')?.addEventListener('click', async () => {
-    const data = await (await import('./db.js?v=5.5')).exportAll();
+    const data = await (await import('./db.js?v=5.6')).exportAll();
     downloadJSON(`orbita-backup-completo-${new Date().toISOString().slice(0,10)}.json`, data);
     toast('Backup completo gerado.', 'success');
   });
@@ -3097,12 +3134,12 @@ export function wireSettingsEvents() {
     const file = e.target.files[0];
     if (!file) return;
     if (!confirm('Isso vai substituir os dados atuais pelo conteúdo do backup. Um backup de segurança dos dados atuais será baixado antes. Continuar?')) { e.target.value = ''; return; }
-    const currentBackup = await (await import('./db.js?v=5.5')).exportAll();
+    const currentBackup = await (await import('./db.js?v=5.6')).exportAll();
     downloadJSON(`orbita-backup-seguranca-antes-restauracao-${Date.now()}.json`, currentBackup);
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      await (await import('./db.js?v=5.5')).importAll(data);
+      await (await import('./db.js?v=5.6')).importAll(data);
       toast('Backup restaurado.', 'success');
       refreshApp();
     } catch { toast('Arquivo de backup inválido.', 'error'); }

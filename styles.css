@@ -2549,3 +2549,68 @@ tr:last-child td { border-bottom: none; }
   border: 1px solid #d6e6f1;
   color: #4e6f87;
 }
+
+/* v5.6 — finalização simplificada da entrega */
+.delivery-completion-form {
+  display: grid;
+  gap: 14px;
+}
+.arrival-confirmed-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 12px;
+  align-items: center;
+  padding: 13px 14px;
+  border-radius: 13px;
+  border: 1px solid #b9dec7;
+  background: #eef9f2;
+}
+.arrival-confirmed-card > span {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--status-entregue);
+  color: #fff;
+  font-weight: 900;
+}
+.arrival-confirmed-card div {
+  min-width: 0;
+}
+.arrival-confirmed-card small {
+  display: block;
+  color: #397457;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: .12em;
+}
+.arrival-confirmed-card strong {
+  display: block;
+  margin-top: 3px;
+  color: #1f5038;
+  font-size: 14px;
+}
+.arrival-confirmed-card p {
+  margin: 3px 0 0;
+  color: #5f7c6c;
+  font-size: 10px;
+}
+.completion-guidance {
+  padding: 12px 13px;
+  border-radius: 12px;
+  border: 1px solid #c9dceb;
+  background: #f3f8fc;
+}
+.completion-guidance strong {
+  display: block;
+  color: var(--ink-2);
+  font-size: 11.5px;
+}
+.completion-guidance small {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.45;
+}

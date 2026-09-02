@@ -212,7 +212,7 @@ Você indicou o repositório `prevencaoredenilo-ux/controle-entregas` (V14.8) co
 - A tela Configurações identifica se o backup foi de abertura, periódico de 1 minuto ou provocado por alteração.
 
 
-## v5.5 — sequência por lançamento
+## v5.6 — sequência por lançamento
 - Entregas normais usam a data operacional escolhida e recebem o próximo número disponível daquele dia.
 - Entrega retroativa: se o dia terminou em #10, a próxima lançada para esse mesmo dia recebe #11, independentemente da hora informada.
 - O recálculo diário usa a ordem real de criação dos registros no sistema e não altera a numeração das agendadas.
