@@ -2,9 +2,35 @@ export const $ = (sel, root = document) => root.querySelector(sel);
 export const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
 export const money = (n) => (Number(n) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-export const dateBR = (iso) => (iso ? new Date(iso).toLocaleDateString('pt-BR') : '—');
-export const dateTimeBR = (iso) => (iso ? new Date(iso).toLocaleString('pt-BR') : '—');
-export const timeBR = (iso) => (iso ? new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '—');
+
+function isDateOnly(value) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(value || ''));
+}
+
+function formatDateOnlyBR(value) {
+  const [y, m, d] = String(value).split('-');
+  return `${d}/${m}/${y}`;
+}
+
+export const dateBR = (iso) => {
+  if (!iso) return '—';
+  if (isDateOnly(iso)) return formatDateOnlyBR(iso);
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString('pt-BR');
+};
+
+export const dateTimeBR = (iso) => {
+  if (!iso) return '—';
+  if (isDateOnly(iso)) return formatDateOnlyBR(iso);
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString('pt-BR');
+};
+
+export const timeBR = (iso) => {
+  if (!iso || isDateOnly(iso)) return '—';
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+};
 
 export function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

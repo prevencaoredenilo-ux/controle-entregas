@@ -1,5 +1,5 @@
-import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, Cycles, OdometerLogs, Costs, DayClosures } from './db.js?v=4.6';
-import { STATUS_META } from './helpers.js?v=4.6';
+import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, Cycles, OdometerLogs, Costs, DayClosures } from './db.js?v=4.7';
+import { STATUS_META } from './helpers.js?v=4.7';
 
 const DEFAULT_TARGETS = { startMinutes:120, arrivalMinutes:210, warningMinutes:30, successTarget:90 };
 const DAY_NAMES = ['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'];
