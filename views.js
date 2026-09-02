@@ -1,7 +1,7 @@
-import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters } from './db.js?v=4.3';
-import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=4.3';
-import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=4.3';
-import { exportFullExcelReport } from './excel-report.js?v=4.3';
+import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters } from './db.js?v=4.4';
+import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=4.4';
+import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=4.4';
+import { exportFullExcelReport } from './excel-report.js?v=4.4';
 
 const DEFAULT_OPERATIONAL_TARGETS = { startMinutes:120, arrivalMinutes:210, warningMinutes:30, successTarget:90 };
 
@@ -20,6 +20,18 @@ export async function normalizeReturnQueueStatus() {
     leftStoreAt: null, clientArrivalAt: null, deliveredAt: null,
     normalizedReturnQueueAt: new Date().toISOString(),
   }).catch(() => null)));
+}
+
+function formatKm(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '—';
+  return `${n.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} km`;
+}
+
+function formatPerKm(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '—';
+  return `${n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ent./km`;
 }
 
 function deliverySla(record, nowMs = Date.now()) {
@@ -230,14 +242,14 @@ export async function renderCentral() {
     <section class="operation-launcher">
       <div class="section-heading"><div><span>COMANDOS RÁPIDOS</span><h2>Toda a operação em um só lugar</h2></div><div class="heading-signal"><i></i>Atualização automática</div></div>
       <div class="command-dock">
-        <button class="primary-command" id="qaNewDelivery" data-tip="Cadastrar uma nova compra e colocá-la na fila."><span>＋</span><strong>Nova entrega</strong></button>
-        <button id="qaStartCycle" data-tip="Pergunta a hora exata de saída antes de confirmar o início."><span>↗</span><strong>Iniciar ciclo</strong></button>
-        <button id="qaArrival" data-tip="Registrar a hora exata em que chegou na casa do cliente."><span>⌂</span><strong>Chegou no cliente</strong></button>
-        <button id="qaReturn" data-tip="Registrar quando uma entrega retornou à loja, o motivo e a próxima tentativa."><span>↩</span><strong>Entrega retornou</strong></button>
-        <button id="qaCloseCycle" data-tip="Resolve pendências e pergunta a hora exata antes de confirmar o fim."><span>✓</span><strong>Finalizar ciclo</strong></button>
-        <button id="qaKm" data-tip="Registrar KM inicial ou final."><span>⌁</span><strong>KM</strong></button>
-        <button id="qaCost" data-tip="Lançar custo operacional."><span>R$</span><strong>Custo</strong></button>
-        <button id="qaCloseDay" data-tip="Confere ciclos, entregas, KM e custos antes de registrar o fechamento do dia."><span>☑</span><strong>Fechar dia</strong></button>
+        <button class="primary-command" id="qaNewDelivery" data-tip="Cadastrar uma nova compra e colocá-la na fila."><span class="cmd-ico">🛒</span><strong>Nova entrega</strong></button>
+        <button id="qaStartCycle" data-tip="Pergunta a hora exata de saída antes de confirmar o início."><span class="cmd-ico">🚚</span><strong>Iniciar ciclo</strong></button>
+        <button id="qaArrival" data-tip="Registrar a hora exata em que chegou na casa do cliente."><span class="cmd-ico">📍</span><strong>Chegou no cliente</strong></button>
+        <button id="qaReturn" data-tip="Registrar quando uma entrega retornou à loja, o motivo e a próxima tentativa."><span class="cmd-ico">↩︎</span><strong>Entrega retornou</strong></button>
+        <button id="qaCloseCycle" data-tip="Resolve pendências e pergunta a hora exata antes de confirmar o fim."><span class="cmd-ico">✅</span><strong>Finalizar ciclo</strong></button>
+        <button id="qaKm" data-tip="Registrar KM inicial ou final."><span class="cmd-ico">🛣️</span><strong>KM do dia</strong></button>
+        <button id="qaCost" data-tip="Lançar custo operacional."><span class="cmd-ico">💰</span><strong>Custo</strong></button>
+        <button id="qaCloseDay" data-tip="Confere ciclos, entregas, KM e custos antes de registrar o fechamento do dia."><span class="cmd-ico">🗓️</span><strong>Fechar dia</strong></button>
       </div>
     </section>
 
@@ -255,18 +267,18 @@ export async function renderCentral() {
 
     <section class="live-board-section">
       <div class="section-heading"><div><span>MAPA OPERACIONAL</span><h2>Onde cada entrega está agora</h2></div><div class="heading-signal"><i></i>dados reais</div></div>
-      <div class="live-board">
-        ${[['Na loja',naLoja],['Em rota',rows.filter(r=>r.status==='em_rota')],['No cliente',noCliente],['Ocorrências',rows.filter(r=>['retorno','reentrega','cancelada'].includes(r.status))]].map(([label,list]) => `<div class="live-lane"><header><strong>${label}</strong><span>${list.length}</span></header><div>${list.slice(0,5).map(liveLaneCard).join('') || '<p class="lane-empty">Nenhuma entrega</p>'}</div></div>`).join('')}
+      <div class="live-board live-board-5">
+        ${[['Na loja',naLoja],['Em rota',rows.filter(r=>r.status==='em_rota')],['No cliente',noCliente],['Agendadas',agendadas],['Ocorrências',rows.filter(r=>['retorno','reentrega','cancelada'].includes(r.status))]].map(([label,list]) => `<div class="live-lane"><header><strong>${label}</strong><span>${list.length}</span></header><div>${list.slice(0,5).map(liveLaneCard).join('') || '<p class="lane-empty">Nenhuma entrega</p>'}</div></div>`).join('')}
       </div>
     </section>
 
     <div class="queue-heading"><div><span>FILA OPERACIONAL</span><h2>Entregas que exigem acompanhamento</h2></div><label class="central-search">⌕<input id="centralQueueSearch" placeholder="Buscar compra, cupom, PDV, DOC ou cliente" /></label></div>
-    ${await miniList([...naLoja, ...emRota])}
+    ${await miniList([...agendadas, ...naLoja, ...emRota])}
   `;
 }
 
 async function miniList(rows) {
-  if (!rows.length) return `<div class="empty-state"><strong>Nada por aqui agora</strong>As entregas na loja e em rota aparecem nesta lista.</div>`;
+  if (!rows.length) return `<div class="empty-state"><strong>Nada por aqui agora</strong>As entregas agendadas, na loja e em rota aparecem nesta lista.</div>`;
   const trs = rows.slice(0, 30).map((r) => {
     const sla = deliverySla(r);
     return `
@@ -1806,7 +1818,8 @@ export async function renderDashboard() {
   const netRevenue = grossFees - refunds;
   const costTotal = costs.reduce((s,c) => s + Number(c.amount || 0), 0);
   const balance = netRevenue - costTotal;
-  const kmTotal = kmLogs.filter((l) => l.kmEnd != null).reduce((s,l) => s + (l.kmEnd - l.kmStart), 0);
+  const validKmLogs = kmLogs.filter((l) => l.kmStart != null && l.kmEnd != null && Number(l.kmEnd) >= Number(l.kmStart));
+  const kmTotal = validKmLogs.reduce((s,l) => s + Math.max(0, Number(l.kmEnd) - Number(l.kmStart)), 0);
 
   // produtividade
   const successRate = rows.length ? Math.round((finalized.length / rows.length) * 100) : 0;
@@ -2052,10 +2065,10 @@ export async function renderDashboard() {
         ${metric('Duração média', formatDuration(avgCycleDuration), 'Média entre início e fim dos ciclos.')}
         ${metric('Ciclo mais longo', formatDuration(maxCycleDuration), 'Maior duração de ciclo registrada.')}
         ${metric('Produtividade/ciclo', avgPerCycle, 'Entregas finalizadas por ciclo fechado.')}
-        ${metric('KM rodado', `${kmTotal.toFixed(1)} km`, 'KM final menos KM inicial.')}
-        ${metric('KM por ciclo', kmPerCycle==null?'—':`${kmPerCycle.toFixed(1)} km`, 'Quilômetros divididos pelos ciclos fechados.')}
-        ${metric('Entregas por KM', deliveriesPerKm==null?'—':deliveriesPerKm.toFixed(2), 'Finalizadas divididas pelo KM rodado.')}
-        ${metric('Expedientes de KM', kmLogs.length, 'Registros de odômetro no período.')}
+        ${metric('Quilometragem rodada', formatKm(kmTotal), 'Soma do KM final menos o KM inicial dos expedientes fechados.')}
+        ${metric('Média de km por ciclo', kmPerCycle==null?'—':formatKm(kmPerCycle), 'Quilometragem rodada dividida pelos ciclos fechados.')}
+        ${metric('Entregas por km', deliveriesPerKm==null?'—':formatPerKm(deliveriesPerKm), 'Quantidade de entregas finalizadas para cada quilômetro rodado.')}
+        ${metric('Expedientes de km', kmLogs.length, 'Registros de quilometragem no período.')}
         ${metric('KM ainda aberto', kmLogs.filter(k=>k.kmEnd==null).length, 'Expedientes sem KM final.', kmLogs.some(k=>k.kmEnd==null)?'warning':'good')}
         ${metric('Recursos vinculados', rows.filter(r=>r.vehicleId&&r.driverId).length, 'Entregas com veículo e entregador informados.')}
       </div>
@@ -2718,7 +2731,7 @@ function openVehicleAddModal(record = null) {
    ========================================================= */
 export async function renderSettings() {
   const cfg = JSON.parse(localStorage.getItem('orbita_settings') || '{}');
-  const { listAutoBackups } = await import('./db.js?v=4.3');
+  const { listAutoBackups } = await import('./db.js?v=4.4');
   const autoBackups = await listAutoBackups();
   const backupReasonLabel = (reason = '') => reason === 'abertura' ? 'Abertura do sistema' : reason === 'periodico-1min' ? 'Segurança · 1 minuto' : reason ? 'Alteração salva' : 'Automático';
   const autoList = autoBackups.length
@@ -2756,13 +2769,13 @@ export async function renderSettings() {
 export function wireSettingsEvents() {
   $$('.auto-restore-btn').forEach((btn) => btn.addEventListener('click', async () => {
     if (!confirm('Restaurar esse backup automático vai substituir os dados atuais. Continuar?')) return;
-    const { restoreAutoBackup } = await import('./db.js?v=4.3');
+    const { restoreAutoBackup } = await import('./db.js?v=4.4');
     await restoreAutoBackup(btn.dataset.id);
     toast('Backup automático restaurado.', 'success');
     refreshApp();
   }));
   $('#settingsBackupBtn')?.addEventListener('click', async () => {
-    const data = await (await import('./db.js?v=4.3')).exportAll();
+    const data = await (await import('./db.js?v=4.4')).exportAll();
     downloadJSON(`orbita-backup-completo-${new Date().toISOString().slice(0,10)}.json`, data);
     toast('Backup completo gerado.', 'success');
   });
@@ -2770,12 +2783,12 @@ export function wireSettingsEvents() {
     const file = e.target.files[0];
     if (!file) return;
     if (!confirm('Isso vai substituir os dados atuais pelo conteúdo do backup. Um backup de segurança dos dados atuais será baixado antes. Continuar?')) { e.target.value = ''; return; }
-    const currentBackup = await (await import('./db.js?v=4.3')).exportAll();
+    const currentBackup = await (await import('./db.js?v=4.4')).exportAll();
     downloadJSON(`orbita-backup-seguranca-antes-restauracao-${Date.now()}.json`, currentBackup);
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      await (await import('./db.js?v=4.3')).importAll(data);
+      await (await import('./db.js?v=4.4')).importAll(data);
       toast('Backup restaurado.', 'success');
       refreshApp();
     } catch { toast('Arquivo de backup inválido.', 'error'); }

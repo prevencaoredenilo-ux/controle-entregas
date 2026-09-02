@@ -6,8 +6,8 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <meta name="theme-color" content="#0B2A4A" />
 <meta name="description" content="Órbita — controle de entregas completo, offline-first e instalável." />
-<link rel="manifest" href="manifest.webmanifest?v=4.3" />
-<link rel="stylesheet" href="styles.css?v=4.3" />
+<link rel="manifest" href="manifest.webmanifest?v=4.4" />
+<link rel="stylesheet" href="styles.css?v=4.4" />
 <title>Órbita • Controle de Entregas</title>
 </head>
 <body>
@@ -26,7 +26,7 @@
       <div>
         <div class="brand-logo-chip"><img src="assets/brand/nilo-logo.png" alt="Nilo Supermercado" onerror="this.replaceWith(Object.assign(document.createElement('strong'),{textContent:'NILO',style:'font-size:20px;color:#0B2A4A'}))" /></div>
         <div class="brand-slogan">"No quieto, no quieto,<br>o Nilo vende mais barato"</div>
-        <div class="release-side">VERSÃO 4.3 · QUIZ INTERATIVO DO TOPO</div>
+        <div class="release-side">VERSÃO 4.4 · KM, ÍCONES E AGENDADAS</div>
       </div>
 
       <button class="conn-pill" id="envToggleBtn" style="border:none;cursor:pointer;text-align:left">
@@ -44,19 +44,19 @@
 
       <nav class="main-nav">
         <p class="nav-group-label">Operação</p>
-        <button class="nav-item active" data-view="central"><span class="ico">⌂</span><span>Central Operacional</span><span class="badge" id="pendingBadge">0</span></button>
-        <button class="nav-item" data-view="dashboard"><span class="ico">▦</span><span>Central de Inteligência</span></button>
-        <button class="nav-item" data-view="search"><span class="ico">⌕</span><span>Busca geral</span></button>
-        <button class="nav-item" data-view="cycles"><span class="ico">↻</span><span>Ciclos</span><span class="badge" id="cyclesBadge">0</span></button>
-        <button class="nav-item" data-view="km"><span class="ico">⌁</span><span>Quilometragem</span></button>
-        <button class="nav-item" data-view="costs"><span class="ico">R$</span><span>Custos/Financeiro</span></button>
-        <button class="nav-item" data-view="reports"><span class="ico">▤</span><span>Relatórios</span></button>
+        <button class="nav-item active" data-view="central"><span class="ico">🏠</span><span>Central Operacional</span><span class="badge" id="pendingBadge">0</span></button>
+        <button class="nav-item" data-view="dashboard"><span class="ico">📊</span><span>Central de Inteligência</span></button>
+        <button class="nav-item" data-view="search"><span class="ico">🔎</span><span>Busca geral</span></button>
+        <button class="nav-item" data-view="cycles"><span class="ico">🚚</span><span>Ciclos</span><span class="badge" id="cyclesBadge">0</span></button>
+        <button class="nav-item" data-view="km"><span class="ico">🛣️</span><span>Quilometragem</span></button>
+        <button class="nav-item" data-view="costs"><span class="ico">💰</span><span>Custos/Financeiro</span></button>
+        <button class="nav-item" data-view="reports"><span class="ico">🧾</span><span>Relatórios</span></button>
 
         <p class="nav-group-label">Administração</p>
-        <button class="nav-item" data-view="registry"><span class="ico">☰</span><span>Cadastros</span></button>
-        <button class="nav-item" data-view="audit"><span class="ico">◷</span><span>Auditoria</span></button>
-        <button class="nav-item" data-view="trash"><span class="ico">⌫</span><span>Lixeira</span><span class="badge" id="trashBadge">0</span></button>
-        <button class="nav-item" data-view="settings"><span class="ico">⚙</span><span>Configurações</span></button>
+        <button class="nav-item" data-view="registry"><span class="ico">📚</span><span>Cadastros</span></button>
+        <button class="nav-item" data-view="audit"><span class="ico">🛡️</span><span>Auditoria</span></button>
+        <button class="nav-item" data-view="trash"><span class="ico">🗑️</span><span>Lixeira</span><span class="badge" id="trashBadge">0</span></button>
+        <button class="nav-item" data-view="settings"><span class="ico">⚙️</span><span>Configurações</span></button>
       </nav>
 
       <button class="mini" id="installBtn" hidden style="background:rgba(255,255,255,.08);color:#fff;padding:8px;border-radius:8px;font-size:12px">⇩ Instalar aplicativo</button>
@@ -80,7 +80,7 @@
           </div>
           <div class="topbar-actions">
             <div class="live-clock utility-pill" id="liveClock"><span class="pulse-dot"></span><span id="liveClockText">--:--:--</span></div>
-            <span class="release-badge utility-pill">v4.3</span>
+            <span class="release-badge utility-pill">v4.4</span>
             <button class="btn-primary topbar-cta" id="newDeliveryBtn">＋ Registrar entrega</button>
           </div>
         </div>
@@ -112,6 +112,6 @@
 
   <div class="toast-stack" id="toastStack"></div>
 
-  <script type="module" src="app.js?v=4.3"></script>
+  <script type="module" src="app.js?v=4.4"></script>
 </body>
 </html>
