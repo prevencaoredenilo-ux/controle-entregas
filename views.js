@@ -1,7 +1,7 @@
-import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters } from './db.js?v=4.9';
-import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=4.9';
-import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=4.9';
-import { exportFullExcelReport } from './excel-report.js?v=4.9';
+import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters } from './db.js?v=5.0';
+import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=5.0';
+import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=5.0';
+import { exportFullExcelReport } from './excel-report.js?v=5.0';
 
 const DEFAULT_OPERATIONAL_TARGETS = { startMinutes:120, arrivalMinutes:210, warningMinutes:30, successTarget:90 };
 
@@ -32,6 +32,26 @@ function formatPerKm(value) {
   const n = Number(value);
   if (!Number.isFinite(n)) return '—';
   return `${n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ent./km`;
+}
+
+function nextDailyPurchaseNumber(deliveries, entryTime, excludeId = null) {
+  const dayKey = localDateKey(entryTime);
+  return deliveries
+    .filter((item) => item.id !== excludeId && item.type !== 'agendada' && localDateKey(item.entryTime) === dayKey)
+    .reduce((max, item) => Math.max(max, Number(item.purchaseNumber) || 0), 0) + 1;
+}
+
+function nextArrivalNumber(deliveries, entryTime, excludeId = null) {
+  const dayKey = localDateKey(entryTime);
+  return deliveries
+    .filter((item) => item.id !== excludeId && localDateKey(item.entryTime) === dayKey)
+    .reduce((max, item) => Math.max(max, Number(item.arrivalNumber) || 0), 0) + 1;
+}
+
+function nextScheduledPurchaseNumber(deliveries, excludeId = null) {
+  return deliveries
+    .filter((item) => item.id !== excludeId && item.type === 'agendada')
+    .reduce((max, item) => Math.max(max, Number(item.purchaseNumber) || 0), 0) + 1;
 }
 
 function deliverySla(record, nowMs = Date.now()) {
@@ -968,26 +988,13 @@ async function saveDeliveryForm(record) {
       const typeChanged = record.type !== fd.type;
       const dayChanged = previousOperationDay !== nextOperationDay;
       if (typeChanged || dayChanged) {
-        const existingDeliveries = (await Deliveries.active(env)).filter((item) => item.id !== record.id);
+        const existingDeliveries = await Deliveries.active(env);
         if (fd.type === 'agendada') {
-          if (typeChanged) {
-            const scheduledMax = existingDeliveries
-              .filter((item) => item.type === 'agendada')
-              .reduce((max, item) => Math.max(max, Number(item.purchaseNumber) || 0), 0);
-            payload.purchaseNumber = await Counters.next(env, 'compra', { scope: 'agendada', daily: false, minimum: scheduledMax });
-          } else {
-            payload.purchaseNumber = record.purchaseNumber;
-          }
+          payload.purchaseNumber = typeChanged ? nextScheduledPurchaseNumber(existingDeliveries, record.id) : record.purchaseNumber;
         } else {
-          const dayMax = existingDeliveries
-            .filter((item) => item.type !== 'agendada' && localDateKey(item.entryTime) === nextOperationDay)
-            .reduce((max, item) => Math.max(max, Number(item.purchaseNumber) || 0), 0);
-          payload.purchaseNumber = await Counters.next(env, 'compra', { daily: true, date: payload.entryTime, minimum: dayMax });
+          payload.purchaseNumber = nextDailyPurchaseNumber(existingDeliveries, payload.entryTime, record.id);
         }
-        const arrivalMax = existingDeliveries
-          .filter((item) => localDateKey(item.entryTime) === nextOperationDay)
-          .reduce((max, item) => Math.max(max, Number(item.arrivalNumber) || 0), 0);
-        payload.arrivalNumber = await Counters.next(env, 'chegada', { daily: true, date: payload.entryTime, minimum: arrivalMax });
+        payload.arrivalNumber = nextArrivalNumber(existingDeliveries, payload.entryTime, record.id);
       }
       await Deliveries.update(record.id, payload);
       const targetStatus = payload.deliveredAt ? 'finalizada' : (payload.clientArrivalAt && record.status === 'em_rota' ? 'no_cliente' : null);
@@ -995,22 +1002,12 @@ async function saveDeliveryForm(record) {
       toast('Entrega atualizada.', 'success');
     } else {
       const existingDeliveries = await Deliveries.active(env);
-      const operationDayKey = localDateKey(payload.entryTime);
       if (fd.type === 'agendada') {
-        const scheduledMax = existingDeliveries
-          .filter((item) => item.type === 'agendada')
-          .reduce((max, item) => Math.max(max, Number(item.purchaseNumber) || 0), 0);
-        payload.purchaseNumber = await Counters.next(env, 'compra', { scope: 'agendada', daily: false, minimum: scheduledMax });
+        payload.purchaseNumber = nextScheduledPurchaseNumber(existingDeliveries);
       } else {
-        const dayMax = existingDeliveries
-          .filter((item) => item.type !== 'agendada' && localDateKey(item.entryTime) === operationDayKey)
-          .reduce((max, item) => Math.max(max, Number(item.purchaseNumber) || 0), 0);
-        payload.purchaseNumber = await Counters.next(env, 'compra', { daily: true, date: payload.entryTime, minimum: dayMax });
+        payload.purchaseNumber = nextDailyPurchaseNumber(existingDeliveries, payload.entryTime);
       }
-      const arrivalMax = existingDeliveries
-        .filter((item) => localDateKey(item.entryTime) === operationDayKey)
-        .reduce((max, item) => Math.max(max, Number(item.arrivalNumber) || 0), 0);
-      payload.arrivalNumber = await Counters.next(env, 'chegada', { daily: true, date: payload.entryTime, minimum: arrivalMax });
+      payload.arrivalNumber = nextArrivalNumber(existingDeliveries, payload.entryTime);
       payload.status = fd.type === 'agendada' ? 'programada' : 'na_loja';
       payload.statusHistory = [];
       payload.reschedules = [];
@@ -2881,7 +2878,7 @@ function openVehicleAddModal(record = null) {
    ========================================================= */
 export async function renderSettings() {
   const cfg = JSON.parse(localStorage.getItem('orbita_settings') || '{}');
-  const { listAutoBackups } = await import('./db.js?v=4.9');
+  const { listAutoBackups } = await import('./db.js?v=5.0');
   const autoBackups = await listAutoBackups();
   const backupReasonLabel = (reason = '') => reason === 'abertura' ? 'Abertura do sistema' : reason === 'periodico-1min' ? 'Segurança · 1 minuto' : reason ? 'Alteração salva' : 'Automático';
   const autoList = autoBackups.length
@@ -2919,13 +2916,13 @@ export async function renderSettings() {
 export function wireSettingsEvents() {
   $$('.auto-restore-btn').forEach((btn) => btn.addEventListener('click', async () => {
     if (!confirm('Restaurar esse backup automático vai substituir os dados atuais. Continuar?')) return;
-    const { restoreAutoBackup } = await import('./db.js?v=4.9');
+    const { restoreAutoBackup } = await import('./db.js?v=5.0');
     await restoreAutoBackup(btn.dataset.id);
     toast('Backup automático restaurado.', 'success');
     refreshApp();
   }));
   $('#settingsBackupBtn')?.addEventListener('click', async () => {
-    const data = await (await import('./db.js?v=4.9')).exportAll();
+    const data = await (await import('./db.js?v=5.0')).exportAll();
     downloadJSON(`orbita-backup-completo-${new Date().toISOString().slice(0,10)}.json`, data);
     toast('Backup completo gerado.', 'success');
   });
@@ -2933,12 +2930,12 @@ export function wireSettingsEvents() {
     const file = e.target.files[0];
     if (!file) return;
     if (!confirm('Isso vai substituir os dados atuais pelo conteúdo do backup. Um backup de segurança dos dados atuais será baixado antes. Continuar?')) { e.target.value = ''; return; }
-    const currentBackup = await (await import('./db.js?v=4.9')).exportAll();
+    const currentBackup = await (await import('./db.js?v=5.0')).exportAll();
     downloadJSON(`orbita-backup-seguranca-antes-restauracao-${Date.now()}.json`, currentBackup);
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      await (await import('./db.js?v=4.9')).importAll(data);
+      await (await import('./db.js?v=5.0')).importAll(data);
       toast('Backup restaurado.', 'success');
       refreshApp();
     } catch { toast('Arquivo de backup inválido.', 'error'); }
