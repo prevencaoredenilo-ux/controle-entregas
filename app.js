@@ -1,6 +1,6 @@
-import { ensureSeed, saveAutoBackup, enableWriteThroughAutoBackup } from './db.js?v=5.1';
-import { $, $$, toast, initTooltips, animateStatCards, performanceProfile } from './helpers.js?v=5.1';
-import * as V from './views.js?v=5.1';
+import { ensureSeed, saveAutoBackup, enableWriteThroughAutoBackup } from './db.js?v=5.2';
+import { $, $$, toast, initTooltips, animateStatCards, performanceProfile } from './helpers.js?v=5.2';
+import * as V from './views.js?v=5.2';
 
 let currentView = 'central';
 let currentRegistryTab = 'vehicles';
@@ -75,7 +75,7 @@ function startLiveClock() {
   setInterval(tick, 1000);
 }
 
-// backup automático v5.1:
+// backup automático v5.2:
 // 1) um snapshot logo na abertura;
 // 2) um snapshot a cada alteração relevante, disparado pela camada de dados;
 // 3) um snapshot de segurança a cada 1 minuto, mesmo sem novas alterações.
@@ -115,7 +115,7 @@ function wireNav() {
 }
 
 async function openOperatorPicker() {
-  const { Collaborators } = await import('./db.js?v=5.1');
+  const { Collaborators } = await import('./db.js?v=5.2');
   const list = (await Collaborators.all()).filter((c) => c.active !== false);
   openModal({
     title: 'Quem está operando agora?',
@@ -365,7 +365,7 @@ async function render() {
 }
 
 async function updateBadges() {
-  const { Deliveries, Cycles } = await import('./db.js?v=5.1');
+  const { Deliveries, Cycles } = await import('./db.js?v=5.2');
   const rows = await Deliveries.active(environment);
   $('#pendingBadge').textContent = rows.filter((r) => r.status === 'na_loja').length;
   const trashed = await Deliveries.trashed(environment);
@@ -388,7 +388,7 @@ if ('serviceWorker' in navigator) {
     refreshingForUpdate = true;
     window.location.reload();
   });
-  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js?v=5.1', { updateViaCache: 'none' }).then((registration) => registration.update()).catch(() => {}));
+  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js?v=5.2', { updateViaCache: 'none' }).then((registration) => registration.update()).catch(() => {}));
 }
 
 boot();

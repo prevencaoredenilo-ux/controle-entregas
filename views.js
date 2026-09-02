@@ -1,7 +1,7 @@
-import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters } from './db.js?v=5.1';
-import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=5.1';
-import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=5.1';
-import { exportFullExcelReport } from './excel-report.js?v=5.1';
+import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters } from './db.js?v=5.2';
+import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=5.2';
+import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=5.2';
+import { exportFullExcelReport } from './excel-report.js?v=5.2';
 
 const DEFAULT_OPERATIONAL_TARGETS = { startMinutes:120, arrivalMinutes:210, warningMinutes:30, successTarget:90 };
 
@@ -324,12 +324,12 @@ async function openRecalculateDayNumbersModal() {
   const today = localDateKey();
   openModal({
     title: 'Recalcular numeração do dia',
-    subtitle: 'Corrige números antigos sem alterar a numeração das entregas agendadas.',
+    subtitle: 'Corrige números antigos sem alterar a sequência válida nem a numeração das entregas agendadas.',
     body: `<form id="recalculateNumberingForm" class="recalculate-numbering-form">
       <label>Data a corrigir *<input type="date" name="operationDate" value="${today}" required /></label>
       <div class="numbering-rule-card">
         <span>↻</span>
-        <div><strong>Como funciona</strong><p>As entregas normais da data escolhida serão ordenadas pela hora de entrada e receberão #1, #2, #3... As entregas agendadas manterão seus números atuais.</p></div>
+        <div><strong>Regra da sequência</strong><p>A sequência segue a ordem em que as entregas normais foram lançadas no sistema para a data escolhida. Se a última válida for #10, uma entrega dessa mesma data lançada depois receberá #11, mesmo que a hora da compra seja anterior. As agendadas mantêm seus números.</p></div>
       </div>
     </form>`,
     actions: [
@@ -343,10 +343,10 @@ async function openRecalculateDayNumbersModal() {
         const normals = rows
           .filter((r) => r.type !== 'agendada' && localDateKey(r.entryTime) === selectedDay)
           .sort((a,b) => {
-            const ta = new Date(a.entryTime).getTime();
-            const tb = new Date(b.entryTime).getTime();
-            if (ta !== tb) return ta - tb;
-            return String(a.createdAt || a.id).localeCompare(String(b.createdAt || b.id));
+            const createdA = new Date(a.createdAt || a.updatedAt || a.entryTime).getTime();
+            const createdB = new Date(b.createdAt || b.updatedAt || b.entryTime).getTime();
+            if (createdA !== createdB) return createdA - createdB;
+            return String(a.id).localeCompare(String(b.id));
           });
         if (!normals.length) {
           toast('Não há entregas normais nessa data para renumerar.', 'error');
@@ -365,7 +365,7 @@ async function openRecalculateDayNumbersModal() {
               day: selectedDay,
               by: getOperatorName(),
               at: new Date().toISOString(),
-              reason: 'Recálculo manual da numeração diária',
+              reason: 'Recálculo manual da sequência diária pela ordem de lançamento no sistema',
             },
           });
           changed += 1;
@@ -2938,7 +2938,7 @@ function openVehicleAddModal(record = null) {
    ========================================================= */
 export async function renderSettings() {
   const cfg = JSON.parse(localStorage.getItem('orbita_settings') || '{}');
-  const { listAutoBackups } = await import('./db.js?v=5.1');
+  const { listAutoBackups } = await import('./db.js?v=5.2');
   const autoBackups = await listAutoBackups();
   const backupReasonLabel = (reason = '') => reason === 'abertura' ? 'Abertura do sistema' : reason === 'periodico-1min' ? 'Segurança · 1 minuto' : reason ? 'Alteração salva' : 'Automático';
   const autoList = autoBackups.length
@@ -2976,13 +2976,13 @@ export async function renderSettings() {
 export function wireSettingsEvents() {
   $$('.auto-restore-btn').forEach((btn) => btn.addEventListener('click', async () => {
     if (!confirm('Restaurar esse backup automático vai substituir os dados atuais. Continuar?')) return;
-    const { restoreAutoBackup } = await import('./db.js?v=5.1');
+    const { restoreAutoBackup } = await import('./db.js?v=5.2');
     await restoreAutoBackup(btn.dataset.id);
     toast('Backup automático restaurado.', 'success');
     refreshApp();
   }));
   $('#settingsBackupBtn')?.addEventListener('click', async () => {
-    const data = await (await import('./db.js?v=5.1')).exportAll();
+    const data = await (await import('./db.js?v=5.2')).exportAll();
     downloadJSON(`orbita-backup-completo-${new Date().toISOString().slice(0,10)}.json`, data);
     toast('Backup completo gerado.', 'success');
   });
@@ -2990,12 +2990,12 @@ export function wireSettingsEvents() {
     const file = e.target.files[0];
     if (!file) return;
     if (!confirm('Isso vai substituir os dados atuais pelo conteúdo do backup. Um backup de segurança dos dados atuais será baixado antes. Continuar?')) { e.target.value = ''; return; }
-    const currentBackup = await (await import('./db.js?v=5.1')).exportAll();
+    const currentBackup = await (await import('./db.js?v=5.2')).exportAll();
     downloadJSON(`orbita-backup-seguranca-antes-restauracao-${Date.now()}.json`, currentBackup);
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      await (await import('./db.js?v=5.1')).importAll(data);
+      await (await import('./db.js?v=5.2')).importAll(data);
       toast('Backup restaurado.', 'success');
       refreshApp();
     } catch { toast('Arquivo de backup inválido.', 'error'); }
