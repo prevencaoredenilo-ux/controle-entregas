@@ -3014,3 +3014,11 @@ tr:last-child td { border-bottom: none; }
   .nq-question{font-size:13.5px}
   .nq-action{font-size:9px}
 }
+
+/* v5.12 — recuperação segura de entrega afetada por edição cadastral */
+.route-recovery-btn{display:inline-flex;align-items:center;gap:7px;min-height:34px;padding:0 11px;border:1px solid #f0b9b9;border-radius:10px;background:#fff2f2;color:#9d2525;font-size:11px;font-weight:850;cursor:pointer;box-shadow:0 3px 10px rgba(157,37,37,.07)}
+.route-recovery-btn b{display:grid;place-items:center;min-width:20px;height:20px;padding:0 5px;border-radius:999px;background:#b82c2c;color:white;font-size:10px}
+.route-recovery-list{display:grid;gap:8px;margin-bottom:12px}
+.route-recovery-row{display:flex!important;align-items:center;gap:10px;padding:11px 12px;border:1px solid var(--line);border-radius:12px;background:#fff;cursor:pointer}
+.route-recovery-row input{width:17px;height:17px;margin:0;flex:none}
+.route-recovery-row span{display:grid;gap:3px}.route-recovery-row strong{font-size:12.5px;color:var(--ink)}.route-recovery-row small{font-size:10.5px;color:var(--text-muted)}

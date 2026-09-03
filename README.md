@@ -1,6 +1,6 @@
-# Órbita — Controle de Entregas (v5.11)
+# Órbita — Controle de Entregas (v5.12)
 
-## Atualização v5.11 — Finalizadas do dia
+## Atualização v5.12 — Finalizadas do dia
 
 - O card **Finalizadas hoje** passa a contar pela data/hora real de conclusão da entrega.
 - Entregas agendadas também entram no total quando forem finalizadas hoje.

@@ -1,7 +1,7 @@
-import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters } from './db.js?v=5.11';
-import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=5.11';
-import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=5.11';
-import { exportFullExcelReport } from './excel-report.js?v=5.11';
+import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters } from './db.js?v=5.12';
+import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=5.12';
+import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=5.12';
+import { exportFullExcelReport } from './excel-report.js?v=5.12';
 
 const DEFAULT_OPERATIONAL_TARGETS = { startMinutes:120, arrivalMinutes:210, warningMinutes:30, successTarget:90 };
 
@@ -240,6 +240,12 @@ export async function renderCentral() {
   const tomorrowCentral = new Date(); tomorrowCentral.setDate(tomorrowCentral.getDate()+1);
   const tomorrowHistory = byWeekdayCountOccurrences(rows,tomorrowCentral.getDay());
   const tomorrowForecast = tomorrowHistory.occurrences ? tomorrowHistory.total/tomorrowHistory.occurrences : null;
+  const routeEditSuspects = rows.filter((r) => {
+    if (r.status !== 'finalizada' || !r.cycleId) return false;
+    const last = (r.statusHistory || []).at(-1);
+    return last?.to === 'finalizada' && last?.note === 'Horários operacionais informados na edição.' && ['em_rota','no_cliente'].includes(last?.from);
+  });
+
   const liveLaneCard = (r) => `<article class="live-delivery-card" role="button" tabindex="0" data-delivery-id="${r.id}" data-tip="Compra #${r.purchaseNumber} · ${escapeHtml(r.clientName || 'Sem nome')} · Entrada ${timeBR(r.entryTime)} · Saída ${timeBR(r.leftStoreAt)} · Entrega ao cliente ${timeBR(r.deliveredAt || r.clientArrivalAt)} · Clique para abrir e editar, inclusive o número da entrega.">
     <div><strong>#${r.purchaseNumber}</strong>${r.priority === 'alta' ? '<span>ALTA</span>' : ''}</div>
     <p>${escapeHtml(r.clientName || r.street || 'Cliente sem nome')}</p>
@@ -356,7 +362,7 @@ export async function renderCentral() {
     </div>
 
     <section class="live-board-section">
-      <div class="section-heading"><div><span>MAPA OPERACIONAL</span><h2>Onde cada entrega está agora</h2></div><div class="section-heading-actions"><button type="button" class="numbering-repair-btn" id="recalculateDayNumbersBtn">↻ Recalcular numeração</button><div class="heading-signal"><i></i>dados reais</div></div></div>
+      <div class="section-heading"><div><span>MAPA OPERACIONAL</span><h2>Onde cada entrega está agora</h2></div><div class="section-heading-actions">${routeEditSuspects.length ? `<button type="button" class="route-recovery-btn" id="recoverRouteEditBtn">↩ Recuperar entrega afetada <b>${routeEditSuspects.length}</b></button>` : ''}<button type="button" class="numbering-repair-btn" id="recalculateDayNumbersBtn">↻ Recalcular numeração</button><div class="heading-signal"><i></i>dados reais</div></div></div>
       <div class="live-board live-board-5">
         ${[['Na loja',naLoja],['Em rota',rows.filter(r=>r.status==='em_rota')],['No cliente',noCliente],['Agendadas',agendadas],['Ocorrências',rows.filter(r=>['retorno','reentrega','cancelada'].includes(r.status))]].map(([label,list]) => `<div class="live-lane"><header><strong>${label}</strong><span>${list.length}</span></header><div>${list.slice(0,5).map(liveLaneCard).join('') || '<p class="lane-empty">Nenhuma entrega</p>'}</div></div>`).join('')}
       </div>
@@ -388,6 +394,51 @@ async function miniList(rows) {
 let _phraseTimer = null;
 let _waveTimer = null;
 let _nameTimer = null;
+
+async function openRouteEditRecoveryModal() {
+  const env = getEnv();
+  const rows = await Deliveries.active(env);
+  const cycles = await Cycles.all();
+  const cycleById = new Map(cycles.map((c) => [c.id, c]));
+  const suspects = rows.filter((r) => {
+    if (r.status !== 'finalizada' || !r.cycleId) return false;
+    const last = (r.statusHistory || []).at(-1);
+    return last?.to === 'finalizada' && last?.note === 'Horários operacionais informados na edição.' && ['em_rota','no_cliente'].includes(last?.from);
+  });
+  if (!suspects.length) return toast('Nenhuma entrega afetada por esse erro foi localizada.', 'success');
+
+  openModal({
+    title: 'Recuperar entrega afetada pela edição',
+    subtitle: 'Nada será alterado até você confirmar. O histórico anterior será preservado.',
+    body: `<div class="route-recovery-list">${suspects.map((r) => {
+      const last = (r.statusHistory || []).at(-1);
+      const cycle = cycleById.get(r.cycleId);
+      return `<label class="route-recovery-row"><input type="radio" name="routeRecoveryId" value="${r.id}"/><span><strong>#${r.purchaseNumber} · ${escapeHtml(r.clientName || r.street || 'Sem nome')}</strong><small>Antes da edição: ${escapeHtml(STATUS_META[last?.from]?.label || last?.from || 'Em rota')} · ciclo ${cycle?.status === 'aberto' ? 'aberto' : (cycle?.status || 'não localizado')}</small></span></label>`;
+    }).join('')}</div><div class="numbering-rule-card"><strong>O que será recuperado?</strong><p>A entrega volta ao status imediatamente anterior à edição indevida, mantendo o mesmo ciclo, veículo, entregador e saída da loja. A recuperação fica registrada no histórico.</p></div>`,
+    actions: [
+      { label: 'Cancelar', kind: 'ghost', onClick: closeModal },
+      { label: 'Recuperar entrega', kind: 'primary', onClick: async () => {
+        const selected = document.querySelector('input[name="routeRecoveryId"]:checked')?.value;
+        if (!selected) return toast('Selecione a entrega que deseja recuperar.', 'error');
+        const record = await Deliveries.get(selected);
+        if (!record) return toast('Entrega não encontrada.', 'error');
+        const last = (record.statusHistory || []).at(-1);
+        if (!last || last.note !== 'Horários operacionais informados na edição.' || !['em_rota','no_cliente'].includes(last.from)) return toast('Essa entrega não possui o padrão de erro esperado.', 'error');
+        const cycle = cycleById.get(record.cycleId);
+        if (cycle && cycle.status !== 'aberto') return toast('O ciclo desta entrega já foi encerrado. Não vou reabrir automaticamente para preservar o histórico.', 'error');
+        const previousStatus = last.from;
+        await Deliveries.changeStatus(record.id, previousStatus, {
+          deliveredAt: null,
+          clientArrivalAt: previousStatus === 'no_cliente' ? (record.clientArrivalAt || null) : null,
+          note: 'Entrega recuperada após finalização indevida causada pela edição cadastral.',
+        });
+        closeModal();
+        toast(`Entrega #${record.purchaseNumber} recuperada para ${STATUS_META[previousStatus]?.label || previousStatus}.`, 'success');
+        refreshApp();
+      }},
+    ],
+  });
+}
 
 async function openRecalculateDayNumbersModal() {
   const env = getEnv();
@@ -449,6 +500,7 @@ export function wireCentralEvents() {
   });
   $('#qaNewDelivery')?.addEventListener('click', () => openDeliveryModal());
   $('#recalculateDayNumbersBtn')?.addEventListener('click', () => openRecalculateDayNumbersModal());
+  $('#recoverRouteEditBtn')?.addEventListener('click', () => openRouteEditRecoveryModal());
   $('#qaStartCycle')?.addEventListener('click', () => openStartCycleModal());
   $('#qaArrival')?.addEventListener('click', () => openArrivalPicker());
   $('#qaReturn')?.addEventListener('click', () => openReturnPicker());
@@ -906,7 +958,6 @@ export async function openDeliveryModal(record = null) {
           </select>
         </label>
       </div>
-      ${operationalTimeFields(record)}
       <label>Observações<textarea name="notes" rows="2">${escapeHtml(record?.notes || '')}</textarea></label>
     </form>
   `;
@@ -1112,25 +1163,11 @@ async function saveDeliveryForm(record) {
   };
 
   if (record) {
-    const leftStoreField = form.elements.namedItem('leftStoreAt');
-    const clientDeliveredField = form.elements.namedItem('clientDeliveredAt');
-    const hasOperationalFields = !!leftStoreField || !!clientDeliveredField;
-
-    if (hasOperationalFields) {
-      payload.leftStoreAt = fd.leftStoreAt ? new Date(fd.leftStoreAt).toISOString() : null;
-      const clientDeliveredAt = fd.clientDeliveredAt ? new Date(fd.clientDeliveredAt).toISOString() : null;
-      payload.clientArrivalAt = clientDeliveredAt;
-      payload.deliveredAt = clientDeliveredAt;
-      if (payload.leftStoreAt && !record.leftStoreAt && !record.cycleId) return toast('A saída da loja só pode ser criada ao iniciar um ciclo com KM inicial liberado.', 'error');
-      if (record.status === 'finalizada' && !clientDeliveredAt) return toast('Uma entrega finalizada precisa ter a hora da entrega ao cliente.', 'error');
-    }
-
-    // Ao agendar uma entrega que ainda não saiu em ciclo, não cria nem mantém
-    // horários operacionais indevidos. Eles serão registrados apenas no ciclo real.
-    if (fd.type === 'agendada' && !record.cycleId && ['na_loja', 'programada'].includes(record.status)) {
-      payload.leftStoreAt = null;
-      payload.clientArrivalAt = null;
-      payload.deliveredAt = null;
+    // Edição cadastral não pode alterar a operação em andamento.
+    // Status, ciclo e horários ficam sob controle exclusivo dos fluxos operacionais.
+    if (record.cycleId || ['em_rota', 'no_cliente', 'finalizada'].includes(record.status)) {
+      payload.vehicleId = record.vehicleId || null;
+      payload.driverId = record.driverId || null;
     }
   }
 
@@ -1170,16 +1207,14 @@ async function saveDeliveryForm(record) {
       }
       await Deliveries.update(record.id, payload);
 
-      // Agendar uma compra ainda na loja muda somente para Programada; não cria saída.
+      // Somente mudanças explícitas de agendamento podem alterar status aqui, e apenas fora de ciclo.
+      // Uma edição cadastral nunca finaliza, remove da rota ou altera o ciclo da entrega.
       if (fd.type === 'agendada' && !record.cycleId && ['na_loja', 'programada'].includes(record.status)) {
         if (record.status !== 'programada') {
           await Deliveries.changeStatus(record.id, 'programada', { note: `Entrega agendada para ${dateTimeBR(payload.scheduledAt)}.` });
         }
       } else if (fd.type === 'hoje' && record.status === 'programada' && !record.cycleId) {
         await Deliveries.changeStatus(record.id, 'na_loja', { note: 'Agendamento removido; entrega voltou para a fila da loja.' });
-      } else {
-        const targetStatus = payload.deliveredAt ? 'finalizada' : null;
-        if (targetStatus && targetStatus !== record.status) await Deliveries.changeStatus(record.id, targetStatus, { note: 'Horários operacionais informados na edição.' });
       }
       toast('Entrega atualizada.', 'success');
     } else {
@@ -3067,7 +3102,7 @@ function openVehicleAddModal(record = null) {
    ========================================================= */
 export async function renderSettings() {
   const cfg = JSON.parse(localStorage.getItem('orbita_settings') || '{}');
-  const { listAutoBackups } = await import('./db.js?v=5.11');
+  const { listAutoBackups } = await import('./db.js?v=5.12');
   const autoBackups = await listAutoBackups();
   const backupReasonLabel = (reason = '') => reason === 'abertura' ? 'Abertura do sistema' : reason === 'periodico-1min' ? 'Segurança · 1 minuto' : reason ? 'Alteração salva' : 'Automático';
   const autoList = autoBackups.length
@@ -3105,13 +3140,13 @@ export async function renderSettings() {
 export function wireSettingsEvents() {
   $$('.auto-restore-btn').forEach((btn) => btn.addEventListener('click', async () => {
     if (!confirm('Restaurar esse backup automático vai substituir os dados atuais. Continuar?')) return;
-    const { restoreAutoBackup } = await import('./db.js?v=5.11');
+    const { restoreAutoBackup } = await import('./db.js?v=5.12');
     await restoreAutoBackup(btn.dataset.id);
     toast('Backup automático restaurado.', 'success');
     refreshApp();
   }));
   $('#settingsBackupBtn')?.addEventListener('click', async () => {
-    const data = await (await import('./db.js?v=5.11')).exportAll();
+    const data = await (await import('./db.js?v=5.12')).exportAll();
     downloadJSON(`orbita-backup-completo-${new Date().toISOString().slice(0,10)}.json`, data);
     toast('Backup completo gerado.', 'success');
   });
@@ -3119,12 +3154,12 @@ export function wireSettingsEvents() {
     const file = e.target.files[0];
     if (!file) return;
     if (!confirm('Isso vai substituir os dados atuais pelo conteúdo do backup. Um backup de segurança dos dados atuais será baixado antes. Continuar?')) { e.target.value = ''; return; }
-    const currentBackup = await (await import('./db.js?v=5.11')).exportAll();
+    const currentBackup = await (await import('./db.js?v=5.12')).exportAll();
     downloadJSON(`orbita-backup-seguranca-antes-restauracao-${Date.now()}.json`, currentBackup);
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      await (await import('./db.js?v=5.11')).importAll(data);
+      await (await import('./db.js?v=5.12')).importAll(data);
       toast('Backup restaurado.', 'success');
       refreshApp();
     } catch { toast('Arquivo de backup inválido.', 'error'); }
