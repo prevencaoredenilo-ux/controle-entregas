@@ -1,0 +1,21 @@
+ÓRBITA v5.7 — CHECKLIST DOS AJUSTES SOLICITADOS
+
+[OK] Numeração usa a DATA REAL DA COMPRA (entryTime/operationDate).
+[OK] Entrega agendada participa da mesma sequência diária da compra normal.
+[OK] Data/hora agendada não cria numeração separada.
+[OK] Próximo Nº da entrega aparece no formulário antes de salvar.
+[OK] Nº de chegada removido do formulário; internamente novos registros recebem o mesmo número para compatibilidade.
+[OK] Número continua editável manualmente em registros existentes.
+[OK] Fluxo do cliente usa um único horário: Hora da entrega ao cliente.
+[OK] O mesmo horário é gravado internamente em chegada/finalização para manter compatibilidade com históricos e relatórios antigos.
+[OK] Não existe mais ação separada "Chegou no cliente" seguida de outro horário de finalização.
+[OK] Seleção do ciclo reorganizada e checkbox limitado a 18px, sem esmagar o texto.
+[OK] Taxa entra na receita assim que a compra é registrada; reembolso é descontado separadamente.
+[OK] Nenhuma renumeração automática de registros antigos na abertura.
+[OK] Cache PWA atualizado para v5.7.
+
+TESTES
+- JavaScript: sintaxe validada em app.js, db.js, helpers.js, views.js, excel-report.js e sw.js.
+- CSS: 0 erros de parser.
+- HTML: 0 IDs duplicados e 0 referências locais ausentes.
+- Cenário de numeração: 20 registros de 02/09 + agendada antiga erroneamente #27 => próximo número calculado = #21.
