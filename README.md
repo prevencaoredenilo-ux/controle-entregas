@@ -1,3 +1,12 @@
+
+## v5.8 — agendamento sem horário de saída indevido
+
+- Ao agendar/editar uma entrega que ainda não iniciou ciclo, o formulário não exibe mais "Saída da loja" nem "Hora da entrega ao cliente".
+- Agendar uma entrega na loja não tenta criar saída da loja e não exige KM inicial.
+- Horários operacionais só passam a existir quando a entrega realmente inicia um ciclo.
+- Ao transformar uma entrega da fila em agendada, o status passa para Programada sem criar horários de rota.
+- Nenhuma migração ou alteração automática de históricos/backups foi adicionada.
+
 # Órbita v3.5 — Perguntas no estilo motivacional + fade/marquee
 
 ## Base anterior v3.0

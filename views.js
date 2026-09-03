@@ -1,7 +1,7 @@
-import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters } from './db.js?v=5.7';
-import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=5.7';
-import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=5.7';
-import { exportFullExcelReport } from './excel-report.js?v=5.7';
+import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters } from './db.js?v=5.8';
+import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=5.8';
+import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=5.8';
+import { exportFullExcelReport } from './excel-report.js?v=5.8';
 
 const DEFAULT_OPERATIONAL_TARGETS = { startMinutes:120, arrivalMinutes:210, warningMinutes:30, successTarget:90 };
 
@@ -115,7 +115,7 @@ async function repairNormalPurchaseNumbers({ environment = getEnv(), selectedDay
 }
 
 export async function normalizeExistingDailyPurchaseNumbers() {
-  // v5.7: não altera registros antigos automaticamente ao abrir.
+  // v5.8: não altera registros antigos automaticamente ao abrir.
   return { changed: 0, days: [] };
 }
 
@@ -785,6 +785,10 @@ function localDateKey(value = new Date()) {
 
 function operationalTimeFields(record) {
   if (!record) return '';
+  // Entregas que ainda estão na loja ou apenas programadas não devem exibir
+  // horários de rota. Saída da loja só nasce quando um ciclo é iniciado.
+  const hasOperationalJourney = !!record.cycleId || ['em_rota', 'no_cliente', 'finalizada'].includes(record.status);
+  if (!hasOperationalJourney) return '';
   const clientDeliveredAt = record.deliveredAt || record.clientArrivalAt;
   return `
     <fieldset class="operational-times-card">
@@ -1103,12 +1107,26 @@ async function saveDeliveryForm(record) {
   };
 
   if (record) {
-    payload.leftStoreAt = fd.leftStoreAt ? new Date(fd.leftStoreAt).toISOString() : null;
-    const clientDeliveredAt = fd.clientDeliveredAt ? new Date(fd.clientDeliveredAt).toISOString() : null;
-    payload.clientArrivalAt = clientDeliveredAt;
-    payload.deliveredAt = clientDeliveredAt;
-    if (payload.leftStoreAt && !record.leftStoreAt && !record.cycleId) return toast('A saída da loja só pode ser criada ao iniciar um ciclo com KM inicial liberado.', 'error');
-    if (record.status === 'finalizada' && !clientDeliveredAt) return toast('Uma entrega finalizada precisa ter a hora da entrega ao cliente.', 'error');
+    const leftStoreField = form.elements.namedItem('leftStoreAt');
+    const clientDeliveredField = form.elements.namedItem('clientDeliveredAt');
+    const hasOperationalFields = !!leftStoreField || !!clientDeliveredField;
+
+    if (hasOperationalFields) {
+      payload.leftStoreAt = fd.leftStoreAt ? new Date(fd.leftStoreAt).toISOString() : null;
+      const clientDeliveredAt = fd.clientDeliveredAt ? new Date(fd.clientDeliveredAt).toISOString() : null;
+      payload.clientArrivalAt = clientDeliveredAt;
+      payload.deliveredAt = clientDeliveredAt;
+      if (payload.leftStoreAt && !record.leftStoreAt && !record.cycleId) return toast('A saída da loja só pode ser criada ao iniciar um ciclo com KM inicial liberado.', 'error');
+      if (record.status === 'finalizada' && !clientDeliveredAt) return toast('Uma entrega finalizada precisa ter a hora da entrega ao cliente.', 'error');
+    }
+
+    // Ao agendar uma entrega que ainda não saiu em ciclo, não cria nem mantém
+    // horários operacionais indevidos. Eles serão registrados apenas no ciclo real.
+    if (fd.type === 'agendada' && !record.cycleId && ['na_loja', 'programada'].includes(record.status)) {
+      payload.leftStoreAt = null;
+      payload.clientArrivalAt = null;
+      payload.deliveredAt = null;
+    }
   }
 
   try {
@@ -1146,8 +1164,18 @@ async function saveDeliveryForm(record) {
         payload.purchaseNumberManual = record.purchaseNumberManual === true;
       }
       await Deliveries.update(record.id, payload);
-      const targetStatus = payload.deliveredAt ? 'finalizada' : null;
-      if (targetStatus && targetStatus !== record.status) await Deliveries.changeStatus(record.id, targetStatus, { note: 'Horários operacionais informados na edição.' });
+
+      // Agendar uma compra ainda na loja muda somente para Programada; não cria saída.
+      if (fd.type === 'agendada' && !record.cycleId && ['na_loja', 'programada'].includes(record.status)) {
+        if (record.status !== 'programada') {
+          await Deliveries.changeStatus(record.id, 'programada', { note: `Entrega agendada para ${dateTimeBR(payload.scheduledAt)}.` });
+        }
+      } else if (fd.type === 'hoje' && record.status === 'programada' && !record.cycleId) {
+        await Deliveries.changeStatus(record.id, 'na_loja', { note: 'Agendamento removido; entrega voltou para a fila da loja.' });
+      } else {
+        const targetStatus = payload.deliveredAt ? 'finalizada' : null;
+        if (targetStatus && targetStatus !== record.status) await Deliveries.changeStatus(record.id, targetStatus, { note: 'Horários operacionais informados na edição.' });
+      }
       toast('Entrega atualizada.', 'success');
     } else {
       const existingDeliveries = await Deliveries.active(env);
@@ -2347,7 +2375,7 @@ export async function renderDashboard() {
       <div class="intel-metric-grid">
         ${metric('Espera na loja', formatDuration(avgStoreWait), 'Entrada da compra até saída da loja.')}
         ${metric('Tempo em rota', formatDuration(avgRoute), 'Saída da loja até chegada ao cliente.')}
-        ${metric('Tempo no cliente', '—', 'A v5.7 usa um único horário de entrega ao cliente; esse intervalo não é medido separadamente.')}
+        ${metric('Tempo no cliente', '—', 'A v5.8 usa um único horário de entrega ao cliente; esse intervalo não é medido separadamente.')}
         ${metric('Tempo completo médio', formatDuration(avgTotal), 'Entrada até finalização.')}
         ${metric('Mediana completa', formatDuration(medianTotal), 'Metade das entregas levou até este tempo.')}
         ${metric('P90 completo', formatDuration(p90Total), '90% das entregas levou até este tempo.')}
@@ -3034,7 +3062,7 @@ function openVehicleAddModal(record = null) {
    ========================================================= */
 export async function renderSettings() {
   const cfg = JSON.parse(localStorage.getItem('orbita_settings') || '{}');
-  const { listAutoBackups } = await import('./db.js?v=5.7');
+  const { listAutoBackups } = await import('./db.js?v=5.8');
   const autoBackups = await listAutoBackups();
   const backupReasonLabel = (reason = '') => reason === 'abertura' ? 'Abertura do sistema' : reason === 'periodico-1min' ? 'Segurança · 1 minuto' : reason ? 'Alteração salva' : 'Automático';
   const autoList = autoBackups.length
@@ -3072,13 +3100,13 @@ export async function renderSettings() {
 export function wireSettingsEvents() {
   $$('.auto-restore-btn').forEach((btn) => btn.addEventListener('click', async () => {
     if (!confirm('Restaurar esse backup automático vai substituir os dados atuais. Continuar?')) return;
-    const { restoreAutoBackup } = await import('./db.js?v=5.7');
+    const { restoreAutoBackup } = await import('./db.js?v=5.8');
     await restoreAutoBackup(btn.dataset.id);
     toast('Backup automático restaurado.', 'success');
     refreshApp();
   }));
   $('#settingsBackupBtn')?.addEventListener('click', async () => {
-    const data = await (await import('./db.js?v=5.7')).exportAll();
+    const data = await (await import('./db.js?v=5.8')).exportAll();
     downloadJSON(`orbita-backup-completo-${new Date().toISOString().slice(0,10)}.json`, data);
     toast('Backup completo gerado.', 'success');
   });
@@ -3086,12 +3114,12 @@ export function wireSettingsEvents() {
     const file = e.target.files[0];
     if (!file) return;
     if (!confirm('Isso vai substituir os dados atuais pelo conteúdo do backup. Um backup de segurança dos dados atuais será baixado antes. Continuar?')) { e.target.value = ''; return; }
-    const currentBackup = await (await import('./db.js?v=5.7')).exportAll();
+    const currentBackup = await (await import('./db.js?v=5.8')).exportAll();
     downloadJSON(`orbita-backup-seguranca-antes-restauracao-${Date.now()}.json`, currentBackup);
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      await (await import('./db.js?v=5.7')).importAll(data);
+      await (await import('./db.js?v=5.8')).importAll(data);
       toast('Backup restaurado.', 'success');
       refreshApp();
     } catch { toast('Arquivo de backup inválido.', 'error'); }
