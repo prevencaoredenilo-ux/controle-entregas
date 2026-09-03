@@ -1,0 +1,17 @@
+ÓRBITA v5.10 — PERGUNTAS PREMIUM
+
+ALTERAÇÃO DESTA VERSÃO:
+- Somente a área de perguntas do topo foi redesenhada.
+- Estilo escolhido: operacional moderno.
+- Novo ícone de Prevenção de Perdas: escudo com confirmação.
+- Curiosidades usam lâmpada redesenhada.
+- Categoria, nível (Fácil/Média/Difícil) e contador aparecem separados.
+- Pergunta tem maior destaque e botão "Ver resposta".
+- Mantidas as 100 perguntas de Prevenção + 100 Curiosidades.
+- Nenhuma regra operacional, histórico ou backup foi alterado.
+
+ATUALIZAÇÃO/CACHE:
+- Todos os arquivos usam identificador v5.10.
+- Service Worker usa um cache exclusivo da v5.10.
+- Ao publicar, confirme que a tela mostra "v5.10".
+- Se ainda aparecer v5.9 após substituir os arquivos, faça uma atualização forçada (Ctrl+F5) uma vez.

@@ -1,3 +1,15 @@
+# Órbita — Controle de Entregas (v5.10)
+
+## Atualização v5.10 — Perguntas Premium
+- Única área funcional alterada nesta versão: perguntas do topo.
+- 100 perguntas de Prevenção de Perdas, incluindo FIFO, FEFO, PEPS, PVPS, inventário, validade, ruptura, avaria, recebimento, auditoria, acuracidade e análise de perdas.
+- 100 Curiosidades Gerais de ciência, geografia, história, natureza, tecnologia e raciocínio.
+- Mistura de níveis FÁCIL, MÉDIA e DIFÍCIL.
+- A pergunta aparece primeiro; a resposta só é revelada ao clicar em “Ver resposta”.
+- Navegação Anterior/Próxima e contador do ciclo.
+- Não repete uma pergunta da mesma categoria até passar pelas 100.
+- Alternância automática entre Prevenção de Perdas e Curiosidades Gerais.
+
 
 ## v5.8 — agendamento sem horário de saída indevido
 
@@ -234,3 +246,13 @@ Você indicou o repositório `prevencaoredenilo-ux/controle-entregas` (V14.8) co
 - Seleção do ciclo reorganizada em cards compactos, com checkbox corrigido e informações alinhadas.
 - Taxa de entrega entra como receita no momento do cadastro; reembolsos são descontados separadamente.
 - Nenhuma renumeração automática de registros antigos na abertura.
+
+
+## v5.10 — atualização visual isolada
+- Novo painel operacional moderno para perguntas.
+- Ícone exclusivo de escudo com confirmação para Prevenção de Perdas.
+- Ícone de lâmpada redesenhado para Curiosidades.
+- Categoria, dificuldade e contador separados visualmente.
+- Botão Ver resposta com maior destaque.
+- Cache/service worker alterado para forçar a chegada desta atualização.
+- Nenhuma outra área funcional foi alterada.

@@ -6,8 +6,8 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <meta name="theme-color" content="#0B2A4A" />
 <meta name="description" content="Órbita — controle de entregas completo, offline-first e instalável." />
-<link rel="manifest" href="manifest.webmanifest?v=5.8" />
-<link rel="stylesheet" href="styles.css?v=5.8" />
+<link rel="manifest" href="manifest.webmanifest?v=5.10" />
+<link rel="stylesheet" href="styles.css?v=5.10" />
 <title>Órbita • Controle de Entregas</title>
 </head>
 <body>
@@ -26,7 +26,7 @@
       <div>
         <div class="brand-logo-chip"><img src="assets/brand/nilo-logo.png" alt="Nilo Supermercado" onerror="this.replaceWith(Object.assign(document.createElement('strong'),{textContent:'NILO',style:'font-size:20px;color:#0B2A4A'}))" /></div>
         <div class="brand-slogan">"No quieto, no quieto,<br>o Nilo vende mais barato"</div>
-        <div class="release-side">VERSÃO 5.8 · AGENDAMENTO CORRIGIDO</div>
+        <div class="release-side">VERSÃO 5.10 · PERGUNTAS PREMIUM</div>
       </div>
 
       <button class="conn-pill" id="envToggleBtn" style="border:none;cursor:pointer;text-align:left">
@@ -80,17 +80,26 @@
           </div>
           <div class="topbar-actions">
             <div class="live-clock utility-pill" id="liveClock"><span class="pulse-dot"></span><span id="liveClockText">--:--:--</span></div>
-            <span class="release-badge utility-pill">v5.8</span>
+            <span class="release-badge utility-pill">v5.10</span>
             <button class="btn-primary topbar-cta" id="newDeliveryBtn">＋ Registrar entrega</button>
           </div>
         </div>
 
         <div class="nilo-quiz-zone">
-          <button class="nilo-quiz-strip" id="funBreakBtn" type="button" data-tip="A pergunta muda automaticamente. Clique para abrir as respostas.">
-            <span class="nq-icon" id="knowledgeTickerIcon" aria-hidden="true">🛡️</span>
-            <span class="nq-category" id="knowledgeTickerGroup">PREVENÇÃO DE PERDAS</span>
-            <strong class="nq-question" id="knowledgeTickerQuestion">Carregando pergunta…</strong>
-            <span class="nq-action" id="knowledgeTickerMeta">Responder <b>›</b></span>
+          <button class="nilo-quiz-strip" id="funBreakBtn" type="button" data-tip="Clique para ver a resposta e navegar pelas perguntas.">
+            <span class="nq-icon" id="knowledgeTickerIcon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 19 6v5c0 4.8-2.8 8.3-7 10-4.2-1.7-7-5.2-7-10V6l7-3Z"/><path d="m9.2 12 1.8 1.8 3.9-4"/></svg>
+            </span>
+            <span class="nq-copy">
+              <span class="nq-topline">
+                <span class="nq-category" id="knowledgeTickerGroup">PREVENÇÃO DE PERDAS</span>
+                <span class="nq-difficulty easy" id="knowledgeTickerDifficulty">FÁCIL</span>
+                <span class="nq-counter" id="knowledgeTickerCounter">1/100</span>
+              </span>
+              <strong class="nq-question" id="knowledgeTickerQuestion">Carregando pergunta…</strong>
+              <span class="nq-helper" id="knowledgeTickerHelper">Conhecimento que protege a operação</span>
+            </span>
+            <span class="nq-action" id="knowledgeTickerMeta"><span>Ver resposta</span><b>›</b></span>
             <span class="nq-progress" aria-hidden="true"><i></i></span>
           </button>
         </div>
@@ -112,6 +121,6 @@
 
   <div class="toast-stack" id="toastStack"></div>
 
-  <script type="module" src="app.js?v=5.8"></script>
+  <script type="module" src="app.js?v=5.10"></script>
 </body>
 </html>
