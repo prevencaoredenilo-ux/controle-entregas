@@ -1,7 +1,7 @@
-import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters } from './db.js?v=5.12';
-import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=5.12';
-import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=5.12';
-import { exportFullExcelReport } from './excel-report.js?v=5.12';
+import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters } from './db.js?v=5.13';
+import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=5.13';
+import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=5.13';
+import { exportFullExcelReport } from './excel-report.js?v=5.13';
 
 const DEFAULT_OPERATIONAL_TARGETS = { startMinutes:120, arrivalMinutes:210, warningMinutes:30, successTarget:90 };
 
@@ -119,11 +119,17 @@ export async function normalizeExistingDailyPurchaseNumbers() {
   return { changed: 0, days: [] };
 }
 
+function isScheduledReleasedToStore(record, dayKey = localDateKey()) {
+  if (!record || record.type !== 'agendada' || record.status !== 'programada' || !record.scheduledAt) return false;
+  const scheduledDay = localDateKey(record.scheduledAt);
+  return !!scheduledDay && scheduledDay <= dayKey;
+}
+
 function deliverySla(record, nowMs = Date.now()) {
   const targets = operationalTargets();
   const baseValue = record.type === 'agendada' && record.scheduledAt ? record.scheduledAt : record.entryTime;
   const baseMs = new Date(baseValue).getTime();
-  const active = ['na_loja','em_rota','no_cliente'].includes(record.status);
+  const active = ['na_loja','em_rota','no_cliente'].includes(record.status) || isScheduledReleasedToStore(record);
   if (!Number.isFinite(baseMs)) return { startLate:false,arrivalLate:false,startRisk:false,arrivalRisk:false,startDeadline:null,arrivalDeadline:null };
   const startDeadlineMs = baseMs + targets.startMinutes*60000;
   const arrivalDeadlineMs = baseMs + targets.arrivalMinutes*60000;
@@ -152,14 +158,20 @@ export async function renderCentral() {
   const vName = (id) => vehicles.find((v) => v.id === id)?.label || 'Veículo';
   const dName = (id) => drivers.find((d) => d.id === id)?.name || 'Entregador';
 
-  const naLoja = rows.filter((r) => r.status === 'na_loja');
+  const todayKey = localDateKey();
+  const agendadasLiberadas = rows.filter((r) => isScheduledReleasedToStore(r, todayKey));
+  const agendadasLiberadasIds = new Set(agendadasLiberadas.map((r) => r.id));
+  const naLoja = rows.filter((r) => r.status === 'na_loja' || agendadasLiberadasIds.has(r.id));
   const emRota = rows.filter((r) => ['em_rota', 'no_cliente'].includes(r.status));
   const returnEligible = rows.filter((r) => ['em_rota', 'no_cliente'].includes(r.status));
-  const prioritarias = rows.filter((r) => r.priority === 'alta' && ['na_loja', 'em_rota', 'no_cliente'].includes(r.status));
+  const prioritarias = rows.filter((r) => r.priority === 'alta' && (['na_loja', 'em_rota', 'no_cliente'].includes(r.status) || agendadasLiberadasIds.has(r.id)));
   const reentrega = rows.filter((r) => r.status === 'na_loja' && (r.returnAttempts || []).length > 0);
-  const agendadas = rows.filter((r) => r.type === 'agendada' && r.status === 'programada');
+  // Agendadas futuras permanecem na coluna "Agendadas".
+  // Quando chega a data agendada (ou ela já passou), entram visualmente em "Na loja"
+  // e ficam prontas para a operação, sem alterar o histórico salvo.
+  const agendadas = rows.filter((r) => r.type === 'agendada' && r.status === 'programada' && !agendadasLiberadasIds.has(r.id));
   const slaRows = rows.map((record) => ({ record, sla:deliverySla(record) }));
-  const operationalSlaRows = slaRows.filter(({record})=>['na_loja','em_rota','no_cliente'].includes(record.status));
+  const operationalSlaRows = slaRows.filter(({record})=>['na_loja','em_rota','no_cliente'].includes(record.status) || agendadasLiberadasIds.has(record.id));
   const startLateRows = operationalSlaRows.filter(({sla})=>sla.startLate).map(({record})=>record);
   const arrivalLateRows = operationalSlaRows.filter(({sla})=>sla.arrivalLate).map(({record})=>record);
   const startRiskRows = operationalSlaRows.filter(({sla})=>sla.startRisk).map(({record})=>record);
@@ -246,11 +258,16 @@ export async function renderCentral() {
     return last?.to === 'finalizada' && last?.note === 'Horários operacionais informados na edição.' && ['em_rota','no_cliente'].includes(last?.from);
   });
 
-  const liveLaneCard = (r) => `<article class="live-delivery-card" role="button" tabindex="0" data-delivery-id="${r.id}" data-tip="Compra #${r.purchaseNumber} · ${escapeHtml(r.clientName || 'Sem nome')} · Entrada ${timeBR(r.entryTime)} · Saída ${timeBR(r.leftStoreAt)} · Entrega ao cliente ${timeBR(r.deliveredAt || r.clientArrivalAt)} · Clique para abrir e editar, inclusive o número da entrega.">
-    <div><strong>#${r.purchaseNumber}</strong>${r.priority === 'alta' ? '<span>ALTA</span>' : ''}</div>
-    <p>${escapeHtml(r.clientName || r.street || 'Cliente sem nome')}</p>
-    <small>${timeBR(r.entryTime)} · ${escapeHtml(STATUS_META[r.status]?.label || r.status)}</small>
-  </article>`;
+  const liveLaneCard = (r) => {
+    const releasedScheduled = agendadasLiberadasIds.has(r.id);
+    const statusLabel = releasedScheduled ? 'Na loja · Agendada' : (STATUS_META[r.status]?.label || r.status);
+    const displayTime = releasedScheduled ? timeBR(r.scheduledAt) : timeBR(r.entryTime);
+    return `<article class="live-delivery-card" role="button" tabindex="0" data-delivery-id="${r.id}" data-tip="Compra #${r.purchaseNumber} · ${escapeHtml(r.clientName || 'Sem nome')} · Entrada ${timeBR(r.entryTime)} · Saída ${timeBR(r.leftStoreAt)} · Entrega ao cliente ${timeBR(r.deliveredAt || r.clientArrivalAt)} · Clique para abrir e editar, inclusive o número da entrega.">
+      <div><strong>#${r.purchaseNumber}</strong>${r.priority === 'alta' ? '<span>ALTA</span>' : ''}${releasedScheduled ? '<span>AGENDADA</span>' : ''}</div>
+      <p>${escapeHtml(r.clientName || r.street || 'Cliente sem nome')}</p>
+      <small>${displayTime} · ${escapeHtml(statusLabel)}</small>
+    </article>`;
+  };
 
   return `
     <div class="central-hero" style="--performance-color:${profile.color}">
@@ -377,12 +394,14 @@ async function miniList(rows) {
   if (!rows.length) return `<div class="empty-state"><strong>Nada por aqui agora</strong>As entregas agendadas, na loja e em rota aparecem nesta lista.</div>`;
   const trs = rows.slice(0, 30).map((r) => {
     const sla = deliverySla(r);
+    const releasedScheduled = isScheduledReleasedToStore(r);
+    const displayStatus = releasedScheduled ? 'na_loja' : r.status;
     return `
-    <tr data-id="${r.id}" class="row-click" data-status="${r.status}" data-priority="${r.priority}" data-late-start="${sla.startLate}" data-late-arrival="${sla.arrivalLate}" data-risk-sla="${sla.startRisk||sla.arrivalRisk}" data-search="${escapeHtml([r.purchaseNumber, r.coupon, r.pdv, r.doc, r.clientName, r.street].join(' ').toLowerCase())}" data-tip="Compra #${r.purchaseNumber} · ${escapeHtml(r.clientName || 'Cliente sem nome')} · Cupom ${escapeHtml(r.coupon || 'não informado')} · PDV ${escapeHtml(r.pdv || '—')} · DOC ${escapeHtml(r.doc || '—')} · Saída limite ${timeBR(sla.startDeadline)} · Chegada limite ${timeBR(sla.arrivalDeadline)} · Saída real ${timeBR(r.leftStoreAt)} · Entrega ao cliente ${timeBR(r.deliveredAt || r.clientArrivalAt)}">
+    <tr data-id="${r.id}" class="row-click" data-status="${displayStatus}" data-priority="${r.priority}" data-late-start="${sla.startLate}" data-late-arrival="${sla.arrivalLate}" data-risk-sla="${sla.startRisk||sla.arrivalRisk}" data-search="${escapeHtml([r.purchaseNumber, r.coupon, r.pdv, r.doc, r.clientName, r.street].join(' ').toLowerCase())}" data-tip="Compra #${r.purchaseNumber} · ${escapeHtml(r.clientName || 'Cliente sem nome')} · Cupom ${escapeHtml(r.coupon || 'não informado')} · PDV ${escapeHtml(r.pdv || '—')} · DOC ${escapeHtml(r.doc || '—')} · Saída limite ${timeBR(sla.startDeadline)} · Chegada limite ${timeBR(sla.arrivalDeadline)} · Saída real ${timeBR(r.leftStoreAt)} · Entrega ao cliente ${timeBR(r.deliveredAt || r.clientArrivalAt)}">
       <td><strong>#${r.purchaseNumber}</strong></td>
       <td>${escapeHtml(r.clientName || 'Sem nome')}<br><span style="color:var(--text-muted);font-size:11px">${escapeHtml(r.street || '')}</span></td>
       <td><strong>${escapeHtml(r.coupon || '—')}</strong><br><span style="color:var(--text-muted);font-size:11px">PDV ${escapeHtml(r.pdv || '—')} · DOC ${escapeHtml(r.doc || '—')}</span></td>
-      <td>${badge(r.status)}${sla.startLate?'<span class="badge problema sla-mini-badge">Saída atrasada</span>':''}${sla.arrivalLate?'<span class="badge problema sla-mini-badge">Chegada atrasada</span>':''}${sla.startRisk||sla.arrivalRisk?'<span class="badge pendente sla-mini-badge">Perto do limite</span>':''}<br><span class="delivery-times">Limites: saída ${timeBR(sla.startDeadline)} · chegada ${timeBR(sla.arrivalDeadline)}</span></td>
+      <td>${badge(displayStatus)}${releasedScheduled?'<span class="badge pendente sla-mini-badge">Agendada para hoje</span>':''}${sla.startLate?'<span class="badge problema sla-mini-badge">Saída atrasada</span>':''}${sla.arrivalLate?'<span class="badge problema sla-mini-badge">Chegada atrasada</span>':''}${sla.startRisk||sla.arrivalRisk?'<span class="badge pendente sla-mini-badge">Perto do limite</span>':''}<br><span class="delivery-times">Limites: saída ${timeBR(sla.startDeadline)} · chegada ${timeBR(sla.arrivalDeadline)}</span></td>
       <td>${r.priority === 'alta' ? '<span class="badge problema">Alta</span>' : '—'}</td>
       <td>${money(r.deliveryFee)}</td>
       <td>${r.status === 'em_rota' ? `<div class="queue-actions"><button class="btn-primary btn-small arrival-row-btn" data-id="${r.id}">Entregue</button><button class="btn-ghost btn-small return-row-btn" data-id="${r.id}">Retornou</button></div>` : r.status === 'no_cliente' ? `<div class="queue-actions"><button class="btn-primary btn-small completion-row-btn" data-id="${r.id}">Confirmar entrega</button><button class="btn-ghost btn-small return-row-btn" data-id="${r.id}">Retornou</button></div>` : '<span style="color:var(--text-muted)">—</span>'}</td>
@@ -1455,7 +1474,9 @@ export async function openStartCycleModal() {
     .filter((d) => !busyDeliveryIds.has(d.id) && ['na_loja', 'programada'].includes(d.status))
     .sort((a, b) => {
       if (a.priority !== b.priority) return a.priority === 'alta' ? -1 : 1;
-      if (a.status !== b.status) return a.status === 'na_loja' ? -1 : 1;
+      const aReady = a.status === 'na_loja' || isScheduledReleasedToStore(a, todayKey);
+      const bReady = b.status === 'na_loja' || isScheduledReleasedToStore(b, todayKey);
+      if (aReady !== bReady) return aReady ? -1 : 1;
       if (a.status === 'programada' && b.status === 'programada') {
         return new Date(a.scheduledAt || a.entryTime).getTime() - new Date(b.scheduledAt || b.entryTime).getTime();
       }
@@ -1501,23 +1522,24 @@ export async function openStartCycleModal() {
         <button type="button" class="btn-ghost btn-small" id="cycleRegisterKmBtn">Registrar KM inicial</button>
       </div>
       <div class="cycle-selection-head">
-        <div><strong>Selecione as entregas do ciclo</strong><small>Normais já vêm marcadas. Agendadas ficam desmarcadas até você escolher.</small></div>
+        <div><strong>Selecione as entregas do ciclo</strong><small>Normais e agendadas cuja data já chegou vêm marcadas. Agendadas futuras continuam desmarcadas.</small></div>
         <span>${candidates.length} disponível(is)</span>
       </div>
       <div id="cycleItemsList" class="cycle-items-list">
         ${candidates.map((d) => {
           const scheduled = d.status === 'programada';
+          const scheduledReady = scheduled && isScheduledReleasedToStore(d, todayKey);
           const neighborhoodName = neighborhoods.find(n=>n.id===d.neighborhoodId)?.name || 'Bairro não informado';
           const scheduledLabel = scheduled ? dateTimeBR(d.scheduledAt || d.entryTime) : '';
           return `
-          <div class="cycle-item ${scheduled ? 'cycle-item-scheduled' : ''}" data-id="${d.id}">
-            <input class="cycle-item-check" type="checkbox" ${scheduled ? '' : 'checked'} aria-label="Selecionar entrega #${d.purchaseNumber}" />
+          <div class="cycle-item ${scheduled ? 'cycle-item-scheduled' : ''} ${scheduledReady ? 'cycle-item-scheduled-ready' : ''}" data-id="${d.id}">
+            <input class="cycle-item-check" type="checkbox" ${(!scheduled || scheduledReady) ? 'checked' : ''} aria-label="Selecionar entrega #${d.purchaseNumber}" />
             <div class="cycle-item-copy">
               <div class="cycle-item-title">
                 <strong class="cycle-item-number">#${d.purchaseNumber}</strong>
                 <b>${escapeHtml(d.clientName || d.street || 'Sem nome')}</b>
                 ${d.priority === 'alta' ? '<span class="cycle-priority-badge">ALTA</span>' : ''}
-                ${scheduled ? '<span class="cycle-scheduled-badge">AGENDADA</span>' : ''}
+                ${scheduledReady ? '<span class="cycle-scheduled-badge">AGENDADA · NA LOJA</span>' : scheduled ? '<span class="cycle-scheduled-badge">AGENDADA</span>' : ''}
               </div>
               <div class="cycle-item-meta"><span>📍 ${escapeHtml(neighborhoodName)}</span>${scheduledLabel ? `<span>🗓 ${escapeHtml(scheduledLabel)}</span>` : ''}</div>
             </div>
@@ -3102,7 +3124,7 @@ function openVehicleAddModal(record = null) {
    ========================================================= */
 export async function renderSettings() {
   const cfg = JSON.parse(localStorage.getItem('orbita_settings') || '{}');
-  const { listAutoBackups } = await import('./db.js?v=5.12');
+  const { listAutoBackups } = await import('./db.js?v=5.13');
   const autoBackups = await listAutoBackups();
   const backupReasonLabel = (reason = '') => reason === 'abertura' ? 'Abertura do sistema' : reason === 'periodico-1min' ? 'Segurança · 1 minuto' : reason ? 'Alteração salva' : 'Automático';
   const autoList = autoBackups.length
@@ -3140,13 +3162,13 @@ export async function renderSettings() {
 export function wireSettingsEvents() {
   $$('.auto-restore-btn').forEach((btn) => btn.addEventListener('click', async () => {
     if (!confirm('Restaurar esse backup automático vai substituir os dados atuais. Continuar?')) return;
-    const { restoreAutoBackup } = await import('./db.js?v=5.12');
+    const { restoreAutoBackup } = await import('./db.js?v=5.13');
     await restoreAutoBackup(btn.dataset.id);
     toast('Backup automático restaurado.', 'success');
     refreshApp();
   }));
   $('#settingsBackupBtn')?.addEventListener('click', async () => {
-    const data = await (await import('./db.js?v=5.12')).exportAll();
+    const data = await (await import('./db.js?v=5.13')).exportAll();
     downloadJSON(`orbita-backup-completo-${new Date().toISOString().slice(0,10)}.json`, data);
     toast('Backup completo gerado.', 'success');
   });
@@ -3154,12 +3176,12 @@ export function wireSettingsEvents() {
     const file = e.target.files[0];
     if (!file) return;
     if (!confirm('Isso vai substituir os dados atuais pelo conteúdo do backup. Um backup de segurança dos dados atuais será baixado antes. Continuar?')) { e.target.value = ''; return; }
-    const currentBackup = await (await import('./db.js?v=5.12')).exportAll();
+    const currentBackup = await (await import('./db.js?v=5.13')).exportAll();
     downloadJSON(`orbita-backup-seguranca-antes-restauracao-${Date.now()}.json`, currentBackup);
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      await (await import('./db.js?v=5.12')).importAll(data);
+      await (await import('./db.js?v=5.13')).importAll(data);
       toast('Backup restaurado.', 'success');
       refreshApp();
     } catch { toast('Arquivo de backup inválido.', 'error'); }

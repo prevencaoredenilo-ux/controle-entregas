@@ -1,7 +1,7 @@
-const CACHE_PREFIX = 'orbita-v511-edicao-segura-rota-';
+const CACHE_PREFIX = 'orbita-v513-agendadas-na-loja-';
 const CACHE = `${CACHE_PREFIX}1`;
 const ASSETS = [
-  './', './index.html', './styles.css?v=5.12', './app.js?v=5.12', './db.js?v=5.12', './helpers.js?v=5.12', './views.js?v=5.12', './excel-report.js?v=5.12', './manifest.webmanifest?v=5.12',
+  './', './index.html', './styles.css?v=5.13', './app.js?v=5.13', './db.js?v=5.13', './helpers.js?v=5.13', './views.js?v=5.13', './excel-report.js?v=5.13', './manifest.webmanifest?v=5.13',
   './assets/brand/nilo-logo.png', './assets/brand/mascote.png', './assets/brand/triela-logo.png',
   './icons/icon-192.png', './icons/icon-512.png',
 ];

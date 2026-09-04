@@ -1,11 +1,12 @@
-# Órbita — Controle de Entregas (v5.12)
+# Órbita — Controle de Entregas (v5.13)
 
-## Atualização v5.12 — Finalizadas do dia
+## Atualização v5.13 — Agendadas entram em “Na loja” no dia
 
-- O card **Finalizadas hoje** passa a contar pela data/hora real de conclusão da entrega.
-- Entregas agendadas também entram no total quando forem finalizadas hoje.
-- Compras registradas em outro dia e concluídas hoje também entram.
-- Nenhum histórico ou backup é alterado por esta atualização.
+- Uma entrega agendada permanece em **Agendadas** enquanto a data programada ainda não chegou.
+- No dia agendado, ela passa a aparecer operacionalmente em **Na loja**, mantendo a informação de que é uma entrega agendada.
+- Se a data agendada já passou e a entrega ainda não foi atendida, ela continua em **Na loja** até ser resolvida.
+- No início do ciclo, agendadas cuja data já chegou vêm marcadas como disponíveis; agendadas futuras continuam desmarcadas.
+- A mudança é apenas de comportamento operacional/visual: o histórico salvo não é reescrito e os backups não são alterados.
 
 
 ## Atualização v5.10 — Perguntas Premium
