@@ -1,7 +1,7 @@
-import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters } from './db.js?v=5.13';
-import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=5.13';
-import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=5.13';
-import { exportFullExcelReport } from './excel-report.js?v=5.13';
+import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters } from './db.js?v=5.14';
+import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=5.14';
+import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=5.14';
+import { exportFullExcelReport } from './excel-report.js?v=5.14';
 
 const DEFAULT_OPERATIONAL_TARGETS = { startMinutes:120, arrivalMinutes:210, warningMinutes:30, successTarget:90 };
 
@@ -1656,7 +1656,105 @@ async function advanceCloseCycle(cycle) {
   }
 }
 
-async function openCycleEndTimeModal(cycle) {
+function cycleOperationalEvents(cycle, items = []) {
+  const events = [];
+  const addEvent = (item, at, type, label) => {
+    if (!at || Number.isNaN(new Date(at).getTime())) return;
+    events.push({
+      at,
+      type,
+      label,
+      delivery: item || null,
+      purchaseNumber: item?.purchaseNumber ?? null,
+      clientName: item?.clientName || item?.street || 'Cliente não informado',
+    });
+  };
+
+  // O início pertence sempre ao próprio ciclo.
+  addEvent(null, cycle.startedAt, 'cycle_start', 'Início do ciclo');
+
+  for (const item of items.filter(Boolean)) {
+    const attempts = (item.returnAttempts || []).filter((attempt) => attempt.cycleId === cycle.id);
+
+    // Retornos guardam uma fotografia dos horários daquele ciclo. Esses dados são
+    // seguros mesmo depois que a entrega volta à loja e entra em outro ciclo.
+    for (const attempt of attempts) {
+      addEvent(item, attempt.leftStoreAt, 'cycle_start', 'Saída da loja');
+      const deliveredAt = attempt.deliveredAt || attempt.clientArrivalAt;
+      addEvent(item, deliveredAt, 'delivery_time', 'Hora da entrega ao cliente');
+      addEvent(item, attempt.returnedAt, 'return_time', 'Retorno à loja');
+    }
+
+    // Os campos atuais da entrega só pertencem a este ciclo quando cycleId ainda
+    // aponta para ele. Assim um evento de outro ciclo nunca bloqueia este fechamento.
+    if (item.cycleId === cycle.id) {
+      addEvent(item, item.leftStoreAt, 'cycle_start', 'Saída da loja');
+      const deliveredAt = item.deliveredAt || item.clientArrivalAt;
+      addEvent(item, deliveredAt, 'delivery_time', 'Hora da entrega ao cliente');
+    }
+  }
+
+  // clientArrivalAt e deliveredAt hoje representam o mesmo horário; removemos
+  // duplicatas para a mensagem apontar um único evento real.
+  const unique = new Map();
+  for (const event of events) {
+    const key = `${event.delivery?.id || 'cycle'}|${event.type}|${event.at}`;
+    if (!unique.has(key)) unique.set(key, event);
+  }
+  return [...unique.values()].sort((a, b) => new Date(a.at) - new Date(b.at));
+}
+
+function latestCycleOperationalEvent(cycle, items = []) {
+  return cycleOperationalEvents(cycle, items).at(-1) || null;
+}
+
+async function finalizeCycleAt(cycle, closedAt, closeNote = '') {
+  await Cycles.update(cycle.id, {
+    status: 'fechado', closedAt,
+    closedAtRegisteredBy: getOperatorName(), closedAtRecordedAt: new Date().toISOString(),
+    closeNote: closeNote?.trim() || '',
+  });
+  toast(`Ciclo encerrado às ${timeBR(closedAt)}. Veículo e entregador liberados.`, 'success');
+  closeModal();
+  refreshApp();
+}
+
+function openCycleEndConflictModal(cycle, latestEvent, requestedClosedAt, closeNote = '') {
+  const isDeliveryTime = latestEvent?.type === 'delivery_time' && latestEvent.delivery;
+  const eventOwner = latestEvent?.delivery
+    ? `Entrega #${latestEvent.purchaseNumber} · ${escapeHtml(latestEvent.clientName)}`
+    : 'Evento do ciclo';
+
+  openModal({
+    title: 'Horário do fim do ciclo precisa ser ajustado',
+    subtitle: 'Encontramos um evento deste ciclo posterior ao horário que você informou.',
+    body: `
+      <div class="cycle-time-conflict">
+        <div class="cycle-time-conflict-icon">!</div>
+        <div class="cycle-time-conflict-copy">
+          <small>EVENTO QUE ESTÁ IMPEDINDO O FECHAMENTO</small>
+          <strong>${eventOwner}</strong>
+          <p>${escapeHtml(latestEvent?.label || 'Último evento')} registrado em <b>${dateTimeBR(latestEvent?.at)}</b>.</p>
+          <p>Você tentou encerrar o ciclo em <b>${dateTimeBR(requestedClosedAt)}</b>. O fim do ciclo precisa ser igual ou posterior ao último evento real deste mesmo ciclo.</p>
+        </div>
+      </div>
+      <div class="cycle-time-conflict-guide">
+        <span>O sistema agora considera somente eventos pertencentes a este ciclo — eventos de outros ciclos, agendamentos futuros e registros antigos não entram nesta validação.</span>
+      </div>`,
+    actions: [
+      { label: 'Voltar', kind: 'ghost', onClick: () => openCycleEndTimeModal(cycle, { suggestedClosedAt: requestedClosedAt, closeNote }) },
+      ...(isDeliveryTime ? [{ label: 'Corrigir horário da entrega', kind: 'ghost', onClick: () => openDeliveryCompletionFlow(latestEvent.delivery, { cycle, editing: true }) }] : []),
+      { label: `Usar ${timeBR(latestEvent.at)} como fim`, kind: 'primary', onClick: async () => {
+        const currentItems = await Promise.all((cycle.deliveryIds || []).map((id) => Deliveries.get(id)));
+        const freshLatest = latestCycleOperationalEvent(cycle, currentItems);
+        const safeClosedAt = freshLatest?.at || latestEvent.at;
+        await finalizeCycleAt(cycle, safeClosedAt, closeNote);
+      }},
+    ],
+  });
+}
+
+async function openCycleEndTimeModal(cycle, { suggestedClosedAt = null, closeNote = '' } = {}) {
   const items = await Promise.all((cycle.deliveryIds || []).map((id) => Deliveries.get(id)));
   const unresolved = items.filter((item) => item && !isCycleDeliveryResolved(item, cycle));
   if (unresolved.length) return showPendingOne(cycle, unresolved[0], unresolved.length);
@@ -1666,11 +1764,8 @@ async function openCycleEndTimeModal(cycle) {
     return !returnedInCycle && item?.status === 'finalizada' && !!(item.deliveredAt || item.clientArrivalAt);
   });
   const retryCycleItems = returnedCycleItems.filter((item) => (item.returnAttempts || []).some((attempt) => attempt.cycleId === cycle.id && attempt.retryPlanned));
-  const latestOperationalAt = items.reduce((latest, item) => {
-    const cycleReturn = (item?.returnAttempts || []).find((attempt) => attempt.cycleId === cycle.id && attempt.returnedAt);
-    const value = cycleReturn?.returnedAt || item?.deliveredAt || item?.clientArrivalAt || item?.leftStoreAt;
-    return value && new Date(value) > new Date(latest) ? value : latest;
-  }, cycle.startedAt);
+  const latestOperationalEvent = latestCycleOperationalEvent(cycle, items);
+  const initialClosedAt = suggestedClosedAt || new Date();
   openModal({
     title: 'Confirmar fim do ciclo',
     subtitle: 'A hora exata é obrigatória antes de liberar o veículo e o entregador.',
@@ -1683,7 +1778,7 @@ async function openCycleEndTimeModal(cycle) {
             <small>Início registrado: ${dateTimeBR(cycle.startedAt)} · ${items.length} entrega(s) no ciclo.</small>
           </div>
           <label>Fim do ciclo *
-            <input type="datetime-local" name="closedAt" required value="${localDateTimeValue(new Date())}" />
+            <input type="datetime-local" name="closedAt" required value="${localDateTimeValue(initialClosedAt)}" />
           </label>
         </div>
         <div class="cycle-resolution-summary">
@@ -1692,7 +1787,7 @@ async function openCycleEndTimeModal(cycle) {
           <div><span>↻</span><small>Com nova tentativa</small><strong>${retryCycleItems.length}</strong></div>
           <div><span>☑</span><small>Pendências abertas</small><strong>0</strong></div>
         </div>
-        <label>Observação do encerramento<textarea name="closeNote" rows="2" placeholder="Opcional"></textarea></label>
+        <label>Observação do encerramento<textarea name="closeNote" rows="2" placeholder="Opcional">${escapeHtml(closeNote)}</textarea></label>
       </form>`,
     actions: [
       { label: 'Voltar', kind: 'ghost', onClick: () => openCloseCycleModal(cycle) },
@@ -1707,15 +1802,14 @@ async function openCycleEndTimeModal(cycle) {
         }
         const closedAt = new Date(fd.closedAt).toISOString();
         if (new Date(closedAt) < new Date(cycle.startedAt)) return toast('O fim do ciclo não pode ser anterior ao início.', 'error');
-        if (latestOperationalAt && new Date(closedAt) < new Date(latestOperationalAt)) return toast(`O fim do ciclo não pode ser anterior ao último evento, às ${timeBR(latestOperationalAt)}.`, 'error');
-        await Cycles.update(cycle.id, {
-          status: 'fechado', closedAt,
-          closedAtRegisteredBy: getOperatorName(), closedAtRecordedAt: new Date().toISOString(),
-          closeNote: fd.closeNote?.trim() || '',
-        });
-        toast(`Ciclo encerrado às ${timeBR(closedAt)}. Veículo e entregador liberados.`, 'success');
-        closeModal();
-        refreshApp();
+
+        // Revalida os eventos no clique para não usar informação antiga da tela.
+        const freshItems = await Promise.all((cycle.deliveryIds || []).map((id) => Deliveries.get(id)));
+        const freshLatestEvent = latestCycleOperationalEvent(cycle, freshItems) || latestOperationalEvent;
+        if (freshLatestEvent && new Date(closedAt) < new Date(freshLatestEvent.at)) {
+          return openCycleEndConflictModal(cycle, freshLatestEvent, closedAt, fd.closeNote || '');
+        }
+        await finalizeCycleAt(cycle, closedAt, fd.closeNote || '');
       }},
     ],
   });
@@ -3124,7 +3218,7 @@ function openVehicleAddModal(record = null) {
    ========================================================= */
 export async function renderSettings() {
   const cfg = JSON.parse(localStorage.getItem('orbita_settings') || '{}');
-  const { listAutoBackups } = await import('./db.js?v=5.13');
+  const { listAutoBackups } = await import('./db.js?v=5.14');
   const autoBackups = await listAutoBackups();
   const backupReasonLabel = (reason = '') => reason === 'abertura' ? 'Abertura do sistema' : reason === 'periodico-1min' ? 'Segurança · 1 minuto' : reason ? 'Alteração salva' : 'Automático';
   const autoList = autoBackups.length
@@ -3162,13 +3256,13 @@ export async function renderSettings() {
 export function wireSettingsEvents() {
   $$('.auto-restore-btn').forEach((btn) => btn.addEventListener('click', async () => {
     if (!confirm('Restaurar esse backup automático vai substituir os dados atuais. Continuar?')) return;
-    const { restoreAutoBackup } = await import('./db.js?v=5.13');
+    const { restoreAutoBackup } = await import('./db.js?v=5.14');
     await restoreAutoBackup(btn.dataset.id);
     toast('Backup automático restaurado.', 'success');
     refreshApp();
   }));
   $('#settingsBackupBtn')?.addEventListener('click', async () => {
-    const data = await (await import('./db.js?v=5.13')).exportAll();
+    const data = await (await import('./db.js?v=5.14')).exportAll();
     downloadJSON(`orbita-backup-completo-${new Date().toISOString().slice(0,10)}.json`, data);
     toast('Backup completo gerado.', 'success');
   });
@@ -3176,12 +3270,12 @@ export function wireSettingsEvents() {
     const file = e.target.files[0];
     if (!file) return;
     if (!confirm('Isso vai substituir os dados atuais pelo conteúdo do backup. Um backup de segurança dos dados atuais será baixado antes. Continuar?')) { e.target.value = ''; return; }
-    const currentBackup = await (await import('./db.js?v=5.13')).exportAll();
+    const currentBackup = await (await import('./db.js?v=5.14')).exportAll();
     downloadJSON(`orbita-backup-seguranca-antes-restauracao-${Date.now()}.json`, currentBackup);
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      await (await import('./db.js?v=5.13')).importAll(data);
+      await (await import('./db.js?v=5.14')).importAll(data);
       toast('Backup restaurado.', 'success');
       refreshApp();
     } catch { toast('Arquivo de backup inválido.', 'error'); }

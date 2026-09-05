@@ -1,4 +1,15 @@
-# Órbita — Controle de Entregas (v5.13)
+# Órbita — Controle de Entregas (v5.14)
+
+
+## Atualização v5.14 — Encerramento de ciclo inteligente
+
+- O fim do ciclo valida somente eventos que pertencem ao próprio ciclo.
+- Eventos de outros ciclos, agendamentos futuros ou registros antigos não bloqueiam o fechamento.
+- Se houver um horário posterior ao informado, o sistema mostra qual entrega e qual evento causaram o bloqueio.
+- Para horário de entrega ao cliente, há botão para corrigir o horário diretamente.
+- Também é possível usar automaticamente o horário do último evento válido como fim do ciclo.
+- Nenhum histórico ou backup existente é regravado automaticamente.
+
 
 ## Atualização v5.13 — Agendadas entram em “Na loja” no dia
 

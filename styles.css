@@ -3022,3 +3022,35 @@ tr:last-child td { border-bottom: none; }
 .route-recovery-row{display:flex!important;align-items:center;gap:10px;padding:11px 12px;border:1px solid var(--line);border-radius:12px;background:#fff;cursor:pointer}
 .route-recovery-row input{width:17px;height:17px;margin:0;flex:none}
 .route-recovery-row span{display:grid;gap:3px}.route-recovery-row strong{font-size:12.5px;color:var(--ink)}.route-recovery-row small{font-size:10.5px;color:var(--text-muted)}
+
+/* v5.14 — explicação e correção inteligente de conflito no fim do ciclo */
+.cycle-time-conflict{
+  display:grid;
+  grid-template-columns:46px minmax(0,1fr);
+  gap:12px;
+  align-items:start;
+  padding:15px;
+  border:1px solid #f0c7c7;
+  border-radius:15px;
+  background:linear-gradient(135deg,#fff8f8 0%,#fffdfd 100%);
+  box-shadow:0 6px 18px rgba(148,45,45,.06);
+  margin-bottom:11px;
+}
+.cycle-time-conflict-icon{
+  width:44px;height:44px;display:grid;place-items:center;
+  border-radius:13px;background:#fff0f0;color:#b62f3e;
+  font-size:21px;font-weight:950;border:1px solid #efc0c5;
+}
+.cycle-time-conflict-copy{display:grid;gap:5px;min-width:0}
+.cycle-time-conflict-copy small{font-size:8.5px;font-weight:900;letter-spacing:.08em;color:#a6424c}
+.cycle-time-conflict-copy strong{font-size:14px;color:var(--ink)}
+.cycle-time-conflict-copy p{margin:0;font-size:11.5px;line-height:1.45;color:var(--text-muted)}
+.cycle-time-conflict-copy p b{color:var(--ink)}
+.cycle-time-conflict-guide{
+  padding:10px 12px;border-radius:12px;background:#eef7ff;border:1px solid #cfe2f3;
+  color:#45647a;font-size:10.5px;line-height:1.45;
+}
+@media(max-width:620px){
+  .cycle-time-conflict{grid-template-columns:38px minmax(0,1fr);padding:12px}
+  .cycle-time-conflict-icon{width:36px;height:36px;border-radius:11px;font-size:18px}
+}
