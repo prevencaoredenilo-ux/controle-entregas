@@ -1,7 +1,7 @@
-import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters } from './db.js?v=5.14';
-import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=5.14';
-import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=5.14';
-import { exportFullExcelReport } from './excel-report.js?v=5.14';
+import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters } from './db.js?v=5.15';
+import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=5.15';
+import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=5.15';
+import { exportFullExcelReport } from './excel-report.js?v=5.15';
 
 const DEFAULT_OPERATIONAL_TARGETS = { startMinutes:120, arrivalMinutes:210, warningMinutes:30, successTarget:90 };
 
@@ -369,7 +369,7 @@ export async function renderCentral() {
     <div class="operation-panels">
       <section class="ops-panel">
         <div class="panel-head"><div><span class="live-mini"></span><strong>Ciclos em andamento</strong></div><button class="text-action" id="panelStartCycle">＋ Novo ciclo</button></div>
-        ${openCycles.length ? openCycles.map((c) => `<div class="ops-line cycle-live-line" data-tip="Saída confirmada às ${timeBR(c.startedAt)} · duração até agora ${formatDuration((Date.now()-new Date(c.startedAt))/60000)}"><div><strong>${escapeHtml(vName(c.vehicleId))}</strong><small>${escapeHtml(dName(c.driverId))} · saída ${timeBR(c.startedAt)} · ${formatDuration((Date.now()-new Date(c.startedAt))/60000)}</small></div><button class="btn-ghost btn-small central-cycle-close" data-id="${c.id}">Finalizar</button></div>`).join('') : '<div class="panel-empty">Nenhum ciclo aberto agora.</div>'}
+        ${openCycles.length ? openCycles.map((c) => `<div class="ops-line cycle-live-line" data-tip="Saída confirmada às ${timeBR(c.startedAt)} · duração até agora ${formatDuration((Date.now()-new Date(c.startedAt))/60000)}"><div><strong>${escapeHtml(vName(c.vehicleId))}</strong><small>${escapeHtml(dName(c.driverId))} · saída ${timeBR(c.startedAt)} · ${formatDuration((Date.now()-new Date(c.startedAt))/60000)}</small></div><div class="cycle-live-actions"><button class="btn-ghost btn-small central-cycle-edit" data-id="${c.id}">Editar entregas</button><button class="btn-ghost btn-small central-cycle-close" data-id="${c.id}">Finalizar</button></div></div>`).join('') : '<div class="panel-empty">Nenhum ciclo aberto agora.</div>'}
       </section>
       <section class="ops-panel">
         <div class="panel-head"><div><span class="live-mini ${kmPendente ? 'warning' : ''}"></span><strong>Expedientes de KM</strong></div><button class="text-action" id="panelKmStart">＋ Iniciar</button></div>
@@ -578,6 +578,10 @@ export function wireCentralEvents() {
     if (cycles.length === 1) return openCloseCycleModal(cycles[0]);
     openCyclePicker(cycles);
   });
+  $$('.central-cycle-edit').forEach((btn) => btn.addEventListener('click', async () => {
+    const cycle = await Cycles.get(btn.dataset.id);
+    if (cycle) openEditCycleDeliveriesModal(cycle);
+  }));
   $$('.central-cycle-close').forEach((btn) => btn.addEventListener('click', async () => {
     const cycle = await Cycles.get(btn.dataset.id);
     if (cycle) openCloseCycleModal(cycle);
@@ -1431,7 +1435,7 @@ export async function renderCycles() {
       <td>${escapeHtml(dName(c.driverId))}</td>
       <td>${items.length}</td>
       <td>${c.status === 'aberto' ? `<span class="badge transito">Aberto · ${pending} pendente(s)</span>` : `<span class="badge entregue">Fechado</span>`}</td>
-      <td>${c.status === 'aberto' ? `<button class="btn-ghost btn-small cycle-close-btn">Finalizar</button><small class="delivery-times">${formatDuration((Date.now()-new Date(c.startedAt))/60000)}</small>` : `${dateTimeBR(c.closedAt)}<small class="delivery-times">${formatDuration((new Date(c.closedAt)-new Date(c.startedAt))/60000)}</small>`}</td>
+      <td>${c.status === 'aberto' ? `<div class="cycle-table-actions"><button class="btn-ghost btn-small cycle-edit-btn">Editar entregas</button><button class="btn-ghost btn-small cycle-close-btn">Finalizar</button></div><small class="delivery-times">${formatDuration((Date.now()-new Date(c.startedAt))/60000)}</small>` : `${dateTimeBR(c.closedAt)}<small class="delivery-times">${formatDuration((new Date(c.closedAt)-new Date(c.startedAt))/60000)}</small>`}</td>
     </tr>`;
   }));
 
@@ -1439,7 +1443,14 @@ export async function renderCycles() {
 }
 
 export function wireCyclesEvents() {
+  $$('.cycle-edit-btn').forEach((btn) => btn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const id = e.target.closest('tr').dataset.id;
+    const cycle = await Cycles.get(id);
+    if (cycle) openEditCycleDeliveriesModal(cycle);
+  }));
   $$('.cycle-close-btn').forEach((btn) => btn.addEventListener('click', async (e) => {
+    e.stopPropagation();
     const id = e.target.closest('tr').dataset.id;
     const cycle = await Cycles.get(id);
     openCloseCycleModal(cycle);
@@ -1602,6 +1613,155 @@ export async function openStartCycleModal() {
     const next = item.nextElementSibling;
     if (next) item.parentNode.insertBefore(next, item);
   }));
+}
+
+
+/* ---------- editar entregas de ciclo já iniciado (v5.15) ---------- */
+function cycleDeliveryCanBeRemoved(delivery, cycle) {
+  if (!delivery || delivery.cycleId !== cycle.id) return false;
+  const returnedInThisCycle = (delivery.returnAttempts || []).some((attempt) => attempt.returnedAt && attempt.cycleId === cycle.id);
+  const hasClientEvent = !!(delivery.clientArrivalAt || delivery.deliveredAt);
+  return !returnedInThisCycle && !hasClientEvent && delivery.status === 'em_rota';
+}
+
+async function openEditCycleDeliveriesModal(cycle) {
+  if (!canPerform('cycle')) return toast('Seu perfil não pode editar ciclos.', 'error');
+  const freshCycle = await Cycles.get(cycle.id);
+  if (!freshCycle || freshCycle.status !== 'aberto' || freshCycle.deletedAt) return toast('Este ciclo já foi encerrado e não pode mais ser alterado.', 'error');
+
+  const env = getEnv();
+  const todayKey = localDateKey();
+  const [allDeliveries, allCycles, neighborhoods, vehicles, drivers] = await Promise.all([
+    Deliveries.active(env), Cycles.all(), Neighborhoods.all(), Vehicles.all(), Drivers.all(),
+  ]);
+  const deliveryById = new Map(allDeliveries.map((d) => [d.id, d]));
+  const currentIds = [...(freshCycle.deliveryIds || [])];
+  const currentItems = currentIds.map((id) => deliveryById.get(id)).filter(Boolean);
+  const otherOpenCycles = allCycles.filter((c) => c.environment === env && c.status === 'aberto' && !c.deletedAt && c.id !== freshCycle.id);
+  const busyIds = new Set(otherOpenCycles.flatMap((c) => c.deliveryIds || []));
+  const available = allDeliveries
+    .filter((d) => !currentIds.includes(d.id) && !busyIds.has(d.id) && !d.cycleId && (d.status === 'na_loja' || d.status === 'programada'))
+    .sort((a,b) => (b.priority === 'alta') - (a.priority === 'alta') || new Date(a.entryTime) - new Date(b.entryTime));
+  const nName = (id) => neighborhoods.find((n) => n.id === id)?.name || 'Bairro não informado';
+  const vName = vehicles.find((v) => v.id === freshCycle.vehicleId)?.label || 'Veículo';
+  const dName = drivers.find((d) => d.id === freshCycle.driverId)?.name || 'Entregador';
+
+  const currentHtml = currentItems.length ? currentItems.map((d) => {
+    const removable = cycleDeliveryCanBeRemoved(d, freshCycle);
+    const returned = (d.returnAttempts || []).some((attempt) => attempt.returnedAt && attempt.cycleId === freshCycle.id);
+    const lockReason = d.status === 'finalizada' || d.deliveredAt || d.clientArrivalAt
+      ? 'Já possui entrega/horário no cliente'
+      : returned ? 'Já possui retorno registrado neste ciclo'
+      : d.status !== 'em_rota' ? `Status atual: ${STATUS_META[d.status]?.label || d.status}` : '';
+    return `<div class="cycle-edit-row ${removable ? '' : 'locked'}">
+      <div class="cycle-edit-main">
+        <strong>#${d.purchaseNumber} · ${escapeHtml(d.clientName || d.street || 'Sem nome')}</strong>
+        <small>📍 ${escapeHtml(nName(d.neighborhoodId))} · ${STATUS_META[d.status]?.label || d.status}${d.priority === 'alta' ? ' · PRIORIDADE ALTA' : ''}</small>
+      </div>
+      ${removable
+        ? `<label class="cycle-edit-toggle remove"><input type="checkbox" class="cycle-remove-check" value="${d.id}"/><span>Retirar do ciclo</span></label>`
+        : `<span class="cycle-edit-lock">🔒 ${escapeHtml(lockReason || 'Não pode ser retirada')}</span>`}
+    </div>`;
+  }).join('') : '<div class="cycle-edit-empty">Este ciclo está sem entregas no momento.</div>';
+
+  const availableHtml = available.length ? available.map((d) => {
+    const scheduled = d.type === 'agendada' || d.status === 'programada';
+    const due = scheduled && isScheduledReleasedToStore(d, todayKey);
+    return `<label class="cycle-edit-row available ${scheduled ? 'scheduled' : ''}">
+      <input type="checkbox" class="cycle-add-check" value="${d.id}"/>
+      <div class="cycle-edit-main">
+        <strong>#${d.purchaseNumber} · ${escapeHtml(d.clientName || d.street || 'Sem nome')}</strong>
+        <small>📍 ${escapeHtml(nName(d.neighborhoodId))}${scheduled ? ` · 🗓 ${escapeHtml(dateTimeBR(d.scheduledAt))}` : ''}</small>
+      </div>
+      <span class="cycle-edit-badge ${scheduled && !due ? 'future' : ''}">${scheduled ? (due ? 'AGENDADA · LIBERADA' : 'AGENDADA FUTURA') : 'NA LOJA'}</span>
+    </label>`;
+  }).join('') : '<div class="cycle-edit-empty">Nenhuma outra entrega disponível para adicionar.</div>';
+
+  openModal({
+    title: 'Editar entregas do ciclo',
+    subtitle: `${escapeHtml(vName)} · ${escapeHtml(dName)} · ciclo iniciado às ${timeBR(freshCycle.startedAt)}.`,
+    body: `<form id="editCycleDeliveriesForm" class="cycle-edit-form">
+      <div class="cycle-edit-info">
+        <span>↻</span><div><strong>Ciclo já iniciado</strong><p>Você pode corrigir uma seleção esquecida ou feita por engano. Toda inclusão e retirada fica registrada na auditoria.</p></div>
+      </div>
+      <section class="cycle-edit-section">
+        <div class="cycle-edit-head"><div><strong>Entregas no ciclo agora</strong><small>Marque “Retirar do ciclo” somente nas que foram incluídas por engano.</small></div><b>${currentItems.length}</b></div>
+        <div class="cycle-edit-list">${currentHtml}</div>
+      </section>
+      <section class="cycle-edit-section">
+        <div class="cycle-edit-head"><div><strong>Adicionar entregas</strong><small>Selecione as que ficaram de fora quando o ciclo foi iniciado.</small></div><b>${available.length}</b></div>
+        <div class="cycle-edit-list">${availableHtml}</div>
+      </section>
+      <label class="cycle-join-time">Hora de saída das novas entregas
+        <input type="datetime-local" name="joinedAt" value="${localDateTimeValue(freshCycle.startedAt)}" />
+        <small>Se a entrega saiu junto com o veículo, mantenha o início do ciclo. Se entrou depois, informe a hora real.</small>
+      </label>
+    </form>`,
+    actions: [
+      { label: 'Cancelar', kind: 'ghost', onClick: closeModal },
+      { label: 'Salvar alterações do ciclo', kind: 'primary', onClick: async () => {
+        const currentCycle = await Cycles.get(freshCycle.id);
+        if (!currentCycle || currentCycle.status !== 'aberto') return toast('O ciclo foi encerrado enquanto esta tela estava aberta.', 'error');
+        const removeIds = $$('.cycle-remove-check:checked').map((el) => el.value);
+        const addIds = $$('.cycle-add-check:checked').map((el) => el.value);
+        if (!removeIds.length && !addIds.length) return toast('Nenhuma alteração foi selecionada.', 'error');
+
+        const joinedAtInput = $('#editCycleDeliveriesForm')?.elements?.namedItem('joinedAt');
+        const joinedAt = addIds.length ? new Date(joinedAtInput?.value || currentCycle.startedAt).toISOString() : null;
+        if (addIds.length && Number.isNaN(new Date(joinedAt).getTime())) return toast('Informe uma hora válida para as entregas adicionadas.', 'error');
+        if (addIds.length && new Date(joinedAt) < new Date(currentCycle.startedAt)) return toast('A saída das novas entregas não pode ser anterior ao início do ciclo.', 'error');
+
+        const liveDeliveries = await Deliveries.active(env);
+        const liveById = new Map(liveDeliveries.map((d) => [d.id, d]));
+        const liveOtherCycles = (await Cycles.all()).filter((c) => c.environment === env && c.status === 'aberto' && !c.deletedAt && c.id !== currentCycle.id);
+        const liveBusyIds = new Set(liveOtherCycles.flatMap((c) => c.deliveryIds || []));
+
+        for (const id of removeIds) {
+          const d = liveById.get(id);
+          if (!cycleDeliveryCanBeRemoved(d, currentCycle)) return toast(`A entrega #${d?.purchaseNumber || '—'} mudou de situação e não pode mais ser retirada por esta tela.`, 'error');
+        }
+        for (const id of addIds) {
+          const d = liveById.get(id);
+          if (!d || liveBusyIds.has(id) || d.cycleId || !['na_loja','programada'].includes(d.status)) return toast(`A entrega #${d?.purchaseNumber || '—'} não está mais disponível para este ciclo.`, 'error');
+          if (new Date(joinedAt) < new Date(d.entryTime)) return toast(`A saída da entrega #${d.purchaseNumber} não pode ser anterior ao horário em que a compra entrou no sistema.`, 'error');
+        }
+
+        const nextIds = (currentCycle.deliveryIds || []).filter((id) => !removeIds.includes(id));
+        addIds.forEach((id) => { if (!nextIds.includes(id)) nextIds.push(id); });
+        const adjustmentAt = new Date().toISOString();
+        const operator = getOperatorName();
+        const adjustments = [...(currentCycle.deliveryAdjustments || [])];
+
+        for (const id of removeIds) {
+          const d = liveById.get(id);
+          const targetStatus = d.type === 'agendada' ? 'programada' : 'na_loja';
+          await Deliveries.changeStatus(id, targetStatus, {
+            cycleId: null, vehicleId: null, driverId: null, leftStoreAt: null,
+            clientArrivalAt: null, deliveredAt: null,
+            note: `Retirada do ciclo já iniciado por correção operacional. Ciclo ${currentCycle.id}.`,
+          });
+          adjustments.push({ action:'remove', deliveryId:id, purchaseNumber:d.purchaseNumber, at:adjustmentAt, operator, previousStatus:d.status });
+        }
+        for (const id of addIds) {
+          const d = liveById.get(id);
+          await Deliveries.changeStatus(id, 'em_rota', {
+            cycleId: currentCycle.id, vehicleId: currentCycle.vehicleId, driverId: currentCycle.driverId, leftStoreAt: joinedAt,
+            clientArrivalAt: null, deliveredAt: null,
+            note: `Adicionada ao ciclo após o início por correção operacional. Saída registrada às ${timeBR(joinedAt)}.`,
+          });
+          adjustments.push({ action:'add', deliveryId:id, purchaseNumber:d.purchaseNumber, at:adjustmentAt, operator, leftStoreAt:joinedAt, previousStatus:d.status });
+        }
+        await Cycles.update(currentCycle.id, { deliveryIds: nextIds, deliveryAdjustments: adjustments });
+
+        closeModal();
+        const parts = [];
+        if (addIds.length) parts.push(`${addIds.length} adicionada(s)`);
+        if (removeIds.length) parts.push(`${removeIds.length} retirada(s)`);
+        toast(`Ciclo atualizado: ${parts.join(' e ')}.`, 'success');
+        refreshApp();
+      }},
+    ],
+  });
 }
 
 /* ---------- finalizar ciclo: uma pendência por vez (seção 9) ---------- */
@@ -3218,7 +3378,7 @@ function openVehicleAddModal(record = null) {
    ========================================================= */
 export async function renderSettings() {
   const cfg = JSON.parse(localStorage.getItem('orbita_settings') || '{}');
-  const { listAutoBackups } = await import('./db.js?v=5.14');
+  const { listAutoBackups } = await import('./db.js?v=5.15');
   const autoBackups = await listAutoBackups();
   const backupReasonLabel = (reason = '') => reason === 'abertura' ? 'Abertura do sistema' : reason === 'periodico-1min' ? 'Segurança · 1 minuto' : reason ? 'Alteração salva' : 'Automático';
   const autoList = autoBackups.length
@@ -3256,13 +3416,13 @@ export async function renderSettings() {
 export function wireSettingsEvents() {
   $$('.auto-restore-btn').forEach((btn) => btn.addEventListener('click', async () => {
     if (!confirm('Restaurar esse backup automático vai substituir os dados atuais. Continuar?')) return;
-    const { restoreAutoBackup } = await import('./db.js?v=5.14');
+    const { restoreAutoBackup } = await import('./db.js?v=5.15');
     await restoreAutoBackup(btn.dataset.id);
     toast('Backup automático restaurado.', 'success');
     refreshApp();
   }));
   $('#settingsBackupBtn')?.addEventListener('click', async () => {
-    const data = await (await import('./db.js?v=5.14')).exportAll();
+    const data = await (await import('./db.js?v=5.15')).exportAll();
     downloadJSON(`orbita-backup-completo-${new Date().toISOString().slice(0,10)}.json`, data);
     toast('Backup completo gerado.', 'success');
   });
@@ -3270,12 +3430,12 @@ export function wireSettingsEvents() {
     const file = e.target.files[0];
     if (!file) return;
     if (!confirm('Isso vai substituir os dados atuais pelo conteúdo do backup. Um backup de segurança dos dados atuais será baixado antes. Continuar?')) { e.target.value = ''; return; }
-    const currentBackup = await (await import('./db.js?v=5.14')).exportAll();
+    const currentBackup = await (await import('./db.js?v=5.15')).exportAll();
     downloadJSON(`orbita-backup-seguranca-antes-restauracao-${Date.now()}.json`, currentBackup);
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      await (await import('./db.js?v=5.14')).importAll(data);
+      await (await import('./db.js?v=5.15')).importAll(data);
       toast('Backup restaurado.', 'success');
       refreshApp();
     } catch { toast('Arquivo de backup inválido.', 'error'); }

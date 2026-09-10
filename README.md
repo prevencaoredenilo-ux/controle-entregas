@@ -1,4 +1,15 @@
-# Órbita — Controle de Entregas (v5.14)
+# Órbita — Controle de Entregas (v5.15)
+
+
+## Atualização v5.15 — Ciclo editável após início
+
+- Ciclos abertos agora permitem adicionar entregas esquecidas depois da saída.
+- Entregas colocadas por engano podem ser retiradas enquanto ainda estão em rota e sem evento no cliente/retorno.
+- Ao adicionar, o operador informa a hora real de saída da nova entrega; por padrão é sugerido o início do ciclo.
+- Ao retirar, a entrega volta para Na loja (ou Programada, se agendada), limpando apenas os vínculos operacionais daquele ciclo.
+- Finalizadas, entregues e retornadas ficam bloqueadas contra retirada por esse atalho.
+- Inclusões e retiradas ficam registradas na auditoria e em `deliveryAdjustments` do ciclo.
+- Históricos e backups existentes não são regravados por esta atualização.
 
 
 ## Atualização v5.14 — Encerramento de ciclo inteligente
