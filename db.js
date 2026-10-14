@@ -29,15 +29,34 @@ let dbPromise = null;
 // O gatilho por escrita só é habilitado depois do seed inicial para evitar snapshots desnecessários no primeiro boot.
 let writeThroughBackupEnabled = false;
 let autoBackupQueue = Promise.resolve();
+let writeThroughBackupTimer = null;
+let pendingWriteThroughReason = null;
 
 export function enableWriteThroughAutoBackup() { writeThroughBackupEnabled = true; }
 
+// Escritas próximas são agrupadas em um único snapshot do estado mais recente.
+// Isso evita uma fila de backups completos quando uma operação atualiza várias entregas.
 function requestWriteThroughBackup(reason = 'alteracao') {
   if (!writeThroughBackupEnabled) return;
+  pendingWriteThroughReason = reason;
+  clearTimeout(writeThroughBackupTimer);
+  writeThroughBackupTimer = setTimeout(() => {
+    const nextReason = pendingWriteThroughReason || 'alteracao';
+    pendingWriteThroughReason = null;
+    writeThroughBackupTimer = null;
+    enqueueAutoBackup(nextReason);
+  }, 350);
+}
+
+function enqueueAutoBackup(reason = 'periodico') {
   autoBackupQueue = autoBackupQueue
-    .then(() => new Promise((resolve) => setTimeout(resolve, 0)))
-    .then(() => saveAutoBackup(reason))
-    .catch(() => {});
+    .catch(() => {})
+    .then(() => createAutoBackup(reason))
+    .catch((error) => {
+      console.warn('Não foi possível concluir o backup automático.', error);
+      return null;
+    });
+  return autoBackupQueue;
 }
 
 function openDB() {
@@ -253,29 +272,71 @@ export async function importAll(data) {
   requestWriteThroughBackup('importacao-completa');
 }
 
-/* ---------- backup automático (rolling, guarda os últimos 50) ---------- */
-export async function saveAutoBackup(reason = 'periodico') {
+/* ---------- backup automático (leitura leve e sem alterar backups antigos) ---------- */
+function backupIdTimestamp(id) {
+  const parts = String(id || '').split('_');
+  return Number.parseInt(parts[2] || '', 36) || 0;
+}
+
+async function createAutoBackup(reason = 'periodico') {
   const snapshot = await exportAll();
   const store = await tx('autoBackups', 'readwrite');
-  const entry = { id: uid('bkp'), at: new Date().toISOString(), reason, data: snapshot };
+  // Prefixo próprio: a retenção nova só administra backups criados por esta rotina.
+  // Backups anteriores à v5.17 são mantidos intactos e nunca são removidos por esta limpeza.
+  const entry = { id: uid('bkp_safe'), at: new Date().toISOString(), reason, retentionGroup: 'orbita-safe-v1', data: snapshot };
   return new Promise((resolve, reject) => {
     const req = store.add(entry);
     req.onsuccess = async () => {
-      const all = await listAutoBackups();
-      const excess = all.slice(50);
-      const delStore = await tx('autoBackups', 'readwrite');
-      excess.forEach((b) => delStore.delete(b.id));
-      resolve(entry);
+      try {
+        // getAllKeys traz apenas identificadores, não carrega os snapshots completos para a memória.
+        const keysStore = await tx('autoBackups', 'readonly');
+        const keysReq = keysStore.getAllKeys();
+        keysReq.onsuccess = async () => {
+          try {
+            const managedKeys = keysReq.result
+              .filter((key) => String(key).startsWith('bkp_safe_'))
+              .sort((a, b) => backupIdTimestamp(a) - backupIdTimestamp(b));
+            const excess = managedKeys.slice(0, Math.max(0, managedKeys.length - 50));
+            if (excess.length) {
+              const delStore = await tx('autoBackups', 'readwrite');
+              excess.forEach((key) => delStore.delete(key));
+            }
+          } catch (error) {
+            console.warn('Não foi possível limitar os novos backups automáticos.', error);
+          }
+          resolve(entry);
+        };
+        keysReq.onerror = () => resolve(entry);
+      } catch {
+        // O snapshot já foi salvo; uma falha na limpeza não invalida o backup.
+        resolve(entry);
+      }
     };
     req.onerror = () => reject(req.error);
   });
 }
 
+export function saveAutoBackup(reason = 'periodico') {
+  return enqueueAutoBackup(reason);
+}
+
+// A tela de configurações precisa só de metadados. Não mantém os 50 snapshots completos na RAM.
 export async function listAutoBackups() {
   const store = await tx('autoBackups', 'readonly');
   return new Promise((resolve, reject) => {
-    const req = store.getAll();
-    req.onsuccess = () => resolve(req.result.sort((a, b) => b.at.localeCompare(a.at)));
+    const rows = [];
+    const req = store.openCursor();
+    req.onsuccess = () => {
+      const cursor = req.result;
+      if (!cursor) {
+        rows.sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')));
+        resolve(rows);
+        return;
+      }
+      const value = cursor.value;
+      rows.push({ id: value.id, at: value.at, reason: value.reason, retentionGroup: value.retentionGroup || null });
+      cursor.continue();
+    };
     req.onerror = () => reject(req.error);
   });
 }

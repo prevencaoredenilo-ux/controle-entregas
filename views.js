@@ -1,7 +1,7 @@
-import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters } from './db.js?v=5.15';
-import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=5.15';
-import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=5.15';
-import { exportFullExcelReport } from './excel-report.js?v=5.15';
+import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters } from './db.js?v=5.17';
+import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=5.17';
+import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=5.17';
+import { exportFullExcelReport } from './excel-report.js?v=5.17';
 
 const DEFAULT_OPERATIONAL_TARGETS = { startMinutes:120, arrivalMinutes:210, warningMinutes:30, successTarget:90 };
 
@@ -415,6 +415,7 @@ let _waveTimer = null;
 let _nameTimer = null;
 
 async function openRouteEditRecoveryModal() {
+  if (!canPerform('delivery_edit')) return toast('Perfil Consulta / Monitor não pode recuperar ou alterar entregas.', 'error');
   const env = getEnv();
   const rows = await Deliveries.active(env);
   const cycles = await Cycles.all();
@@ -460,6 +461,7 @@ async function openRouteEditRecoveryModal() {
 }
 
 async function openRecalculateDayNumbersModal() {
+  if (!canPerform('delivery_edit')) return toast('Perfil Consulta / Monitor não pode recalcular numeração.', 'error');
   const env = getEnv();
   const today = localDateKey();
   openModal({
@@ -805,6 +807,7 @@ async function openKmPicker(logs) {
 }
 
 async function openArrivalPicker() {
+  if (!canPerform('delivery_edit')) return toast('Perfil Consulta / Monitor não pode registrar entregas.', 'error');
   const rows = (await Deliveries.active(getEnv())).filter((r) => r.status === 'em_rota');
   if (!rows.length) return toast('Não há entrega em rota aguardando confirmação de entrega.', 'error');
   openModal({
@@ -820,6 +823,7 @@ async function openArrivalPicker() {
 }
 
 async function openReturnPicker() {
+  if (!canPerform('delivery_edit')) return toast('Perfil Consulta / Monitor não pode registrar retornos.', 'error');
   const rows = (await Deliveries.active(getEnv())).filter((r) => ['em_rota', 'no_cliente'].includes(r.status));
   if (!rows.length) {
     return openModal({
@@ -988,8 +992,8 @@ export async function openDeliveryModal(record = null) {
   const statusActions = isEdit && !readOnly ? deliveryStatusActionsHtml(record) : '';
 
   openModal({
-    title: isEdit ? `Editar entrega #${record.purchaseNumber}` : 'Registrar entrega',
-    subtitle: isEdit ? `Status atual: ${STATUS_META[record.status]?.label}` : 'Preencha os campos obrigatórios (*)',
+    title: isEdit ? `${readOnly ? 'Consultar' : 'Editar'} entrega #${record.purchaseNumber}` : 'Registrar entrega',
+    subtitle: isEdit ? `${readOnly ? 'Somente leitura · ' : ''}Status atual: ${STATUS_META[record.status]?.label}` : 'Preencha os campos obrigatórios (*)',
     body: body + statusActions,
     actions: readOnly ? [{label:'Fechar',kind:'ghost',onClick:closeModal}] : isEdit
       ? [
@@ -1002,6 +1006,14 @@ export async function openDeliveryModal(record = null) {
           { label: 'Registrar', kind: 'primary', onClick: () => saveDeliveryForm(null) },
         ],
   });
+
+  if (readOnly) {
+    $('#deliveryForm')?.classList.add('monitor-readonly-form');
+    $('#deliveryForm')?.querySelectorAll('input, select, textarea').forEach((field) => {
+      field.disabled = true;
+      field.setAttribute('aria-readonly', 'true');
+    });
+  }
 
   $('#sizeSelect')?.addEventListener('change', (e) => {
     $('input[name="tripCount"]').disabled = e.target.value !== 'grande';
@@ -1020,7 +1032,7 @@ export async function openDeliveryModal(record = null) {
     };
     $('input[name="operationDate"]')?.addEventListener('change', updateNumberPreview);
   }
-  wireDeliveryStatusActions(record);
+  if (!readOnly) wireDeliveryStatusActions(record);
   wirePhoneMask($('#modalBody'));
 }
 
@@ -1071,6 +1083,7 @@ function wireDeliveryStatusActions(record) {
 }
 
 function openDeliveryCompletionFlow(record, { cycle = null, editing = false } = {}) {
+  if (!canPerform('delivery_edit')) return toast('Perfil Consulta / Monitor não pode concluir ou editar entregas.', 'error');
   const existingClientTime = record.deliveredAt || record.clientArrivalAt || null;
   const defaultTime = existingClientTime || new Date();
   const alreadyHasTime = !!existingClientTime;
@@ -1260,6 +1273,7 @@ async function saveDeliveryForm(record) {
 
 /* ---------- retirada na loja (seção 10) ---------- */
 function openRetiradaFlow(record) {
+  if (!canPerform('delivery_edit')) return toast('Perfil Consulta / Monitor não pode registrar retirada.', 'error');
   openModal({
     title: 'Retirada na loja',
     subtitle: `Entrega #${record.purchaseNumber} — reembolsar a taxa de ${money(record.deliveryFee)}?`,
@@ -1281,11 +1295,13 @@ async function finishRetirada(record, refunded) {
 
 /* ---------- retorno / reentrega (seção 8 e 10) ---------- */
 async function openRetornoFlow(record) {
+  if (!canPerform('delivery_edit')) return toast('Perfil Consulta / Monitor não pode registrar retorno.', 'error');
   const cycle = record.cycleId ? await Cycles.get(record.cycleId) : null;
   return openReturnResolutionFlow(record, { cycle: cycle?.status === 'aberto' ? cycle : null });
 }
 
 async function openReturnResolutionFlow(record, { cycle = null, onBack = null, continueClose = false } = {}) {
+  if (!canPerform('delivery_edit')) return toast('Perfil Consulta / Monitor não pode alterar a operação.', 'error');
   const reasons = (await ReturnReasons.all()).filter((r) => r.active);
   openModal({
     title: 'Registrar retorno à loja',
@@ -1391,6 +1407,7 @@ async function openReturnResolutionFlow(record, { cycle = null, onBack = null, c
 
 /* ---------- reagendamento (nunca sobrescreve a tentativa anterior) ---------- */
 function openReagendarFlow(record) {
+  if (!canPerform('delivery_edit')) return toast('Perfil Consulta / Monitor não pode reagendar entregas.', 'error');
   openModal({
     title: 'Reagendar entrega',
     subtitle: `Entrega #${record.purchaseNumber} — a tentativa anterior fica preservada no histórico.`,
@@ -2797,6 +2814,7 @@ export function wireDashboardEvents() {
 }
 
 function openOperationalTargetsModal(){
+  if (!canPerform('settings')) return toast('Perfil Consulta / Monitor não pode alterar metas.', 'error');
   const targets=operationalTargets();
   openModal({
     title:'Metas e limites operacionais',
@@ -3300,7 +3318,7 @@ function openRegistryAddModal(tab, record = null) {
 }
 
 function openCollaboratorAddModal(record = null) {
-  const roles = ['Equipe Operacional', 'Líder', 'Consulta', 'Administrador'];
+  const roles = ['Equipe Operacional', 'Líder', 'Consulta / Monitor', 'Administrador'];
   openModal({
     title: record ? 'Editar colaborador' : 'Novo colaborador',
     subtitle: record ? 'O nome atualizado entrará automaticamente no rodízio da saudação.' : 'Qualquer nome cadastrado aqui aparece automaticamente na saudação.',
@@ -3309,7 +3327,7 @@ function openCollaboratorAddModal(record = null) {
         <label>Nome *<input name="name" required value="${escapeHtml(record?.name || '')}" /></label>
         <label>Função
           <select name="role">
-            ${roles.map((role) => `<option value="${role}" ${record?.role === role ? 'selected' : ''}>${role}</option>`).join('')}
+            ${roles.map((role) => `<option value="${role}" ${((record?.role === 'Consulta' && role === 'Consulta / Monitor') || record?.role === role) ? 'selected' : ''}>${role}</option>`).join('')}
           </select>
         </label>
       </form>`,
@@ -3378,7 +3396,7 @@ function openVehicleAddModal(record = null) {
    ========================================================= */
 export async function renderSettings() {
   const cfg = JSON.parse(localStorage.getItem('orbita_settings') || '{}');
-  const { listAutoBackups } = await import('./db.js?v=5.15');
+  const { listAutoBackups } = await import('./db.js?v=5.17');
   const autoBackups = await listAutoBackups();
   const backupReasonLabel = (reason = '') => reason === 'abertura' ? 'Abertura do sistema' : reason === 'periodico-1min' ? 'Segurança · 1 minuto' : reason ? 'Alteração salva' : 'Automático';
   const autoList = autoBackups.length
@@ -3416,13 +3434,13 @@ export async function renderSettings() {
 export function wireSettingsEvents() {
   $$('.auto-restore-btn').forEach((btn) => btn.addEventListener('click', async () => {
     if (!confirm('Restaurar esse backup automático vai substituir os dados atuais. Continuar?')) return;
-    const { restoreAutoBackup } = await import('./db.js?v=5.15');
+    const { restoreAutoBackup } = await import('./db.js?v=5.17');
     await restoreAutoBackup(btn.dataset.id);
     toast('Backup automático restaurado.', 'success');
     refreshApp();
   }));
   $('#settingsBackupBtn')?.addEventListener('click', async () => {
-    const data = await (await import('./db.js?v=5.15')).exportAll();
+    const data = await (await import('./db.js?v=5.17')).exportAll();
     downloadJSON(`orbita-backup-completo-${new Date().toISOString().slice(0,10)}.json`, data);
     toast('Backup completo gerado.', 'success');
   });
@@ -3430,12 +3448,12 @@ export function wireSettingsEvents() {
     const file = e.target.files[0];
     if (!file) return;
     if (!confirm('Isso vai substituir os dados atuais pelo conteúdo do backup. Um backup de segurança dos dados atuais será baixado antes. Continuar?')) { e.target.value = ''; return; }
-    const currentBackup = await (await import('./db.js?v=5.15')).exportAll();
+    const currentBackup = await (await import('./db.js?v=5.17')).exportAll();
     downloadJSON(`orbita-backup-seguranca-antes-restauracao-${Date.now()}.json`, currentBackup);
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      await (await import('./db.js?v=5.15')).importAll(data);
+      await (await import('./db.js?v=5.17')).importAll(data);
       toast('Backup restaurado.', 'success');
       refreshApp();
     } catch { toast('Arquivo de backup inválido.', 'error'); }

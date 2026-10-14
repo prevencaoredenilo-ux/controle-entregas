@@ -1,0 +1,23 @@
+ÓRBITA v5.16 — PERFIL CONSULTA / MONITOR
+
+Esta atualização adiciona um perfil de acompanhamento em modo somente leitura.
+
+ACESSO DO PERFIL
+- Central Operacional
+- Central de Inteligência
+- Busca geral
+- Relatórios
+
+BLOQUEIOS
+- Não cadastra, edita ou exclui entregas.
+- Não inicia, edita ou finaliza ciclos.
+- Não registra KM, custos, retornos ou conclusão de entrega.
+- Não recalcula numeração, recupera registros ou altera metas/configurações.
+- Não acessa Cadastros, Lixeira ou Configurações.
+- Operação Real fixa para o perfil Monitor.
+
+DADOS
+- Nenhum histórico ou backup existente é alterado pela atualização.
+
+IMPORTANTE
+- A v5.16 cria o perfil de consulta local. Para enxergar a mesma operação em outro PC/celular em tempo real, ainda será necessária a sincronização online entre dispositivos.

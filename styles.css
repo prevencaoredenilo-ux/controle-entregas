@@ -3201,3 +3201,43 @@ tr:last-child td { border-bottom: none; }
   .cycle-edit-row:not(.available) .cycle-edit-toggle,
   .cycle-edit-row:not(.available) .cycle-edit-lock{grid-column:1}
 }
+
+/* v5.16 — Perfil Consulta / Monitor: somente leitura; mantido na v5.17 */
+.monitor-mode-badge {
+  display:inline-flex; align-items:center; justify-content:center; min-height:38px; padding:0 13px;
+  border-radius:999px; border:1px solid #b8d8c5; background:#eefaf3; color:#17633b;
+  font-size:10px; font-weight:900; letter-spacing:.08em; white-space:nowrap;
+}
+#envToggleBtn.monitor-locked { cursor:default !important; opacity:.92; }
+body[data-operator-role="consulta"] .command-dock,
+body[data-operator-role="consulta"] #panelStartCycle,
+body[data-operator-role="consulta"] #panelKmStart,
+body[data-operator-role="consulta"] .central-cycle-edit,
+body[data-operator-role="consulta"] .central-cycle-close,
+body[data-operator-role="consulta"] .central-km-close,
+body[data-operator-role="consulta"] .central-km-reopen,
+body[data-operator-role="consulta"] .arrival-row-btn,
+body[data-operator-role="consulta"] .completion-row-btn,
+body[data-operator-role="consulta"] .return-row-btn,
+body[data-operator-role="consulta"] #returnSpotlightBtn,
+body[data-operator-role="consulta"] #recalculateDayNumbersBtn,
+body[data-operator-role="consulta"] #recoverRouteEditBtn,
+body[data-operator-role="consulta"] #dashboardGoalsBtn,
+body[data-operator-role="consulta"] #kmNewBtn,
+body[data-operator-role="consulta"] .km-edit-all-btn,
+body[data-operator-role="consulta"] .km-close-btn,
+body[data-operator-role="consulta"] .km-reopen-btn,
+body[data-operator-role="consulta"] #costNewBtn,
+body[data-operator-role="consulta"] .cycle-edit-btn,
+body[data-operator-role="consulta"] .cycle-close-btn { display:none!important; }
+body[data-operator-role="consulta"] #heroKmAction,
+body[data-operator-role="consulta"] #heroCycleAction,
+body[data-operator-role="consulta"] [data-central-action] { cursor:default!important; pointer-events:none!important; }
+body[data-operator-role="consulta"] .monitor-readonly-form input:disabled,
+body[data-operator-role="consulta"] .monitor-readonly-form select:disabled,
+body[data-operator-role="consulta"] .monitor-readonly-form textarea:disabled {
+  opacity:1; color:var(--text); -webkit-text-fill-color:var(--text); background:#f5f8fa; cursor:default;
+}
+body[data-operator-role="consulta"] .monitor-readonly-form .delivery-number-edit-input:disabled {
+  font-weight:900; color:var(--ink); -webkit-text-fill-color:var(--ink);
+}

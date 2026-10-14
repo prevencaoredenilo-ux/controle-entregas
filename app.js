@@ -1,6 +1,6 @@
-import { ensureSeed, saveAutoBackup, enableWriteThroughAutoBackup } from './db.js?v=5.15';
-import { $, $$, toast, initTooltips, animateStatCards, performanceProfile } from './helpers.js?v=5.15';
-import * as V from './views.js?v=5.15';
+import { ensureSeed, saveAutoBackup, enableWriteThroughAutoBackup } from './db.js?v=5.17';
+import { $, $$, toast, initTooltips, animateStatCards, performanceProfile } from './helpers.js?v=5.17';
+import * as V from './views.js?v=5.17';
 
 let currentView = 'central';
 let currentRegistryTab = 'vehicles';
@@ -11,6 +11,7 @@ let operatorRole = localStorage.getItem('orbita_operator_role') || 'Administrado
 export function getEnv() { return environment; }
 export function getOperatorName() { return operatorName; }
 export function getOperatorRole() { return operatorRole; }
+export function isReadOnlyProfile() { return roleKey() === 'consulta'; }
 
 function roleKey(role=operatorRole){
   const value=String(role||'').toLowerCase();
@@ -81,16 +82,32 @@ function startLiveClock() {
 // 3) um snapshot de segurança a cada 1 minuto, mesmo sem novas alterações.
 function startAutoBackup() {
   saveAutoBackup('abertura').catch(() => {});
-  setInterval(() => saveAutoBackup('periodico-1min').catch(() => {}), 60 * 1000);
+  // Agenda o próximo snapshot somente depois de concluir o anterior, sem sobreposição.
+  const scheduleNext = () => {
+    setTimeout(async () => {
+      try { await saveAutoBackup('periodico-1min'); } catch {}
+      scheduleNext();
+    }, 60 * 1000);
+  };
+  scheduleNext();
 }
 
 function renderEnvPill() {
+  const readOnly = roleKey() === 'consulta';
   $('#envPill').textContent = environment === 'treino' ? '🎓 Treinamento' : '● Operação Real';
   $('#envPill').classList.toggle('treino', environment === 'treino');
-  $('#operatorLabel').textContent = operatorName ? `👤 ${operatorName} · ${operatorRole}` : 'Quem está operando?';
+  const shownRole = readOnly ? 'Consulta / Monitor' : operatorRole;
+  $('#operatorLabel').textContent = operatorName ? `👤 ${operatorName} · ${shownRole}` : 'Quem está operando?';
   document.body.dataset.operatorRole=roleKey();
   $$('.nav-item[data-view]').forEach((btn)=>btn.classList.toggle('role-hidden',!canAccessView(btn.dataset.view)));
   $('#newDeliveryBtn')?.classList.toggle('role-hidden',!canPerform('delivery_edit'));
+  $('#monitorModeBadge')?.classList.toggle('hidden', !readOnly);
+  const envBtn = $('#envToggleBtn');
+  if (envBtn) {
+    envBtn.disabled = readOnly;
+    envBtn.title = readOnly ? 'Perfil Consulta / Monitor acompanha somente a Operação Real.' : '';
+    envBtn.classList.toggle('monitor-locked', readOnly);
+  }
 }
 
 function wireNav() {
@@ -105,6 +122,7 @@ function wireNav() {
   });
   $('#menuBtn').addEventListener('click', () => $('#sidebar').classList.toggle('open'));
   $('#envToggleBtn').addEventListener('click', () => {
+    if (roleKey() === 'consulta') return toast('Perfil Consulta / Monitor acompanha somente a Operação Real.', '');
     environment = environment === 'real' ? 'treino' : 'real';
     localStorage.setItem('orbita_env', environment);
     renderEnvPill();
@@ -115,11 +133,11 @@ function wireNav() {
 }
 
 async function openOperatorPicker() {
-  const { Collaborators } = await import('./db.js?v=5.15');
+  const { Collaborators } = await import('./db.js?v=5.17');
   const list = (await Collaborators.all()).filter((c) => c.active !== false);
   openModal({
     title: 'Quem está operando agora?',
-    subtitle: 'Usado para personalizar a saudação e identificar quem fez cada lançamento.',
+    subtitle: 'Escolha o perfil do aparelho. Consulta / Monitor permite acompanhar a operação sem alterar dados.',
     body: `
       <form id="operatorForm">
         ${list.length ? `<label>Colaborador cadastrado
@@ -140,6 +158,12 @@ async function openOperatorPicker() {
         operatorRole = list.find((c)=>c.name===fd.existing)?.role || 'Líder';
         localStorage.setItem('orbita_operator', name);
         localStorage.setItem('orbita_operator_role',operatorRole);
+        if (roleKey() === 'consulta') {
+          environment = 'real';
+          localStorage.setItem('orbita_env', 'real');
+          currentView = 'central';
+          toast('Perfil Consulta / Monitor ativado: somente leitura.', 'success');
+        }
         renderEnvPill();
         closeModal();
         render();
@@ -382,7 +406,7 @@ async function render() {
 }
 
 async function updateBadges() {
-  const { Deliveries, Cycles } = await import('./db.js?v=5.15');
+  const { Deliveries, Cycles } = await import('./db.js?v=5.17');
   const rows = await Deliveries.active(environment);
   $('#pendingBadge').textContent = rows.filter((r) => r.status === 'na_loja').length;
   const trashed = await Deliveries.trashed(environment);
@@ -405,7 +429,7 @@ if ('serviceWorker' in navigator) {
     refreshingForUpdate = true;
     window.location.reload();
   });
-  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js?build=20260910-v5.15-ciclo-editavel', { updateViaCache: 'none' }).then((registration) => registration.update()).catch(() => {}));
+  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js?build=20261014-v5.17-memoria-segura', { updateViaCache: 'none' }).then((registration) => registration.update()).catch(() => {}));
 }
 
 boot();

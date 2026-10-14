@@ -1,0 +1,20 @@
+ÓRBITA v5.17 — ESTABILIDADE DE MEMÓRIA E PROTEÇÃO DE BACKUPS
+
+O que foi corrigido:
+- Evita carregar os 50 backups completos na memória apenas para ordenar a lista.
+- Evita sobreposição de snapshots automáticos periódicos.
+- Agrupa alterações feitas em sequência para evitar filas excessivas de backups completos.
+- Usa apenas a lista de identificadores para administrar a retenção dos novos backups.
+- A nova retenção só remove backups criados pela rotina segura da v5.17; os backups existentes antes desta atualização são preservados.
+
+Segurança dos dados:
+- Mantém o banco IndexedDB `orbita-v2` e a versão do banco existente.
+- Não migra, renumera, apaga ou sobrescreve históricos operacionais existentes.
+- Não modifica o conteúdo dos backups já gravados.
+- A atualização não sincroniza dados entre dispositivos; isso continua dependendo de uma solução online separada.
+
+Atualização recomendada:
+1. Não limpe os dados do site no navegador.
+2. Faça uma cópia manual do backup JSON, se ainda conseguir abrir as configurações.
+3. Publique os arquivos desta versão no mesmo local do GitHub Pages.
+4. Abra o site e faça uma recarga forçada (Ctrl+F5) após a publicação.

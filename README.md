@@ -1,4 +1,13 @@
-# Órbita — Controle de Entregas (v5.15)
+# Órbita — Controle de Entregas (v5.17)
+
+## v5.17 — Estabilidade de memória e proteção de backups
+
+- Backups automáticos enfileirados para não executar snapshots completos em paralelo.
+- Alterações consecutivas são agrupadas em um snapshot do estado mais recente.
+- A listagem de backups lê somente metadados para a tela de configurações, sem manter todos os arquivos de backup na memória.
+- A retenção da nova rotina administra apenas os backups criados por ela; backups anteriores são preservados intactos.
+- Não altera o nome, a versão nem o conteúdo das tabelas de histórico operacional já existentes.
+
 
 
 ## Atualização v5.15 — Ciclo editável após início
@@ -287,3 +296,15 @@ Você indicou o repositório `prevencaoredenilo-ux/controle-entregas` (V14.8) co
 - Botão Ver resposta com maior destaque.
 - Cache/service worker alterado para forçar a chegada desta atualização.
 - Nenhuma outra área funcional foi alterada.
+
+
+## v5.16 — Perfil Consulta / Monitor
+- Novo perfil `Consulta / Monitor` nos colaboradores.
+- Acesso somente à Central Operacional, Central de Inteligência, Busca geral e Relatórios.
+- Todos os comandos de alteração ficam bloqueados/ocultos.
+- Entregas abertas pelo perfil ficam em modo somente leitura.
+- O perfil abre sempre a Operação Real e não pode alternar para Treinamento.
+- Selo `SOMENTE LEITURA` visível no topo.
+- Não altera históricos nem backups existentes.
+
+Observação: nesta arquitetura local, outro dispositivo ainda não recebe automaticamente os mesmos dados. O perfil de consulta está pronto; visualização ao vivo entre aparelhos exigirá a sincronização online futura.
