@@ -1,7 +1,7 @@
-const CACHE_PREFIX = 'orbita-v517-memoria-segura-';
+const CACHE_PREFIX = 'orbita-v518-custos-editaveis-';
 const CACHE = `${CACHE_PREFIX}1`;
 const ASSETS = [
-  './', './index.html', './styles.css?v=5.17', './app.js?v=5.17', './db.js?v=5.17', './helpers.js?v=5.17', './views.js?v=5.17', './excel-report.js?v=5.17', './manifest.webmanifest?v=5.17',
+  './', './index.html', './styles.css?v=5.18', './app.js?v=5.18', './db.js?v=5.18', './helpers.js?v=5.18', './views.js?v=5.18', './excel-report.js?v=5.18', './manifest.webmanifest?v=5.18',
   './assets/brand/nilo-logo.png', './assets/brand/mascote.png', './assets/brand/triela-logo.png',
   './icons/icon-192.png', './icons/icon-512.png',
 ];

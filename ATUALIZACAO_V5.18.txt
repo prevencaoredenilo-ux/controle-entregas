@@ -1,0 +1,19 @@
+ÓRBITA v5.18 — EDIÇÃO E ANULAÇÃO SEGURA DE CUSTOS
+
+O que mudou:
+- A tela Custos/Financeiro agora oferece Editar e Anular em cada despesa ativa.
+- A edição permite corrigir data, categoria, veículo, entregador, valor e observação.
+- A anulação exige motivo, mantém o registro armazenado e retira o valor dos cálculos financeiros e relatórios.
+- Os lançamentos anulados ficam consultáveis e podem ser reativados com justificativa.
+- Criação, edição, anulação e reativação são registradas pela auditoria já existente.
+
+Proteção dos dados:
+- Mantém o banco IndexedDB orbita-v2 e sua versão existente.
+- Não apaga nem regrava fisicamente despesas, históricos operacionais ou backups antigos.
+- A atualização não publica automaticamente o site: os arquivos precisam ser enviados ao repositório do GitHub Pages.
+
+Publicação recomendada:
+1. Antes de atualizar, exporte um backup JSON pelas Configurações se o sistema estiver acessível.
+2. Não limpe os dados do site no Chrome.
+3. Publique todos os arquivos desta versão no mesmo local do GitHub Pages.
+4. Depois da publicação, abra o site e use Ctrl+F5.

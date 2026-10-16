@@ -1,7 +1,7 @@
-import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters } from './db.js?v=5.17';
-import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=5.17';
-import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=5.17';
-import { exportFullExcelReport } from './excel-report.js?v=5.17';
+import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters } from './db.js?v=5.18';
+import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=5.18';
+import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=5.18';
+import { exportFullExcelReport } from './excel-report.js?v=5.18';
 
 const DEFAULT_OPERATIONAL_TARGETS = { startMinutes:120, arrivalMinutes:210, warningMinutes:30, successTarget:90 };
 
@@ -2263,7 +2263,9 @@ function openKmReopenModal(log) {
    ========================================================= */
 export async function renderCosts() {
   const env = getEnv();
-  const costs = (await Costs.all()).filter((c) => c.environment === env && !c.deletedAt).sort((a, b) => b.date.localeCompare(a.date));
+  const allCosts = (await Costs.all()).filter((c) => c.environment === env);
+  const costs = allCosts.filter((c) => !c.deletedAt).sort((a, b) => b.date.localeCompare(a.date));
+  const annulledCosts = allCosts.filter((c) => !!c.deletedAt).sort((a, b) => (b.voidedAt || b.deletedAt || '').localeCompare(a.voidedAt || a.deletedAt || ''));
   const categories = await CostCategories.all();
   const vehicles = await Vehicles.all();
   const drivers = await Drivers.all();
@@ -2272,8 +2274,27 @@ export async function renderCosts() {
   const dName = (id) => drivers.find((d) => d.id === id)?.name || '—';
 
   const rows = costs.map((c) => `
-    <tr><td>${dateBR(c.date)}</td><td>${escapeHtml(catName(c.categoryId))}</td><td>${escapeHtml(vName(c.vehicleId))}</td><td>${escapeHtml(dName(c.driverId))}</td><td>${money(c.amount)}</td><td>${escapeHtml(c.note || '')}</td></tr>
-  `).join('');
+    <tr data-cost-row="${escapeHtml(c.id)}">
+      <td>${dateBR(c.date)}</td>
+      <td>${escapeHtml(catName(c.categoryId))}</td>
+      <td>${escapeHtml(vName(c.vehicleId))}</td>
+      <td>${escapeHtml(dName(c.driverId))}</td>
+      <td><strong>${money(c.amount)}</strong></td>
+      <td>${escapeHtml(c.note || '')}</td>
+      <td><div style="display:flex;gap:5px;white-space:nowrap"><button type="button" class="btn-ghost btn-small" data-cost-edit="${escapeHtml(c.id)}">Editar</button><button type="button" class="btn-danger-text" data-cost-void="${escapeHtml(c.id)}">Anular</button></div></td>
+    </tr>`).join('');
+
+  const annulledRows = annulledCosts.map((c) => `
+    <tr data-cost-row="${escapeHtml(c.id)}">
+      <td>${dateBR(c.date)}</td>
+      <td>${escapeHtml(catName(c.categoryId))}</td>
+      <td>${escapeHtml(vName(c.vehicleId))}</td>
+      <td>${escapeHtml(dName(c.driverId))}</td>
+      <td>${money(c.amount)}</td>
+      <td>${escapeHtml(c.note || '')}</td>
+      <td>${escapeHtml(c.voidReason || 'Motivo não informado')}<br><small class="delivery-times">${escapeHtml(c.voidedBy || 'Operador não identificado')} · ${dateTimeBR(c.voidedAt || c.deletedAt)}</small></td>
+      <td><button type="button" class="btn-ghost btn-small" data-cost-restore="${escapeHtml(c.id)}">Reativar</button></td>
+    </tr>`).join('');
 
   const financial = await computeFinancialSummary(env);
 
@@ -2281,7 +2302,7 @@ export async function renderCosts() {
     <div class="stat-row">
       <div class="stat-card"><small>Total de taxas</small><strong>${money(financial.fees)}</strong></div>
       <div class="stat-card"><small>Reembolsos</small><strong>${money(financial.refunds)}</strong></div>
-      <div class="stat-card"><small>Custos</small><strong>${money(financial.costsTotal)}</strong></div>
+      <div class="stat-card"><small>Custos ativos</small><strong>${money(financial.costsTotal)}</strong></div>
       <div class="stat-card accent"><small>Saldo</small><strong>${money(financial.balance)}</strong></div>
     </div>
     <div class="stat-row" style="grid-template-columns:1fr 1fr">
@@ -2289,7 +2310,9 @@ export async function renderCosts() {
       <div class="stat-card"><small>Custo por entrega</small><strong>${financial.deliveredCount ? money(financial.costsTotal / financial.deliveredCount) : '—'}</strong></div>
     </div>
     <div style="margin:16px 0"><button class="btn-primary" id="costNewBtn">＋ Registrar custo</button></div>
-    ${costs.length ? `<div class="table-wrap"><table><thead><tr><th>Data</th><th>Categoria</th><th>Veículo</th><th>Entregador</th><th>Valor</th><th>Obs.</th></tr></thead><tbody>${rows}</tbody></table></div>` : `<div class="empty-state"><strong>Nenhum custo lançado</strong></div>`}
+    <p style="font-size:12px;color:var(--text-muted);margin:0 0 10px">Você pode editar um lançamento ou anulá-lo se foi registrado em duplicidade. A anulação não apaga o histórico e retira o valor dos cálculos financeiros.</p>
+    ${costs.length ? `<div class="table-wrap"><table><thead><tr><th>Data</th><th>Categoria</th><th>Veículo</th><th>Entregador</th><th>Valor</th><th>Obs.</th><th>Ações</th></tr></thead><tbody>${rows}</tbody></table></div>` : `<div class="empty-state"><strong>Nenhum custo ativo lançado</strong><span>Registre um custo ou consulte os lançamentos anulados abaixo.</span></div>`}
+    ${annulledCosts.length ? `<details style="margin-top:18px"><summary style="cursor:pointer;font-weight:800;padding:10px 0">Lançamentos anulados (${annulledCosts.length}) — fora dos cálculos financeiros</summary><p style="font-size:12px;color:var(--text-muted);margin:0 0 10px">Os registros anulados permanecem guardados para conferência. Se uma anulação foi feita por engano, use Reativar.</p><div class="table-wrap"><table><thead><tr><th>Data</th><th>Categoria</th><th>Veículo</th><th>Entregador</th><th>Valor</th><th>Obs.</th><th>Motivo / registro da anulação</th><th>Ação</th></tr></thead><tbody>${annulledRows}</tbody></table></div></details>` : ''}
   `;
 }
 
@@ -2305,35 +2328,123 @@ async function computeFinancialSummary(env) {
 }
 
 export function wireCostsEvents() {
-  $('#costNewBtn')?.addEventListener('click', openCostModal);
+  $('#costNewBtn')?.addEventListener('click', () => openCostModal());
+  $$('[data-cost-edit]').forEach((btn) => btn.addEventListener('click', () => openCostModal(btn.dataset.costEdit)));
+  $$('[data-cost-void]').forEach((btn) => btn.addEventListener('click', () => openCostVoidModal(btn.dataset.costVoid)));
+  $$('[data-cost-restore]').forEach((btn) => btn.addEventListener('click', () => openCostRestoreModal(btn.dataset.costRestore)));
 }
 
-async function openCostModal() {
-  if(!canPerform('cost'))return toast('Seu perfil não pode lançar custos.','error');
-  const categories = (await CostCategories.all()).filter((c) => c.active);
+async function openCostModal(costId = null) {
+  if (!canPerform('cost')) return toast('Seu perfil não pode editar ou lançar custos.', 'error');
+  const existing = costId ? await Costs.get(costId) : null;
+  if (costId && (!existing || existing.environment !== getEnv() || existing.deletedAt)) {
+    toast('Este lançamento não está disponível para edição.', 'error');
+    return;
+  }
+  const allCategories = await CostCategories.all();
+  const categories = allCategories.filter((c) => c.active || String(c.id) === String(existing?.categoryId || ''));
   const vehicles = await Vehicles.all();
   const drivers = await Drivers.all();
+  const dateValue = existing?.date || new Date().toISOString().slice(0, 10);
+  const categoryOptions = categories.map((c) => `<option value="${escapeHtml(c.id)}" ${String(existing?.categoryId || '') === String(c.id) ? 'selected' : ''}>${escapeHtml(c.name)}${c.active ? '' : ' (inativa)'}</option>`).join('');
+  const vehicleOptions = vehicles.map((v) => `<option value="${escapeHtml(v.id)}" ${String(existing?.vehicleId || '') === String(v.id) ? 'selected' : ''}>${escapeHtml(v.label)}</option>`).join('');
+  const driverOptions = drivers.map((d) => `<option value="${escapeHtml(d.id)}" ${String(existing?.driverId || '') === String(d.id) ? 'selected' : ''}>${escapeHtml(d.name)}</option>`).join('');
   openModal({
-    title: 'Registrar custo',
+    title: existing ? 'Editar despesa' : 'Registrar custo',
+    subtitle: existing ? 'As alterações serão registradas na auditoria.' : 'Preencha os dados do lançamento.',
     body: `
       <form id="costForm">
-        <label>Data *<input type="date" name="date" required value="${new Date().toISOString().slice(0,10)}" /></label>
-        <label>Categoria *<select name="categoryId" required><option value="">Selecione…</option>${categories.map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}</select></label>
+        <label>Data *<input type="date" name="date" required value="${escapeHtml(dateValue)}" /></label>
+        <label>Categoria *<select name="categoryId" required><option value="">Selecione…</option>${categoryOptions}</select></label>
         <div class="field-row">
-          <label>Veículo<select name="vehicleId"><option value="">—</option>${vehicles.map((v) => `<option value="${v.id}">${escapeHtml(v.label)}</option>`).join('')}</select></label>
-          <label>Entregador<select name="driverId"><option value="">—</option>${drivers.map((d) => `<option value="${d.id}">${escapeHtml(d.name)}</option>`).join('')}</select></label>
+          <label>Veículo<select name="vehicleId"><option value="">—</option>${vehicleOptions}</select></label>
+          <label>Entregador<select name="driverId"><option value="">—</option>${driverOptions}</select></label>
         </div>
-        <label>Valor *<input type="number" step="0.01" min="0" name="amount" required /></label>
-        <label>Comprovante/observação<textarea name="note" rows="2"></textarea></label>
+        <label>Valor (R$) *<input type="number" step="0.01" min="0" name="amount" required value="${existing ? escapeHtml(String(existing.amount ?? '')) : ''}" /></label>
+        <label>Comprovante/observação<textarea name="note" rows="2">${escapeHtml(existing?.note || '')}</textarea></label>
       </form>`,
     actions: [
       { label: 'Cancelar', kind: 'ghost', onClick: closeModal },
-      { label: 'Salvar', kind: 'primary', onClick: async () => {
+      { label: existing ? 'Salvar alterações' : 'Salvar', kind: 'primary', onClick: async () => {
         const form = $('#costForm');
         if (!form.reportValidity()) return;
         const fd = Object.fromEntries(new FormData(form).entries());
-        await Costs.add({ environment: getEnv(), date: fd.date, categoryId: fd.categoryId, vehicleId: fd.vehicleId || null, driverId: fd.driverId || null, amount: Number(fd.amount), note: fd.note, deletedAt: null });
-        toast('Custo registrado.', 'success');
+        const amount = Number(fd.amount);
+        if (!Number.isFinite(amount) || amount < 0) return toast('Informe um valor válido para a despesa.', 'error');
+        const patch = { date: fd.date, categoryId: fd.categoryId, vehicleId: fd.vehicleId || null, driverId: fd.driverId || null, amount, note: String(fd.note || '').trim() };
+        if (existing) {
+          const latest = await Costs.get(existing.id);
+          if (!latest || latest.environment !== getEnv() || latest.deletedAt) {
+            toast('Este lançamento não está mais ativo. Atualize a tela antes de continuar.', 'error');
+            closeModal(); refreshApp(); return;
+          }
+          await Costs.update(existing.id, patch);
+          toast('Despesa atualizada e registrada na auditoria.', 'success');
+        } else {
+          await Costs.add({ environment: getEnv(), ...patch, deletedAt: null });
+          toast('Custo registrado.', 'success');
+        }
+        closeModal(); refreshApp();
+      }},
+    ],
+  });
+}
+
+async function openCostVoidModal(costId) {
+  if (!canPerform('cost')) return toast('Seu perfil não pode anular custos.', 'error');
+  const cost = await Costs.get(costId);
+  if (!cost || cost.environment !== getEnv() || cost.deletedAt) return toast('Este lançamento não está ativo para anulação.', 'error');
+  const [categories, vehicles, drivers] = await Promise.all([CostCategories.all(), Vehicles.all(), Drivers.all()]);
+  const category = categories.find((c) => String(c.id) === String(cost.categoryId))?.name || '—';
+  const vehicle = vehicles.find((v) => String(v.id) === String(cost.vehicleId))?.label || '—';
+  const driver = drivers.find((d) => String(d.id) === String(cost.driverId))?.name || '—';
+  openModal({
+    title: 'Anular despesa',
+    subtitle: 'O registro será preservado para auditoria e deixará de entrar nos cálculos.',
+    body: `<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:14px"><div><small>Data</small><strong>${dateBR(cost.date)}</strong></div><div><small>Valor</small><strong>${money(cost.amount)}</strong></div><div><small>Categoria</small><strong>${escapeHtml(category)}</strong></div><div><small>Veículo / entregador</small><strong>${escapeHtml(vehicle)} / ${escapeHtml(driver)}</strong></div></div><p style="font-size:12px;color:var(--text-muted)">Use esta opção para um lançamento duplicado ou incorreto. A despesa não será apagada.</p><form id="costVoidForm"><label>Motivo da anulação *<textarea id="costVoidReason" name="reason" rows="3" required placeholder="Ex.: despesa registrada duas vezes; manter apenas o outro lançamento."></textarea></label></form>`,
+    actions: [
+      { label: 'Voltar', kind: 'ghost', onClick: closeModal },
+      { label: 'Confirmar anulação', kind: 'danger', onClick: async () => {
+        const form = $('#costVoidForm');
+        if (!form.reportValidity()) return;
+        const reason = String(new FormData(form).get('reason') || '').trim();
+        if (!reason) return toast('Informe o motivo da anulação.', 'error');
+        const latest = await Costs.get(cost.id);
+        if (!latest || latest.environment !== getEnv() || latest.deletedAt) {
+          toast('Este lançamento já foi alterado ou anulado.', 'error');
+          closeModal(); refreshApp(); return;
+        }
+        const now = new Date().toISOString();
+        await Costs.update(cost.id, { deletedAt: now, voidedAt: now, voidedBy: getOperatorName() || 'Não identificado', voidReason: reason });
+        toast('Despesa anulada. O valor foi retirado dos cálculos e o histórico foi preservado.', 'success');
+        closeModal(); refreshApp();
+      }},
+    ],
+  });
+}
+
+async function openCostRestoreModal(costId) {
+  if (!canPerform('cost')) return toast('Seu perfil não pode reativar custos.', 'error');
+  const cost = await Costs.get(costId);
+  if (!cost || cost.environment !== getEnv() || !cost.deletedAt) return toast('Este lançamento não está anulado.', 'error');
+  openModal({
+    title: 'Reativar despesa anulada',
+    subtitle: 'O valor voltará a compor os custos, saldo e relatórios.',
+    body: `<p>Despesa de <strong>${money(cost.amount)}</strong>, datada de ${dateBR(cost.date)}.</p><form id="costRestoreForm"><label>Motivo da reativação *<textarea name="reason" rows="3" required placeholder="Explique por que o lançamento deve voltar aos cálculos."></textarea></label></form>`,
+    actions: [
+      { label: 'Cancelar', kind: 'ghost', onClick: closeModal },
+      { label: 'Reativar lançamento', kind: 'primary', onClick: async () => {
+        const form = $('#costRestoreForm');
+        if (!form.reportValidity()) return;
+        const reason = String(new FormData(form).get('reason') || '').trim();
+        if (!reason) return toast('Informe o motivo da reativação.', 'error');
+        const latest = await Costs.get(cost.id);
+        if (!latest || latest.environment !== getEnv() || !latest.deletedAt) {
+          toast('Este lançamento já foi alterado.', 'error');
+          closeModal(); refreshApp(); return;
+        }
+        await Costs.update(cost.id, { deletedAt: null, restoredAt: new Date().toISOString(), restoredBy: getOperatorName() || 'Não identificado', restoreReason: reason });
+        toast('Despesa reativada e incluída novamente nos cálculos.', 'success');
         closeModal(); refreshApp();
       }},
     ],
@@ -3168,9 +3279,17 @@ export function wireReportsEvents() {
 export async function renderAudit() {
   const log = await AuditLog.all();
   if (!log.length) return `<div class="empty-state"><strong>Sem eventos ainda</strong></div>`;
-  const rows = log.slice(0, 200).map((e) => `
-    <tr><td>${dateTimeBR(e.at)}</td><td>${escapeHtml(e.operator || 'Não identificado')}<br><small class="delivery-times">${escapeHtml(e.operatorRole || '')}</small></td><td>${escapeHtml(e.entityTable)}</td><td>${e.action}</td><td style="font-family:monospace;font-size:11px">${escapeHtml(e.entityId).slice(0,14)}</td></tr>
-  `).join('');
+  const rows = log.slice(0, 200).map((e) => {
+    let actionLabel = e.action;
+    if (e.entityTable === 'costs' && e.action === 'update') {
+      if (e.after?.deletedAt && !e.before?.deletedAt) actionLabel = 'Anular despesa';
+      else if (!e.after?.deletedAt && e.before?.deletedAt) actionLabel = 'Reativar despesa';
+      else actionLabel = 'Editar despesa';
+    }
+    return `
+      <tr><td>${dateTimeBR(e.at)}</td><td>${escapeHtml(e.operator || 'Não identificado')}<br><small class="delivery-times">${escapeHtml(e.operatorRole || '')}</small></td><td>${escapeHtml(e.entityTable)}</td><td>${escapeHtml(actionLabel)}</td><td style="font-family:monospace;font-size:11px">${escapeHtml(e.entityId).slice(0,14)}</td></tr>
+    `;
+  }).join('');
   return `<div class="table-wrap"><table><thead><tr><th>Quando</th><th>Operador</th><th>Entidade</th><th>Ação</th><th>ID</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
@@ -3396,7 +3515,7 @@ function openVehicleAddModal(record = null) {
    ========================================================= */
 export async function renderSettings() {
   const cfg = JSON.parse(localStorage.getItem('orbita_settings') || '{}');
-  const { listAutoBackups } = await import('./db.js?v=5.17');
+  const { listAutoBackups } = await import('./db.js?v=5.18');
   const autoBackups = await listAutoBackups();
   const backupReasonLabel = (reason = '') => reason === 'abertura' ? 'Abertura do sistema' : reason === 'periodico-1min' ? 'Segurança · 1 minuto' : reason ? 'Alteração salva' : 'Automático';
   const autoList = autoBackups.length
@@ -3434,13 +3553,13 @@ export async function renderSettings() {
 export function wireSettingsEvents() {
   $$('.auto-restore-btn').forEach((btn) => btn.addEventListener('click', async () => {
     if (!confirm('Restaurar esse backup automático vai substituir os dados atuais. Continuar?')) return;
-    const { restoreAutoBackup } = await import('./db.js?v=5.17');
+    const { restoreAutoBackup } = await import('./db.js?v=5.18');
     await restoreAutoBackup(btn.dataset.id);
     toast('Backup automático restaurado.', 'success');
     refreshApp();
   }));
   $('#settingsBackupBtn')?.addEventListener('click', async () => {
-    const data = await (await import('./db.js?v=5.17')).exportAll();
+    const data = await (await import('./db.js?v=5.18')).exportAll();
     downloadJSON(`orbita-backup-completo-${new Date().toISOString().slice(0,10)}.json`, data);
     toast('Backup completo gerado.', 'success');
   });
@@ -3448,12 +3567,12 @@ export function wireSettingsEvents() {
     const file = e.target.files[0];
     if (!file) return;
     if (!confirm('Isso vai substituir os dados atuais pelo conteúdo do backup. Um backup de segurança dos dados atuais será baixado antes. Continuar?')) { e.target.value = ''; return; }
-    const currentBackup = await (await import('./db.js?v=5.17')).exportAll();
+    const currentBackup = await (await import('./db.js?v=5.18')).exportAll();
     downloadJSON(`orbita-backup-seguranca-antes-restauracao-${Date.now()}.json`, currentBackup);
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      await (await import('./db.js?v=5.17')).importAll(data);
+      await (await import('./db.js?v=5.18')).importAll(data);
       toast('Backup restaurado.', 'success');
       refreshApp();
     } catch { toast('Arquivo de backup inválido.', 'error'); }

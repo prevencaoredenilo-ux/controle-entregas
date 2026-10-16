@@ -1,4 +1,12 @@
-# Órbita — Controle de Entregas (v5.17)
+# Órbita — Controle de Entregas (v5.18)
+
+## v5.18 — Edição e anulação segura de custos
+
+- A tela Custos/Financeiro permite editar data, categoria, veículo, entregador, valor e observação de um lançamento existente.
+- Cada custo ativo tem a opção Anular, com motivo obrigatório; o registro permanece armazenado e a ação entra na auditoria.
+- Custos anulados deixam de compor saldo, custo por KM, custo por entrega, painel e relatórios.
+- A lista de anulados permite consultar o motivo e reativar um lançamento, com motivo obrigatório e novo evento de auditoria.
+- Não há exclusão física de despesas nem migração, renumeração ou sobrescrita de históricos/backups existentes.
 
 ## v5.17 — Estabilidade de memória e proteção de backups
 
