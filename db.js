@@ -210,8 +210,155 @@ export const CostCategories = genericStore('costCategories');
 export const ReturnReasons = genericStore('returnReasons');
 export const Cycles = genericStore('cycles');
 const odometerLogsBase = genericStore('odometerLogs');
+function odometerLocalDateKey(value) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return '';
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+function odometerAuditEntry(entityId, action, before, after, at) {
+  return {
+    id: uid('aud'), entityTable: 'odometerLogs', entityId, action,
+    operator: typeof localStorage !== 'undefined' ? (localStorage.getItem('orbita_operator') || '') : '',
+    operatorRole: typeof localStorage !== 'undefined' ? (localStorage.getItem('orbita_operator_role') || '') : '',
+    before: JSON.parse(JSON.stringify(before)),
+    after: JSON.parse(JSON.stringify(after)),
+    at,
+  };
+}
 export const OdometerLogs = {
   ...odometerLogsBase,
+  // Registros excluídos continuam no banco/backup, mas ficam fora da operação e dos relatórios.
+  async active(environment = null) {
+    const rows = await odometerLogsBase.all();
+    return rows.filter((row) => !row.deletedAt && (environment == null || row.environment === environment));
+  },
+  async trashed(environment = null) {
+    const rows = await odometerLogsBase.all();
+    return rows.filter((row) => !!row.deletedAt && (environment == null || row.environment === environment));
+  },
+  // Exclusão lógica e auditada. Não apaga o expediente nem permite quebrar ciclos históricos.
+  async softDelete(id, reason) {
+    const cleanReason = String(reason || '').trim();
+    if (!cleanReason) throw new Error('Informe o motivo da exclusão.');
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(['odometerLogs', 'cycles', 'auditLog'], 'readwrite');
+      const kmStore = transaction.objectStore('odometerLogs');
+      const cycleStore = transaction.objectStore('cycles');
+      const auditStore = transaction.objectStore('auditLog');
+      const kmRequest = kmStore.get(id);
+      const cyclesRequest = cycleStore.getAll();
+      let pending = 2;
+      let before = null;
+      let cycles = [];
+      let customError = null;
+      let result = null;
+      const finish = () => {
+        pending -= 1;
+        if (pending > 0) return;
+        if (!before) {
+          customError = new Error('Registro de quilometragem não encontrado.');
+          transaction.abort();
+          return;
+        }
+        if (before.deletedAt) {
+          customError = new Error('Este registro já está na lixeira.');
+          transaction.abort();
+          return;
+        }
+        const linkedCycles = cycles.filter((cycle) => cycle.environment === before.environment && cycle.odometerLogId === id);
+        const legacyCycles = cycles.filter((cycle) => cycle.environment === before.environment && !cycle.odometerLogId && String(cycle.vehicleId || '') === String(before.vehicleId || '') && odometerLocalDateKey(cycle.startedAt) === before.shiftDate);
+        if (linkedCycles.length || legacyCycles.length) {
+          const count = linkedCycles.length + legacyCycles.length;
+          customError = new Error(`Não é possível excluir: este expediente possui ${count} ciclo(s) vinculado(s). Para corrigir o veículo, use “Editar KM inicial/final”.`);
+          transaction.abort();
+          return;
+        }
+        const now = new Date().toISOString();
+        const operator = typeof localStorage !== 'undefined' ? (localStorage.getItem('orbita_operator') || '') : '';
+        const after = {
+          ...before,
+          deletedAt: now,
+          deletedBy: operator,
+          deleteReason: cleanReason,
+          deletionHistory: [...(before.deletionHistory || []), { action: 'delete', reason: cleanReason, by: operator, at: now }],
+          updatedAt: now,
+        };
+        kmStore.put(after);
+        auditStore.add(odometerAuditEntry(id, 'soft_delete', before, after, now));
+        result = after;
+      };
+      kmRequest.onsuccess = () => { before = kmRequest.result || null; finish(); };
+      cyclesRequest.onsuccess = () => { cycles = cyclesRequest.result || []; finish(); };
+      kmRequest.onerror = cyclesRequest.onerror = (event) => {
+        customError = event.target?.error || new Error('Não foi possível conferir os ciclos vinculados.');
+        try { transaction.abort(); } catch (_) {}
+      };
+      transaction.oncomplete = () => { requestWriteThroughBackup('odometerLogs:soft-delete'); resolve(result); };
+      transaction.onerror = () => reject(customError || transaction.error || new Error('Falha ao excluir o registro de quilometragem.'));
+      transaction.onabort = () => reject(customError || transaction.error || new Error('Exclusão cancelada.'));
+    });
+  },
+  // Restauração mantém o mesmo ID e impede duplicidade de veículo/data.
+  async restore(id, reason = 'Restauração de registro de quilometragem') {
+    const cleanReason = String(reason || '').trim();
+    if (!cleanReason) throw new Error('Informe o motivo da restauração.');
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(['odometerLogs', 'auditLog'], 'readwrite');
+      const kmStore = transaction.objectStore('odometerLogs');
+      const auditStore = transaction.objectStore('auditLog');
+      const kmRequest = kmStore.get(id);
+      const allRequest = kmStore.getAll();
+      let pending = 2;
+      let before = null;
+      let allLogs = [];
+      let customError = null;
+      let result = null;
+      const finish = () => {
+        pending -= 1;
+        if (pending > 0) return;
+        if (!before || !before.deletedAt) {
+          customError = new Error('Este registro não está na lixeira.');
+          transaction.abort();
+          return;
+        }
+        const duplicate = allLogs.find((row) => row.id !== id && !row.deletedAt && row.environment === before.environment && row.shiftDate === before.shiftDate && String(row.vehicleId || '') === String(before.vehicleId || ''));
+        if (duplicate) {
+          customError = new Error('Não é possível restaurar: já existe um registro ativo para este veículo nesta data.');
+          transaction.abort();
+          return;
+        }
+        const now = new Date().toISOString();
+        const operator = typeof localStorage !== 'undefined' ? (localStorage.getItem('orbita_operator') || '') : '';
+        const after = {
+          ...before,
+          deletedAt: null,
+          deletedBy: null,
+          restorationHistory: [...(before.restorationHistory || []), { fromDeletedAt: before.deletedAt, reason: cleanReason, by: operator, at: now }],
+          restoredAt: now,
+          restoredBy: operator,
+          restoreReason: cleanReason,
+          updatedAt: now,
+        };
+        kmStore.put(after);
+        auditStore.add(odometerAuditEntry(id, 'restore', before, after, now));
+        result = after;
+      };
+      kmRequest.onsuccess = () => { before = kmRequest.result || null; finish(); };
+      allRequest.onsuccess = () => { allLogs = allRequest.result || []; finish(); };
+      kmRequest.onerror = allRequest.onerror = (event) => {
+        customError = event.target?.error || new Error('Não foi possível consultar os registros.');
+        try { transaction.abort(); } catch (_) {}
+      };
+      transaction.oncomplete = () => { requestWriteThroughBackup('odometerLogs:restore'); resolve(result); };
+      transaction.onerror = () => reject(customError || transaction.error || new Error('Falha ao restaurar o registro de quilometragem.'));
+      transaction.onabort = () => reject(customError || transaction.error || new Error('Restauração cancelada.'));
+    });
+  },
   // Correção do expediente + vínculos operacionais em uma única transação IndexedDB.
   // Evita que o KM mude de veículo enquanto ciclos/entregas vinculados permaneçam no veículo antigo.
   async updateWithRelatedRecords(id, patch, options = {}) {
@@ -250,8 +397,8 @@ export const OdometerLogs = {
       const applyChanges = () => {
         pending -= 1;
         if (pending > 0) return;
-        if (!beforeLog) {
-          customError = new Error('Registro de quilometragem não encontrado.');
+        if (!beforeLog || beforeLog.deletedAt) {
+          customError = new Error('Registro de quilometragem não encontrado ou já excluído.');
           transaction.abort();
           return;
         }

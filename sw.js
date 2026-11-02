@@ -1,7 +1,7 @@
-const CACHE_PREFIX = 'orbita-v519-veiculo-km-editavel-';
+const CACHE_PREFIX = 'orbita-v520-exclusao-segura-km-';
 const CACHE = `${CACHE_PREFIX}1`;
 const ASSETS = [
-  './', './index.html', './styles.css?v=5.19', './app.js?v=5.19', './db.js?v=5.19', './helpers.js?v=5.19', './views.js?v=5.19', './excel-report.js?v=5.19', './manifest.webmanifest?v=5.19',
+  './', './index.html', './styles.css?v=5.20', './app.js?v=5.20', './db.js?v=5.20', './helpers.js?v=5.20', './views.js?v=5.20', './excel-report.js?v=5.20', './manifest.webmanifest?v=5.20',
   './assets/brand/nilo-logo.png', './assets/brand/mascote.png', './assets/brand/triela-logo.png',
   './icons/icon-192.png', './icons/icon-512.png',
 ];

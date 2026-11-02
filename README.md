@@ -1,4 +1,13 @@
-# Órbita — Controle de Entregas (v5.19)
+# Órbita — Controle de Entregas (v5.20)
+
+## v5.20 — Exclusão segura de registros de quilometragem
+
+- A tela Quilometragem permite enviar um expediente incorreto ou duplicado para a lixeira, com motivo obrigatório.
+- Registros excluídos deixam de participar dos indicadores, relatórios, liberação de ciclos e validação de duplicidade.
+- A seção “Registros excluídos” permite consultar e restaurar um expediente. A restauração verifica se já existe outro registro ativo para o mesmo veículo e data.
+- A exclusão é bloqueada quando há ciclo vinculado ao expediente ou ciclo legado do mesmo veículo/data sem vínculo explícito.
+- Exclusão e restauração são registradas na auditoria. O registro não é apagado fisicamente e continua incluído nos backups completos.
+- Banco de dados mantido em orbita-v2 / versão 4; sem migração ou limpeza de históricos/backups anteriores.
 
 ## v5.19 — Edição do veículo e da data do expediente de KM
 

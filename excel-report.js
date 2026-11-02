@@ -1,5 +1,5 @@
-import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, Cycles, OdometerLogs, Costs, DayClosures } from './db.js?v=5.7';
-import { STATUS_META } from './helpers.js?v=5.7';
+import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, Cycles, OdometerLogs, Costs, DayClosures } from './db.js?v=5.20';
+import { STATUS_META } from './helpers.js?v=5.20';
 
 const DEFAULT_TARGETS = { startMinutes:120, arrivalMinutes:210, warningMinutes:30, successTarget:90 };
 const DAY_NAMES = ['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'];
@@ -125,7 +125,7 @@ function dailyMetrics(dayRows, dayCosts, dayCycles, dayKm){
 
 export async function exportFullExcelReport(env, period){
   const [allDeliveries,vehicles,drivers,collaborators,neighborhoods,categories,cyclesAll,kmAll,costsAll,closuresAll]=await Promise.all([
-    Deliveries.active(env),Vehicles.all(),Drivers.all(),Collaborators.all(),Neighborhoods.all(),CostCategories.all(),Cycles.all(),OdometerLogs.all(),Costs.all(),DayClosures.all(),
+    Deliveries.active(env),Vehicles.all(),Drivers.all(),Collaborators.all(),Neighborhoods.all(),CostCategories.all(),Cycles.all(),OdometerLogs.active(),Costs.all(),DayClosures.all(),
   ]);
   const rows=allDeliveries.filter((r)=>inPeriod(r.entryTime,period));
   const cycles=cyclesAll.filter((c)=>c.environment===env&&!c.deletedAt&&inPeriod(c.startedAt,period));

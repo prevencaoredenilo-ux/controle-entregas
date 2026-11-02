@@ -1,0 +1,19 @@
+ÓRBITA v5.20 — EXCLUSÃO SEGURA DE REGISTROS DE QUILOMETRAGEM
+
+O QUE MUDOU
+- Na tela Quilometragem, cada expediente ativo agora tem a opção “Excluir registro”.
+- A exclusão exige justificativa e envia o registro para uma lixeira própria da quilometragem.
+- Registros na lixeira deixam de aparecer na lista principal e ficam fora dos indicadores, relatórios, liberação de ciclos e validação de duplicidade.
+- A seção “Registros excluídos” permite consultar o registro e restaurá-lo com justificativa.
+- A restauração é bloqueada se já existir outro expediente ativo para o mesmo veículo e data.
+- A exclusão é bloqueada se o expediente estiver vinculado a ciclos ou a ciclos antigos do mesmo veículo/data sem vínculo explícito. Nesses casos, use “Editar KM inicial/final” para corrigir o veículo, preservando a operação.
+- Exclusão e restauração ficam registradas na Auditoria.
+
+PRESERVAÇÃO DE DADOS
+- A exclusão é lógica: não apaga fisicamente o registro.
+- Backups completos continuam incluindo registros ativos e excluídos, para permitir recuperação.
+- Banco de dados permanece orbita-v2 / versão 4. Não há migração, limpeza, renumeração ou sobrescrita de históricos/backups anteriores.
+- O perfil Consulta continua somente leitura e não recebe os botões de excluir/restaurar.
+
+PUBLICAÇÃO
+Substitua os arquivos pelos desta atualização no repositório do GitHub Pages. Não limpe os dados do site nem os dados do navegador.

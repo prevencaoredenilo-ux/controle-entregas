@@ -1,7 +1,7 @@
-import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters } from './db.js?v=5.19';
-import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=5.19';
-import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=5.19';
-import { exportFullExcelReport } from './excel-report.js?v=5.19';
+import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters } from './db.js?v=5.20';
+import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=5.20';
+import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=5.20';
+import { exportFullExcelReport } from './excel-report.js?v=5.20';
 
 const DEFAULT_OPERATIONAL_TARGETS = { startMinutes:120, arrivalMinutes:210, warningMinutes:30, successTarget:90 };
 
@@ -152,7 +152,7 @@ export async function renderCentral() {
   const env = getEnv();
   const rows = await Deliveries.active(env);
   const [cycles, vehicles, drivers, collaborators, kmLogs, costs] = await Promise.all([
-    Cycles.all(), Vehicles.all(), Drivers.all(), Collaborators.all(), OdometerLogs.all(), Costs.all(),
+    Cycles.all(), Vehicles.all(), Drivers.all(), Collaborators.all(), OdometerLogs.active(), Costs.all(),
   ]);
   const openCycles = cycles.filter((c) => c.environment === env && c.status === 'aberto' && !c.deletedAt);
   const vName = (id) => vehicles.find((v) => v.id === id)?.label || 'Veículo';
@@ -532,7 +532,7 @@ export function wireCentralEvents() {
   $('#heroKmAction')?.addEventListener('click', async (e) => {
     if (Number(e.currentTarget.dataset.missing || 0) > 0) return openKmStartModal();
     const today = localDateKey();
-    const openLogs = (await OdometerLogs.all()).filter((l) => l.environment === getEnv() && l.shiftDate === today && l.kmStart != null && l.kmEnd == null);
+    const openLogs = (await OdometerLogs.active()).filter((l) => l.environment === getEnv() && l.shiftDate === today && l.kmStart != null && l.kmEnd == null);
     if (openLogs.length) return openKmPicker(openLogs);
     toast('Não há veículo liberado: os expedientes de hoje já foram encerrados.', 'error');
   });
@@ -615,7 +615,7 @@ export function wireCentralEvents() {
   }));
   $$('[data-central-action]').forEach((card) => card.addEventListener('click', async () => {
     if (card.dataset.centralAction === 'km') {
-      const pending = (await OdometerLogs.all()).filter((k) => k.environment === getEnv() && k.kmEnd == null);
+      const pending = (await OdometerLogs.active()).filter((k) => k.environment === getEnv() && k.kmEnd == null);
       if (pending.length === 1) return openKmEndModal(pending[0]);
       if (!pending.length) return openKmStartModal();
       return openKmPicker(pending);
@@ -715,7 +715,7 @@ function openCentralInsightDrawer(title, body) {
 async function openDayCloseAssistant() {
   if(!canPerform('day_close'))return toast('Somente Líder ou Administrador pode fechar o dia.','error');
   const env=getEnv(), today=localDateKey();
-  const [rows,cycles,logs,costs,closures]=await Promise.all([Deliveries.active(env),Cycles.all(),OdometerLogs.all(),Costs.all(),DayClosures.all()]);
+  const [rows,cycles,logs,costs,closures]=await Promise.all([Deliveries.active(env),Cycles.all(),OdometerLogs.active(),Costs.all(),DayClosures.all()]);
   const openCycles=cycles.filter((c)=>c.environment===env&&c.status==='aberto'&&!c.deletedAt);
   const pending=rows.filter((r)=>['na_loja','em_rota','no_cliente'].includes(r.status));
   const openKm=logs.filter((l)=>l.environment===env&&l.shiftDate===today&&l.kmStart!=null&&l.kmEnd==null);
@@ -1493,7 +1493,7 @@ export async function openStartCycleModal() {
 
   const vehicles = (await Vehicles.all()).filter((v) => v.active);
   const drivers = (await Drivers.all()).filter((d) => d.active);
-  const kmLogs = (await OdometerLogs.all()).filter((l) => l.environment === env && l.shiftDate === todayKey);
+  const kmLogs = (await OdometerLogs.active()).filter((l) => l.environment === env && l.shiftDate === todayKey);
   const activeKmByVehicle = new Map(kmLogs.filter((l) => l.kmStart != null && l.kmEnd == null).map((l) => [l.vehicleId, l]));
   const neighborhoods = await Neighborhoods.all();
   const neighOrder = Object.fromEntries(neighborhoods.map((n) => [n.id, n.routeOrder ?? 0]));
@@ -1593,7 +1593,7 @@ export async function openStartCycleModal() {
         const order = $$('.cycle-item').map((el) => el.dataset.id);
         const checked = order.filter((id) => $(`.cycle-item[data-id="${id}"] input[type=checkbox]`).checked);
         if (!checked.length) return toast('Selecione ao menos uma entrega.', 'error');
-        const currentKmLogs = (await OdometerLogs.all()).filter((l) => l.environment === env && l.shiftDate === todayKey && l.vehicleId === fd.vehicleId && l.kmStart != null && l.kmEnd == null);
+        const currentKmLogs = (await OdometerLogs.active()).filter((l) => l.environment === env && l.shiftDate === todayKey && l.vehicleId === fd.vehicleId && l.kmStart != null && l.kmEnd == null);
         if (!currentKmLogs.length) return toast('Ciclo bloqueado: registre primeiro o KM inicial de hoje para este veículo.', 'error');
         const odometerLog = currentKmLogs[0];
         const startedAt = new Date(fd.startedAt).toISOString();
@@ -1997,7 +1997,8 @@ async function openCycleEndTimeModal(cycle, { suggestedClosedAt = null, closeNot
    ========================================================= */
 export async function renderKm() {
   const env = getEnv();
-  const logs = (await OdometerLogs.all()).filter((l) => l.environment === env).sort((a, b) => b.shiftDate.localeCompare(a.shiftDate));
+  const logs = (await OdometerLogs.active(env)).sort((a, b) => b.shiftDate.localeCompare(a.shiftDate));
+  const deletedLogs = (await OdometerLogs.trashed(env)).sort((a, b) => (b.deletedAt || '').localeCompare(a.deletedAt || ''));
   const vehicles = await Vehicles.all();
   const vName = (id) => vehicles.find((v) => v.id === id)?.label || '—';
 
@@ -2012,21 +2013,39 @@ export async function renderKm() {
         <button class="btn-ghost btn-small km-edit-all-btn">Editar KM inicial/final</button>
         ${l.kmEnd == null ? '<button class="btn-ghost btn-small km-close-btn">Registrar KM final</button>' : ''}
         ${l.kmEnd != null && l.shiftDate === localDateKey() ? '<button class="btn-ghost btn-small km-reopen-btn">Corrigir fechamento antecipado</button>' : ''}
+        <button class="btn-danger-text btn-small km-delete-btn" title="Enviar este expediente para a lixeira">Excluir registro</button>
       </div></td>
+    </tr>`).join('');
+  const deletedRows = deletedLogs.map((l) => `
+    <tr data-id="${l.id}">
+      <td>${dateBR(l.shiftDate)}</td><td>${escapeHtml(vName(l.vehicleId))}</td><td>${l.kmStart ?? '—'}</td><td>${l.kmEnd ?? '—'}</td>
+      <td>${dateTimeBR(l.deletedAt)}<br><small>${escapeHtml(l.deleteReason || 'Motivo não informado')}</small></td>
+      <td><button class="btn-ghost btn-small km-restore-btn">Restaurar</button></td>
     </tr>`).join('');
 
   return `
     <div class="km-toolbar">
       <button class="btn-primary" id="kmNewBtn">＋ Iniciar expediente</button>
-      <div class="km-history-edit-note"><span>✎</span><div><strong>Edição histórica liberada</strong><small>Você pode corrigir o KM inicial e o KM final de qualquer dia. Toda alteração fica registrada na auditoria.</small></div></div>
+      <div class="km-history-edit-note"><span>✎</span><div><strong>Edição e exclusão controladas</strong><small>Você pode corrigir ou excluir registros incorretos. Exclusões ficam na lixeira, fora dos cálculos, com opção de restauração e histórico na auditoria.</small></div></div>
     </div>
     ${logs.length ? `<div class="table-wrap"><table><thead><tr><th>Data</th><th>Veículo</th><th>KM inicial</th><th>KM final</th><th>Quilometragem percorrida</th><th>Ações</th></tr></thead><tbody>${rows}</tbody></table></div>`
-      : `<div class="empty-state"><strong>Nenhum registro de KM</strong>Clique em "Iniciar expediente" para o primeiro veículo do dia.</div>`}
+      : `<div class="empty-state"><strong>Nenhum registro ativo de KM</strong>Clique em "Iniciar expediente" para registrar o primeiro veículo. Os registros excluídos ficam guardados na seção abaixo.</div>`}
+    ${deletedLogs.length ? `<details class="km-trash-details" style="margin-top:18px"><summary style="cursor:pointer;font-weight:800;padding:11px 0">Registros excluídos (${deletedLogs.length}) — fora dos cálculos</summary><p style="font-size:12px;color:var(--text-muted);margin:0 0 10px">Os registros não são apagados do banco nem dos backups. Se algum foi excluído por engano, você pode restaurá-lo; o sistema verificará se já existe outro expediente ativo para o mesmo veículo e data.</p><div class="table-wrap"><table><thead><tr><th>Data</th><th>Veículo</th><th>KM inicial</th><th>KM final</th><th>Excluído em / motivo</th><th>Ação</th></tr></thead><tbody>${deletedRows}</tbody></table></div></details>` : ''}
   `;
 }
 
 export function wireKmEvents() {
   $('#kmNewBtn')?.addEventListener('click', openKmStartModal);
+  $$('.km-delete-btn').forEach((btn) => btn.addEventListener('click', async (e) => {
+    const id = e.target.closest('tr').dataset.id;
+    const log = await OdometerLogs.get(id);
+    openKmDeleteModal(log);
+  }));
+  $$('.km-restore-btn').forEach((btn) => btn.addEventListener('click', async (e) => {
+    const id = e.target.closest('tr').dataset.id;
+    const log = await OdometerLogs.get(id);
+    openKmRestoreModal(log);
+  }));
   $$('.km-edit-all-btn').forEach((btn) => btn.addEventListener('click', async (e) => {
     const id = e.target.closest('tr').dataset.id;
     const log = await OdometerLogs.get(id);
@@ -2044,11 +2063,72 @@ export function wireKmEvents() {
   }));
 }
 
+async function openKmDeleteModal(log) {
+  if (!canPerform('km')) return toast('Seu perfil não pode excluir registros de quilometragem.', 'error');
+  if (!log || log.deletedAt) return toast('Registro ativo de quilometragem não encontrado.', 'error');
+  const vehicles = await Vehicles.all();
+  const vehicleLabel = vehicles.find((vehicle) => String(vehicle.id) === String(log.vehicleId))?.label || 'Veículo não identificado';
+  openModal({
+    title: 'Excluir registro de quilometragem',
+    subtitle: `${dateBR(log.shiftDate)} · ${vehicleLabel}`,
+    body: `<form id="kmDeleteForm">
+      <div class="km-edit-note"><span>!</span><div><strong>O expediente irá para a lixeira</strong><small>Ele deixará de aparecer na lista principal e não contará nos indicadores, relatórios ou liberação de ciclos. O registro continuará guardado na auditoria e nos backups.</small></div></div>
+      <div class="field-row"><label>KM inicial<strong>${log.kmStart ?? '—'}</strong></label><label>KM final<strong>${log.kmEnd ?? '—'}</strong></label></div>
+      <label>Motivo da exclusão *<textarea name="reason" rows="3" required placeholder="Ex.: veículo selecionado errado; expediente duplicado lançado por engano"></textarea></label>
+    </form>`,
+    actions: [
+      { label: 'Cancelar', kind: 'ghost', onClick: closeModal },
+      { label: 'Excluir registro', kind: 'danger', onClick: async () => {
+        const form = $('#kmDeleteForm');
+        if (!form.reportValidity()) return;
+        const reason = String(new FormData(form).get('reason') || '').trim();
+        try {
+          await OdometerLogs.softDelete(log.id, reason);
+        } catch (error) {
+          return toast(error?.message || 'Não foi possível excluir este expediente.', 'error');
+        }
+        toast('Registro enviado para a lixeira. Os históricos e backups foram preservados.', 'success');
+        closeModal(); refreshApp();
+      }},
+    ],
+  });
+}
+
+async function openKmRestoreModal(log) {
+  if (!canPerform('km')) return toast('Seu perfil não pode restaurar registros de quilometragem.', 'error');
+  if (!log || !log.deletedAt) return toast('Registro não encontrado na lixeira.', 'error');
+  const vehicles = await Vehicles.all();
+  const vehicleLabel = vehicles.find((vehicle) => String(vehicle.id) === String(log.vehicleId))?.label || 'Veículo não identificado';
+  openModal({
+    title: 'Restaurar registro de quilometragem',
+    subtitle: `${dateBR(log.shiftDate)} · ${vehicleLabel}`,
+    body: `<form id="kmRestoreForm">
+      <div class="km-edit-note"><span>↺</span><div><strong>O expediente voltará à operação</strong><small>Ele voltará a contar nos indicadores e relatórios. A restauração será bloqueada se já existir outro registro ativo para o mesmo veículo e data.</small></div></div>
+      <label>Motivo da restauração *<textarea name="reason" rows="3" required placeholder="Ex.: registro correto; a exclusão anterior foi feita por engano"></textarea></label>
+    </form>`,
+    actions: [
+      { label: 'Cancelar', kind: 'ghost', onClick: closeModal },
+      { label: 'Restaurar registro', kind: 'primary', onClick: async () => {
+        const form = $('#kmRestoreForm');
+        if (!form.reportValidity()) return;
+        const reason = String(new FormData(form).get('reason') || '').trim();
+        try {
+          await OdometerLogs.restore(log.id, reason);
+        } catch (error) {
+          return toast(error?.message || 'Não foi possível restaurar este expediente.', 'error');
+        }
+        toast('Registro de quilometragem restaurado e registrado na auditoria.', 'success');
+        closeModal(); refreshApp();
+      }},
+    ],
+  });
+}
+
 async function openKmStartModal() {
   if(!canPerform('km'))return toast('Seu perfil não pode registrar quilometragem.','error');
   const vehicles = (await Vehicles.all()).filter((v) => v.active);
   const todayKey = localDateKey();
-  const todayLogs = (await OdometerLogs.all()).filter((l) => l.environment === getEnv() && l.shiftDate === todayKey);
+  const todayLogs = (await OdometerLogs.active()).filter((l) => l.environment === getEnv() && l.shiftDate === todayKey);
   const alreadyLogged = new Set(todayLogs.map((l) => l.vehicleId));
   const availableVehicles = vehicles.filter((v) => !alreadyLogged.has(v.id));
   if (!availableVehicles.length) {
@@ -2072,7 +2152,7 @@ async function openKmStartModal() {
         const form = $('#kmStartForm');
         if (!form.reportValidity()) return;
         const fd = Object.fromEntries(new FormData(form).entries());
-        const duplicate = (await OdometerLogs.all()).some((l) => l.environment === getEnv() && l.shiftDate === todayKey && l.vehicleId === fd.vehicleId);
+        const duplicate = (await OdometerLogs.active()).some((l) => l.environment === getEnv() && l.shiftDate === todayKey && l.vehicleId === fd.vehicleId);
         if (duplicate) return toast('Este veículo já possui registro de KM hoje.', 'error');
         await OdometerLogs.add({ environment: getEnv(), vehicleId: fd.vehicleId, shiftDate: todayKey, kmStart: Number(fd.kmStart), kmEnd: null, startedBy: getOperatorName() });
         toast('KM inicial registrado. Veículo liberado para ciclos.', 'success');
@@ -2131,7 +2211,7 @@ async function openKmFullEditModal(log) {
         if (!reason) return toast('Informe o motivo da correção.', 'error');
 
         const env = getEnv();
-        const allLogs = await OdometerLogs.all();
+        const allLogs = await OdometerLogs.active();
         const allCycles = await Cycles.all();
         const oldVehicleId = log.vehicleId;
         const oldShiftDate = log.shiftDate;
@@ -2397,7 +2477,7 @@ async function computeFinancialSummary(env) {
   const fees = deliveries.reduce((s, d) => s + (Number(d.deliveryFee) || 0), 0);
   const refunds = deliveries.filter((d) => d.refunded).reduce((s, d) => s + (Number(d.deliveryFee) || 0), 0);
   const costsTotal = (await Costs.all()).filter((c) => c.environment === env && !c.deletedAt).reduce((s, c) => s + Number(c.amount || 0), 0);
-  const kmTotal = (await OdometerLogs.all()).filter((l) => l.environment === env && l.kmEnd != null).reduce((s, l) => s + (l.kmEnd - l.kmStart), 0);
+  const kmTotal = (await OdometerLogs.active()).filter((l) => l.environment === env && l.kmEnd != null).reduce((s, l) => s + (l.kmEnd - l.kmStart), 0);
   const balance = fees - refunds - costsTotal;
   return { fees, refunds, costsTotal, balance, kmTotal, deliveredCount: finalized.length };
 }
@@ -2641,7 +2721,7 @@ function dashboardTrend(rows, range) {
 export async function renderDashboard() {
   const env = getEnv();
   const [allRows, allCycles, allCosts, allKm, drivers, vehicles, neighborhoods, costCategories] = await Promise.all([
-    Deliveries.active(env), Cycles.all(), Costs.all(), OdometerLogs.all(), Drivers.all(), Vehicles.all(), Neighborhoods.all(), CostCategories.all(),
+    Deliveries.active(env), Cycles.all(), Costs.all(), OdometerLogs.active(), Drivers.all(), Vehicles.all(), Neighborhoods.all(), CostCategories.all(),
   ]);
   const range = dashboardRange();
   const rows = allRows.filter((r) => dashboardInRange(r.entryTime, range));
@@ -3133,7 +3213,7 @@ async function buildExport(kind, env, period = null) {
     return { name: 'ciclos', header, lines };
   }
   if (kind === 'km') {
-    const rows = (await OdometerLogs.all()).filter((l) => l.environment === env && inReportPeriod(l.shiftDate, period));
+    const rows = (await OdometerLogs.active()).filter((l) => l.environment === env && inReportPeriod(l.shiftDate, period));
     const header = ['Data', 'Veículo', 'KM inicial', 'KM final', 'KM rodado'];
     const lines = rows.map((l) => [dateBR(l.shiftDate), vName(l.vehicleId), l.kmStart, l.kmEnd ?? '', l.kmEnd != null ? (l.kmEnd - l.kmStart).toFixed(1) : '']);
     return { name: 'quilometragem', header, lines };
@@ -3171,7 +3251,7 @@ async function buildExport(kind, env, period = null) {
     const finalized = rows.filter((r) => r.status === 'finalizada');
     const countedFees = rows;
     const periodCosts = (await Costs.all()).filter((c) => c.environment === env && !c.deletedAt && inReportPeriod(c.date, period));
-    const periodKm = (await OdometerLogs.all()).filter((l) => l.environment === env && l.kmEnd != null && inReportPeriod(l.shiftDate, period));
+    const periodKm = (await OdometerLogs.active()).filter((l) => l.environment === env && l.kmEnd != null && inReportPeriod(l.shiftDate, period));
     const financial = {
       fees: countedFees.reduce((s,d) => s + Number(d.deliveryFee || 0), 0),
       refunds: rows.filter((d) => d.refunded).reduce((s,d) => s + Number(d.deliveryFee || 0), 0),
@@ -3284,7 +3364,7 @@ export function wireReportsEvents() {
     if (period.start && period.end && period.start > period.end) return toast('A data inicial não pode ser maior que a final.', 'error');
     const rows = (await Deliveries.active(env)).filter((r) => inReportPeriod(r.entryTime, period));
     const allCosts = (await Costs.all()).filter((c) => c.environment === env && !c.deletedAt && inReportPeriod(c.date, period));
-    const allKm = (await OdometerLogs.all()).filter((l) => l.environment === env && l.kmEnd != null && inReportPeriod(l.shiftDate, period));
+    const allKm = (await OdometerLogs.active()).filter((l) => l.environment === env && l.kmEnd != null && inReportPeriod(l.shiftDate, period));
     const finalizedForFinance = rows;
     const financial = {
       fees: finalizedForFinance.reduce((s,d) => s + Number(d.deliveryFee || 0), 0),
@@ -3360,6 +3440,11 @@ export async function renderAudit() {
       if (e.after?.deletedAt && !e.before?.deletedAt) actionLabel = 'Anular despesa';
       else if (!e.after?.deletedAt && e.before?.deletedAt) actionLabel = 'Reativar despesa';
       else actionLabel = 'Editar despesa';
+    }
+    if (e.entityTable === 'odometerLogs') {
+      if (e.action === 'soft_delete') actionLabel = 'Excluir expediente de KM';
+      else if (e.action === 'restore') actionLabel = 'Restaurar expediente de KM';
+      else if (e.action === 'update') actionLabel = 'Editar expediente de KM';
     }
     return `
       <tr><td>${dateTimeBR(e.at)}</td><td>${escapeHtml(e.operator || 'Não identificado')}<br><small class="delivery-times">${escapeHtml(e.operatorRole || '')}</small></td><td>${escapeHtml(e.entityTable)}</td><td>${escapeHtml(actionLabel)}</td><td style="font-family:monospace;font-size:11px">${escapeHtml(e.entityId).slice(0,14)}</td></tr>
@@ -3590,7 +3675,7 @@ function openVehicleAddModal(record = null) {
    ========================================================= */
 export async function renderSettings() {
   const cfg = JSON.parse(localStorage.getItem('orbita_settings') || '{}');
-  const { listAutoBackups } = await import('./db.js?v=5.19');
+  const { listAutoBackups } = await import('./db.js?v=5.20');
   const autoBackups = await listAutoBackups();
   const backupReasonLabel = (reason = '') => reason === 'abertura' ? 'Abertura do sistema' : reason === 'periodico-1min' ? 'Segurança · 1 minuto' : reason ? 'Alteração salva' : 'Automático';
   const autoList = autoBackups.length
@@ -3628,13 +3713,13 @@ export async function renderSettings() {
 export function wireSettingsEvents() {
   $$('.auto-restore-btn').forEach((btn) => btn.addEventListener('click', async () => {
     if (!confirm('Restaurar esse backup automático vai substituir os dados atuais. Continuar?')) return;
-    const { restoreAutoBackup } = await import('./db.js?v=5.19');
+    const { restoreAutoBackup } = await import('./db.js?v=5.20');
     await restoreAutoBackup(btn.dataset.id);
     toast('Backup automático restaurado.', 'success');
     refreshApp();
   }));
   $('#settingsBackupBtn')?.addEventListener('click', async () => {
-    const data = await (await import('./db.js?v=5.19')).exportAll();
+    const data = await (await import('./db.js?v=5.20')).exportAll();
     downloadJSON(`orbita-backup-completo-${new Date().toISOString().slice(0,10)}.json`, data);
     toast('Backup completo gerado.', 'success');
   });
@@ -3642,12 +3727,12 @@ export function wireSettingsEvents() {
     const file = e.target.files[0];
     if (!file) return;
     if (!confirm('Isso vai substituir os dados atuais pelo conteúdo do backup. Um backup de segurança dos dados atuais será baixado antes. Continuar?')) { e.target.value = ''; return; }
-    const currentBackup = await (await import('./db.js?v=5.19')).exportAll();
+    const currentBackup = await (await import('./db.js?v=5.20')).exportAll();
     downloadJSON(`orbita-backup-seguranca-antes-restauracao-${Date.now()}.json`, currentBackup);
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      await (await import('./db.js?v=5.19')).importAll(data);
+      await (await import('./db.js?v=5.20')).importAll(data);
       toast('Backup restaurado.', 'success');
       refreshApp();
     } catch { toast('Arquivo de backup inválido.', 'error'); }
