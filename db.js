@@ -209,7 +209,116 @@ export const Neighborhoods = genericStore('neighborhoods');
 export const CostCategories = genericStore('costCategories');
 export const ReturnReasons = genericStore('returnReasons');
 export const Cycles = genericStore('cycles');
-export const OdometerLogs = genericStore('odometerLogs');
+const odometerLogsBase = genericStore('odometerLogs');
+export const OdometerLogs = {
+  ...odometerLogsBase,
+  // Correção do expediente + vínculos operacionais em uma única transação IndexedDB.
+  // Evita que o KM mude de veículo enquanto ciclos/entregas vinculados permaneçam no veículo antigo.
+  async updateWithRelatedRecords(id, patch, options = {}) {
+    const {
+      environment = '', oldVehicleId = null, newVehicleId = null,
+      cascadeVehicle = false, vehicleCorrectionMeta = {},
+    } = options;
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(['odometerLogs', 'cycles', 'deliveries', 'auditLog'], 'readwrite');
+      const kmStore = transaction.objectStore('odometerLogs');
+      const cycleStore = transaction.objectStore('cycles');
+      const deliveryStore = transaction.objectStore('deliveries');
+      const auditStore = transaction.objectStore('auditLog');
+      const kmRequest = kmStore.get(id);
+      const cyclesRequest = cycleStore.getAll();
+      const deliveriesRequest = deliveryStore.getAll();
+      let pending = 3;
+      let beforeLog = null;
+      let allCycles = [];
+      let allDeliveries = [];
+      let customError = null;
+      const result = { log: null, cyclesUpdated: 0, deliveriesUpdated: 0 };
+
+      const addAudit = (entityTable, entityId, before, after, at) => {
+        auditStore.add({
+          id: uid('aud'), entityTable, entityId, action: 'update',
+          operator: typeof localStorage !== 'undefined' ? (localStorage.getItem('orbita_operator') || '') : '',
+          operatorRole: typeof localStorage !== 'undefined' ? (localStorage.getItem('orbita_operator_role') || '') : '',
+          before: JSON.parse(JSON.stringify(before)),
+          after: JSON.parse(JSON.stringify(after)),
+          at,
+        });
+      };
+
+      const applyChanges = () => {
+        pending -= 1;
+        if (pending > 0) return;
+        if (!beforeLog) {
+          customError = new Error('Registro de quilometragem não encontrado.');
+          transaction.abort();
+          return;
+        }
+
+        const now = new Date().toISOString();
+        const afterLog = { ...beforeLog, ...patch, updatedAt: now };
+        kmStore.put(afterLog);
+        addAudit('odometerLogs', id, beforeLog, afterLog, now);
+        result.log = afterLog;
+
+        if (cascadeVehicle && String(oldVehicleId ?? '') !== String(newVehicleId ?? '')) {
+          const linkedCycles = allCycles.filter((cycle) => cycle.environment === environment && cycle.odometerLogId === id && !cycle.deletedAt);
+          for (const cycle of linkedCycles) {
+            if (String(cycle.vehicleId ?? '') !== String(newVehicleId ?? '')) {
+              const cycleCorrection = {
+                from: cycle.vehicleId, fromLabel: vehicleCorrectionMeta.fromLabel || '',
+                to: newVehicleId, toLabel: vehicleCorrectionMeta.toLabel || '',
+                reason: vehicleCorrectionMeta.reason || '', by: vehicleCorrectionMeta.by || '',
+                at: vehicleCorrectionMeta.at || now, odometerLogId: id,
+              };
+              const afterCycle = {
+                ...cycle, vehicleId: newVehicleId,
+                vehicleCorrections: [...(cycle.vehicleCorrections || []), cycleCorrection],
+                updatedAt: now,
+              };
+              cycleStore.put(afterCycle);
+              addAudit('cycles', cycle.id, cycle, afterCycle, now);
+              result.cyclesUpdated += 1;
+            }
+
+            for (const item of allDeliveries) {
+              if (item.environment !== environment || item.cycleId !== cycle.id || String(item.vehicleId ?? '') !== String(oldVehicleId ?? '')) continue;
+              const deliveryCorrection = {
+                from: oldVehicleId, fromLabel: vehicleCorrectionMeta.fromLabel || '',
+                to: newVehicleId, toLabel: vehicleCorrectionMeta.toLabel || '',
+                reason: vehicleCorrectionMeta.reason || '', by: vehicleCorrectionMeta.by || '',
+                at: vehicleCorrectionMeta.at || now, odometerLogId: id, cycleId: cycle.id,
+              };
+              const afterDelivery = {
+                ...item, vehicleId: newVehicleId,
+                vehicleCorrections: [...(item.vehicleCorrections || []), deliveryCorrection],
+                updatedAt: now,
+              };
+              deliveryStore.put(afterDelivery);
+              addAudit('deliveries', item.id, item, afterDelivery, now);
+              result.deliveriesUpdated += 1;
+            }
+          }
+        }
+      };
+
+      kmRequest.onsuccess = () => { beforeLog = kmRequest.result || null; applyChanges(); };
+      cyclesRequest.onsuccess = () => { allCycles = cyclesRequest.result || []; applyChanges(); };
+      deliveriesRequest.onsuccess = () => { allDeliveries = deliveriesRequest.result || []; applyChanges(); };
+      kmRequest.onerror = cyclesRequest.onerror = deliveriesRequest.onerror = (event) => {
+        customError = event.target?.error || new Error('Não foi possível ler os registros relacionados.');
+        try { transaction.abort(); } catch (_) {}
+      };
+      transaction.oncomplete = () => {
+        requestWriteThroughBackup(cascadeVehicle ? 'odometerLogs:vehicle-correction' : 'odometerLogs:update');
+        resolve(result);
+      };
+      transaction.onerror = () => reject(customError || transaction.error || new Error('Falha ao corrigir quilometragem.'));
+      transaction.onabort = () => reject(customError || transaction.error || new Error('Correção cancelada.'));
+    });
+  },
+};
 export const Costs = genericStore('costs');
 export const DayClosures = genericStore('dayClosures');
 

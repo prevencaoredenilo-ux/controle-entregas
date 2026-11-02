@@ -1,4 +1,12 @@
-# Órbita — Controle de Entregas (v5.18)
+# Órbita — Controle de Entregas (v5.19)
+
+## v5.19 — Edição do veículo e da data do expediente de KM
+
+- A edição histórica de quilometragem agora permite corrigir também o veículo selecionado por engano e, quando não há ciclos vinculados, a data do expediente.
+- A troca de veículo é bloqueada quando já existe outro registro de KM para o mesmo veículo e data ou quando o veículo de destino está em ciclo aberto nessa data.
+- Ciclos com vínculo explícito ao registro de KM e entregas ainda vinculadas a esses ciclos acompanham a correção do veículo em uma única transação IndexedDB. Ciclos antigos sem vínculo explícito não são alterados automaticamente.
+- Toda correção exige justificativa e fica registrada na auditoria, preservando os valores anteriores.
+- Banco de dados e estrutura de backups permanecem sem migração; os históricos e backups existentes são preservados.
 
 ## v5.18 — Edição e anulação segura de custos
 

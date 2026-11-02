@@ -1,7 +1,7 @@
-import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters } from './db.js?v=5.18';
-import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=5.18';
-import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=5.18';
-import { exportFullExcelReport } from './excel-report.js?v=5.18';
+import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters } from './db.js?v=5.19';
+import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=5.19';
+import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=5.19';
+import { exportFullExcelReport } from './excel-report.js?v=5.19';
 
 const DEFAULT_OPERATIONAL_TARGETS = { startMinutes:120, arrivalMinutes:210, warningMinutes:30, successTarget:90 };
 
@@ -2082,20 +2082,34 @@ async function openKmStartModal() {
   });
 }
 
-function openKmFullEditModal(log) {
+async function openKmFullEditModal(log) {
   if (!canPerform('km')) return toast('Seu perfil não pode corrigir quilometragem.', 'error');
   if (!log) return toast('Registro de KM não encontrado.', 'error');
+
+  const vehicles = (await Vehicles.all()).sort((a, b) => String(a.label || '').localeCompare(String(b.label || ''), 'pt-BR'));
+  const currentVehicle = vehicles.find((v) => String(v.id) === String(log.vehicleId));
+  const vehicleOptions = vehicles.map((v) => `<option value="${escapeHtml(v.id)}" ${String(v.id) === String(log.vehicleId) ? 'selected' : ''}>${escapeHtml(v.label || 'Veículo sem nome')}${v.active === false ? ' (inativo)' : ''}</option>`).join('');
+  const fallbackVehicle = !currentVehicle
+    ? `<option value="${escapeHtml(log.vehicleId || '')}" selected>Veículo atual não encontrado</option>`
+    : '';
+
   openModal({
-    title: 'Editar KM inicial e final',
+    title: 'Editar veículo e quilometragem',
     subtitle: `${dateBR(log.shiftDate)} · correção permitida para qualquer data`,
     body: `<form id="kmFullEditForm">
-      <div class="km-edit-history-head"><span>✎</span><div><strong>Correção completa de quilometragem</strong><small>Você pode alterar o KM inicial e o KM final deste expediente. O registro original ficará preservado na auditoria.</small></div></div>
+      <div class="km-edit-history-head"><span>✎</span><div><strong>Correção completa do expediente</strong><small>Corrija o veículo selecionado, a data e os valores do hodômetro. O registro original ficará preservado na auditoria.</small></div></div>
+      <div class="field-row">
+        <label>Veículo *
+          <select name="vehicleId" required>${fallbackVehicle}${vehicleOptions}</select>
+        </label>
+        <label>Data do expediente *<input name="shiftDate" type="date" required value="${escapeHtml(log.shiftDate || '')}" /></label>
+      </div>
       <div class="field-row">
         <label>KM inicial *<input name="kmStart" type="number" step="0.1" min="0" required value="${log.kmStart ?? ''}" /></label>
         <label>KM final ${log.kmEnd != null ? '*' : ''}<input name="kmEnd" type="number" step="0.1" min="0" ${log.kmEnd != null ? 'required' : ''} value="${log.kmEnd ?? ''}" placeholder="Ainda não informado" /></label>
       </div>
-      <label>Motivo da correção *<textarea name="reason" rows="3" required placeholder="Ex.: KM inicial digitado incorretamente; conferência do odômetro; correção de lançamento anterior"></textarea></label>
-      <div class="km-edit-note"><span>✓</span><div><strong>Auditoria automática</strong><small>Serão guardados os valores anteriores, os novos valores, quem fez a alteração, o motivo e a data/hora.</small></div></div>
+      <label>Motivo da correção *<textarea name="reason" rows="3" required placeholder="Ex.: veículo selecionado errado no registro; hodômetro digitado incorretamente"></textarea></label>
+      <div class="km-edit-note"><span>✓</span><div><strong>Auditoria automática</strong><small>Serão guardados os dados anteriores, os novos dados, quem fez a alteração, o motivo e a data/hora. Se houver ciclos vinculados a este expediente, o veículo também será corrigido nesses ciclos e nas entregas ainda vinculadas a eles.</small></div></div>
     </form>`,
     actions: [
       { label: 'Cancelar', kind: 'ghost', onClick: closeModal },
@@ -2103,41 +2117,75 @@ function openKmFullEditModal(log) {
         const form = $('#kmFullEditForm');
         if (!form.reportValidity()) return;
         const fd = Object.fromEntries(new FormData(form).entries());
+        const vehicleId = String(fd.vehicleId || '').trim();
+        const shiftDate = String(fd.shiftDate || '').trim();
         const kmStart = Number(fd.kmStart);
         const hasKmEnd = String(fd.kmEnd ?? '').trim() !== '';
         const kmEnd = hasKmEnd ? Number(fd.kmEnd) : null;
         const reason = String(fd.reason || '').trim();
+        const newVehicle = vehicles.find((v) => String(v.id) === vehicleId);
+        if (!vehicleId || (!newVehicle && String(log.vehicleId || '') !== vehicleId)) return toast('Selecione um veículo cadastrado.', 'error');
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(shiftDate) || Number.isNaN(new Date(`${shiftDate}T12:00:00`).getTime())) return toast('Informe uma data válida para o expediente.', 'error');
         if (!Number.isFinite(kmStart) || kmStart < 0) return toast('Informe um KM inicial válido.', 'error');
         if (hasKmEnd && (!Number.isFinite(kmEnd) || kmEnd < kmStart)) return toast('O KM final deve ser igual ou maior que o KM inicial.', 'error');
         if (!reason) return toast('Informe o motivo da correção.', 'error');
 
-        // Se o expediente ainda está aberto, editar o KM inicial é permitido. Informar um novo KM final
-        // por esta tela só é permitido quando não existir ciclo ativo para o veículo.
+        const env = getEnv();
+        const allLogs = await OdometerLogs.all();
+        const allCycles = await Cycles.all();
+        const oldVehicleId = log.vehicleId;
+        const oldShiftDate = log.shiftDate;
+        const oldVehicleLabel = currentVehicle?.label || 'Veículo não identificado';
+        const newVehicleLabel = newVehicle?.label || oldVehicleLabel;
+        const changedVehicle = String(oldVehicleId || '') !== vehicleId;
+        const changedDate = oldShiftDate !== shiftDate;
+        const changedStart = Number(log.kmStart) !== kmStart;
+        const oldEnd = log.kmEnd == null ? null : Number(log.kmEnd);
+        const changedEnd = oldEnd !== kmEnd;
+        if (!changedVehicle && !changedDate && !changedStart && !changedEnd) return toast('Nenhum dado foi alterado.', 'success');
+
+        const duplicateLog = allLogs.find((item) => item.id !== log.id && item.environment === log.environment && item.shiftDate === shiftDate && String(item.vehicleId) === vehicleId);
+        if (duplicateLog) return toast(`Este veículo já possui um registro de KM em ${dateBR(shiftDate)}. Não é permitido duplicar o expediente.`, 'error');
+
+        const linkedCycles = allCycles.filter((cycle) => cycle.environment === env && cycle.odometerLogId === log.id && !cycle.deletedAt);
+        const linkedCycleIds = new Set(linkedCycles.map((cycle) => cycle.id));
+        if (changedDate && linkedCycles.length) return toast('Não é possível alterar a data porque este expediente já possui ciclos vinculados. Corrija o veículo e os KM sem mudar a data.', 'error');
+
+        // Não altera ciclos antigos que não tenham vínculo explícito com este expediente.
+        // Se houver um ciclo aberto sem vínculo, bloqueia a troca para evitar corrigir o ciclo errado.
+        if (changedVehicle || changedDate) {
+          const unlinkedOpenCycle = allCycles.find((cycle) => cycle.environment === env && cycle.status === 'aberto' && !cycle.deletedAt && String(cycle.vehicleId) === String(oldVehicleId) && localDateKey(cycle.startedAt) === oldShiftDate && !linkedCycleIds.has(cycle.id));
+          if (unlinkedOpenCycle) return toast('Há um ciclo aberto sem vínculo direto com este expediente. Confira ou finalize esse ciclo antes de trocar o veículo.', 'error');
+        }
+
+        if (changedVehicle || changedDate) {
+          const targetBusyCycle = allCycles.find((cycle) => cycle.environment === env && cycle.status === 'aberto' && !cycle.deletedAt && String(cycle.vehicleId) === vehicleId && localDateKey(cycle.startedAt) === shiftDate && !linkedCycleIds.has(cycle.id));
+          if (targetBusyCycle) return toast('O veículo escolhido já está em um ciclo aberto nesta data. Finalize ou confira o ciclo antes de transferir o expediente.', 'error');
+        }
+
+        // Se o expediente ainda está aberto, informar KM final continua proibido enquanto
+        // existir um ciclo ativo vinculado ao veículo/expediente original.
         if (log.kmEnd == null && hasKmEnd) {
-          const activeCycle = (await Cycles.all()).find((c) => c.environment === getEnv() && c.vehicleId === log.vehicleId && c.status === 'aberto' && !c.deletedAt);
+          const activeCycle = allCycles.find((cycle) => cycle.environment === env && cycle.vehicleId === oldVehicleId && cycle.status === 'aberto' && !cycle.deletedAt && (cycle.odometerLogId === log.id || localDateKey(cycle.startedAt) === oldShiftDate));
           if (activeCycle) return toast('Não é possível informar KM final enquanto este veículo estiver em um ciclo ativo.', 'error');
         }
 
         const now = new Date().toISOString();
-        const changedStart = Number(log.kmStart) !== kmStart;
-        const oldEnd = log.kmEnd == null ? null : Number(log.kmEnd);
-        const changedEnd = oldEnd !== kmEnd;
-        if (!changedStart && !changedEnd) return toast('Nenhum valor foi alterado.', 'success');
-
         const correction = {
           type: 'full_edit',
-          from: { kmStart: Number(log.kmStart), kmEnd: oldEnd },
-          to: { kmStart, kmEnd },
+          from: { vehicleId: oldVehicleId, vehicleLabel: oldVehicleLabel, shiftDate: oldShiftDate, kmStart: Number(log.kmStart), kmEnd: oldEnd },
+          to: { vehicleId, vehicleLabel: newVehicleLabel, shiftDate, kmStart, kmEnd },
           reason,
           by: getOperatorName(),
           at: now,
-          shiftDate: log.shiftDate,
+          shiftDate: oldShiftDate,
         };
-        const corrections = [...(log.kmCorrections || []), correction];
         const patch = {
+          vehicleId,
+          shiftDate,
           kmStart,
           kmEnd,
-          kmCorrections: corrections,
+          kmCorrections: [...(log.kmCorrections || []), correction],
           lastKmEditedBy: getOperatorName(),
           lastKmEditedAt: now,
           lastKmEditReason: reason,
@@ -2159,14 +2207,41 @@ function openKmFullEditModal(log) {
             patch.endedBy = null;
           }
         }
-        await OdometerLogs.update(log.id, patch);
-        toast(`KM de ${dateBR(log.shiftDate)} corrigido e registrado na auditoria.`, 'success');
+        if (changedVehicle) {
+          const vehicleCorrection = { from: oldVehicleId, fromLabel: oldVehicleLabel, to: vehicleId, toLabel: newVehicleLabel, reason, by: getOperatorName(), at: now };
+          patch.vehicleCorrections = [...(log.vehicleCorrections || []), vehicleCorrection];
+          patch.lastVehicleEditedBy = getOperatorName();
+          patch.lastVehicleEditedAt = now;
+        }
+        if (changedDate) {
+          patch.shiftDateCorrections = [...(log.shiftDateCorrections || []), { from: oldShiftDate, to: shiftDate, reason, by: getOperatorName(), at: now }];
+          patch.lastShiftDateEditedBy = getOperatorName();
+          patch.lastShiftDateEditedAt = now;
+        }
+
+        try {
+          await OdometerLogs.updateWithRelatedRecords(log.id, patch, {
+            environment: env,
+            oldVehicleId,
+            newVehicleId: vehicleId,
+            cascadeVehicle: changedVehicle,
+            vehicleCorrectionMeta: {
+              fromLabel: oldVehicleLabel, toLabel: newVehicleLabel,
+              reason, by: getOperatorName(), at: now,
+            },
+          });
+        } catch (error) {
+          console.error('Falha ao concluir a correção de quilometragem/veículo.', error);
+          return toast('Não foi possível concluir toda a correção. Confira a Auditoria antes de tentar novamente.', 'error');
+        }
+
+        const changedParts = [changedVehicle ? 'veículo' : '', changedDate ? 'data' : '', changedStart || changedEnd ? 'quilometragem' : ''].filter(Boolean).join(', ');
+        toast(`Registro de ${dateBR(shiftDate)} corrigido (${changedParts}) e registrado na auditoria.`, 'success');
         closeModal(); refreshApp();
       }},
     ],
   });
 }
-
 function openKmEndModal(log) {
   if(!canPerform('km'))return toast('Seu perfil não pode registrar quilometragem.','error');
   const editing = log.kmEnd != null;
@@ -3515,7 +3590,7 @@ function openVehicleAddModal(record = null) {
    ========================================================= */
 export async function renderSettings() {
   const cfg = JSON.parse(localStorage.getItem('orbita_settings') || '{}');
-  const { listAutoBackups } = await import('./db.js?v=5.18');
+  const { listAutoBackups } = await import('./db.js?v=5.19');
   const autoBackups = await listAutoBackups();
   const backupReasonLabel = (reason = '') => reason === 'abertura' ? 'Abertura do sistema' : reason === 'periodico-1min' ? 'Segurança · 1 minuto' : reason ? 'Alteração salva' : 'Automático';
   const autoList = autoBackups.length
@@ -3553,13 +3628,13 @@ export async function renderSettings() {
 export function wireSettingsEvents() {
   $$('.auto-restore-btn').forEach((btn) => btn.addEventListener('click', async () => {
     if (!confirm('Restaurar esse backup automático vai substituir os dados atuais. Continuar?')) return;
-    const { restoreAutoBackup } = await import('./db.js?v=5.18');
+    const { restoreAutoBackup } = await import('./db.js?v=5.19');
     await restoreAutoBackup(btn.dataset.id);
     toast('Backup automático restaurado.', 'success');
     refreshApp();
   }));
   $('#settingsBackupBtn')?.addEventListener('click', async () => {
-    const data = await (await import('./db.js?v=5.18')).exportAll();
+    const data = await (await import('./db.js?v=5.19')).exportAll();
     downloadJSON(`orbita-backup-completo-${new Date().toISOString().slice(0,10)}.json`, data);
     toast('Backup completo gerado.', 'success');
   });
@@ -3567,12 +3642,12 @@ export function wireSettingsEvents() {
     const file = e.target.files[0];
     if (!file) return;
     if (!confirm('Isso vai substituir os dados atuais pelo conteúdo do backup. Um backup de segurança dos dados atuais será baixado antes. Continuar?')) { e.target.value = ''; return; }
-    const currentBackup = await (await import('./db.js?v=5.18')).exportAll();
+    const currentBackup = await (await import('./db.js?v=5.19')).exportAll();
     downloadJSON(`orbita-backup-seguranca-antes-restauracao-${Date.now()}.json`, currentBackup);
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      await (await import('./db.js?v=5.18')).importAll(data);
+      await (await import('./db.js?v=5.19')).importAll(data);
       toast('Backup restaurado.', 'success');
       refreshApp();
     } catch { toast('Arquivo de backup inválido.', 'error'); }

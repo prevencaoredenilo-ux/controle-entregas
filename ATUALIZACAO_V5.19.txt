@@ -1,0 +1,15 @@
+ÓRBITA v5.19 — EDIÇÃO DE VEÍCULO E KM
+
+Na tela Quilometragem, a opção “Editar KM inicial/final” agora permite corrigir: veículo, data do expediente, KM inicial e KM final.
+
+REGRAS DE SEGURANÇA
+- Toda correção exige motivo e gera auditoria com dados anteriores e novos.
+- Não permite duplicar expediente do mesmo veículo na mesma data.
+- Não permite transferir para veículo com ciclo aberto na data.
+- Ciclos e entregas ainda vinculados ao expediente acompanham a correção de veículo em uma única transação, evitando atualização parcial.
+- Ciclos sem vínculo explícito não são alterados automaticamente.
+- A data não pode ser alterada quando há ciclos vinculados ao expediente.
+- Nenhum histórico ou backup anterior é apagado ou migrado.
+
+PUBLICAÇÃO
+Substitua os arquivos do site pelos arquivos desta atualização, preservando o banco local do navegador. Não limpe os dados do site e não desinstale o aplicativo.
