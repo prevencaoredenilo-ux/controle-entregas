@@ -1,0 +1,10 @@
+ÓRBITA v5.21 — FUNDO ORBITAL ANIMADO
+
+- Adicionada uma animação vetorial de fundo com uma Hyundai HR de entregas Nilo orbitando uma esfera luminosa identificada como ÓRBITA.
+- A animação fica presente em todas as abas, atrás dos painéis e sem bloquear cliques ou formulários.
+- Ajustes responsivos para computador e celular.
+- Efeitos discretos e respeito à preferência do dispositivo por movimento reduzido.
+- Animação feita em SVG/CSS, sem vídeo ou GIF pesado e sem timers JavaScript.
+- Nenhuma tela operacional, regra de negócio, registro, tabela ou estrutura de banco foi alterada.
+- Nenhuma migração, renumeração, exclusão ou regravação de histórico/backups foi executada.
+- Banco orbita-v2 / versão 4 mantido sem alterações.

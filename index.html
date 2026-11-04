@@ -6,8 +6,8 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <meta name="theme-color" content="#0B2A4A" />
 <meta name="description" content="Órbita — controle de entregas completo, offline-first e instalável." />
-<link rel="manifest" href="manifest.webmanifest?v=5.20" />
-<link rel="stylesheet" href="styles.css?v=5.20" />
+<link rel="manifest" href="manifest.webmanifest?v=5.21" />
+<link rel="stylesheet" href="styles.css?v=5.21" />
 <title>Órbita • Controle de Entregas</title>
 </head>
 <body>
@@ -26,7 +26,7 @@
       <div>
         <div class="brand-logo-chip"><img src="assets/brand/nilo-logo.png" alt="Nilo Supermercado" onerror="this.replaceWith(Object.assign(document.createElement('strong'),{textContent:'NILO',style:'font-size:20px;color:#0B2A4A'}))" /></div>
         <div class="brand-slogan">"No quieto, no quieto,<br>o Nilo vende mais barato"</div>
-        <div class="release-side">VERSÃO 5.20 · EXCLUSÃO SEGURA DE KM</div>
+        <div class="release-side">VERSÃO 5.21 · FUNDO ORBITAL ANIMADO</div>
       </div>
 
       <button class="conn-pill" id="envToggleBtn" style="border:none;cursor:pointer;text-align:left">
@@ -68,6 +68,87 @@
     </aside>
 
     <div class="main">
+      <div class="orbita-ambient" aria-hidden="true">
+        <svg class="orbita-ambient-art" viewBox="0 0 900 620" role="presentation" focusable="false" xmlns="http://www.w3.org/2000/svg">
+          <title>Hyundai HR de entregas Nilo orbitando o planeta Órbita</title>
+          <defs>
+            <radialGradient id="orbitaPlanetFill" cx="34%" cy="28%" r="76%">
+              <stop offset="0" stop-color="#bcecff"/>
+              <stop offset=".34" stop-color="#4a9bc9"/>
+              <stop offset=".72" stop-color="#17527f"/>
+              <stop offset="1" stop-color="#092c4c"/>
+            </radialGradient>
+            <linearGradient id="orbitaPlanetBand" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#d8f7ff" stop-opacity=".7"/>
+              <stop offset="1" stop-color="#55b8e8" stop-opacity=".06"/>
+            </linearGradient>
+            <linearGradient id="orbitaTruckBox" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#ffffff"/>
+              <stop offset="1" stop-color="#dbe8f0"/>
+            </linearGradient>
+            <linearGradient id="orbitaTruckCab" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#ffffff"/>
+              <stop offset="1" stop-color="#b9d0df"/>
+            </linearGradient>
+            <linearGradient id="orbitaTruckGlass" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#9fe4fa"/>
+              <stop offset="1" stop-color="#28658b"/>
+            </linearGradient>
+            <filter id="orbitaSoftGlow" x="-80%" y="-80%" width="260%" height="260%">
+              <feGaussianBlur stdDeviation="9" result="blur"/>
+              <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+            <filter id="orbitaTruckShadow" x="-30%" y="-50%" width="160%" height="220%">
+              <feGaussianBlur stdDeviation="3"/>
+            </filter>
+          </defs>
+
+          <circle cx="452" cy="318" r="160" fill="#56b8e8" opacity=".08" filter="url(#orbitaSoftGlow)"/>
+          <path class="orbita-track-back" fill="none" stroke="#8ab9d3" stroke-opacity=".22" stroke-width="2" stroke-dasharray="5 11" d="M 410 92 C 610 55 790 175 790 310 C 790 455 610 560 410 550 C 200 540 95 400 120 255 C 145 115 270 70 410 92"/>
+          <ellipse class="orbita-ring-far" fill="none" stroke="#8ab9d3" stroke-opacity=".16" stroke-width="1.2" stroke-dasharray="3 9" cx="452" cy="318" rx="332" ry="210" transform="rotate(-17 452 318)"/>
+
+          <g class="orbita-planet">
+            <circle cx="452" cy="318" r="101" fill="url(#orbitaPlanetFill)"/>
+            <path d="M374 278c20-22 36-23 48-12l8 15-12 12 5 17-22 9-18-13-18 2-8-15 17-15Zm105-31 21 6 12 18-13 12-2 19-20 8-12-17 7-15-8-15 15-16Zm-7 91 19-12 22 7 9 18-12 15-3 25-20 7-18-18 4-20-10-22Zm-74 23 17-8 20 12-3 18-15 11-17-12-2-21Z" fill="#9bd6df" opacity=".24"/>
+            <path d="M360 317c43-35 141-38 184 1M371 350c48 28 115 29 161-2M452 218c-31 36-38 164 0 200M452 218c31 36 38 164 0 200" fill="none" stroke="url(#orbitaPlanetBand)" stroke-width="2" opacity=".42"/>
+            <ellipse cx="452" cy="318" rx="101" ry="32" fill="none" stroke="#bdefff" stroke-width="1.5" opacity=".2" transform="rotate(-17 452 318)"/>
+            <text x="452" y="325" text-anchor="middle" fill="#ffffff" font-size="17" font-weight="900" letter-spacing="3" opacity=".68">ÓRBITA</text>
+          </g>
+
+          <path class="orbita-track-front" fill="none" stroke="#2f8bbe" stroke-opacity=".34" stroke-width="1.5" stroke-dasharray="2 13" stroke-linecap="round" d="M 410 92 C 610 55 790 175 790 310 C 790 455 610 560 410 550 C 200 540 95 400 120 255 C 145 115 270 70 410 92"/>
+          <circle class="orbita-star" fill="#55a9d2" cx="192" cy="177" r="3"/>
+          <circle class="orbita-star orbita-star-small" fill="#55a9d2" cx="728" cy="448" r="2.5"/>
+          <circle class="orbita-star orbita-star-small" fill="#55a9d2" cx="690" cy="118" r="2"/>
+
+          <g transform="translate(410 92)">
+            <g id="orbitaTruckMotion" class="orbita-truck-motion">
+              <animateMotion dur="38s" repeatCount="indefinite" rotate="0" path="M 0 0 C 200 -37 380 83 380 218 C 380 363 200 468 0 458 C -210 448 -315 308 -290 163 C -265 23 -140 -22 0 0"/>
+              <g transform="translate(-76 -34)">
+              <ellipse cx="77" cy="62" rx="68" ry="7" fill="#082b49" opacity=".28" filter="url(#orbitaTruckShadow)"/>
+              <circle cx="42" cy="49" r="12" fill="#142b3b"/>
+              <circle cx="42" cy="49" r="6" fill="#9bb3c1"/>
+              <circle cx="112" cy="49" r="12" fill="#142b3b"/>
+              <circle cx="112" cy="49" r="6" fill="#9bb3c1"/>
+              <path d="M12 15h68v32H12Z" fill="url(#orbitaTruckBox)" stroke="#829eaf" stroke-width="1.5"/>
+              <path d="M14 18h64v2H14Z" fill="#ffffff" opacity=".85"/>
+              <path d="M14 42h65v5H14Z" fill="#ffdd00" opacity=".95"/>
+              <text x="46" y="31" text-anchor="middle" fill="#0b2a4a" font-size="10" font-weight="900" letter-spacing="1">NILO</text>
+              <text x="46" y="38" text-anchor="middle" fill="#47677d" font-size="4.5" font-weight="800" letter-spacing="1.1">ENTREGAS</text>
+              <path d="M78 43V27c0-9 6-15 15-15h19c9 0 14 5 18 14l7 17v6H78Z" fill="url(#orbitaTruckCab)" stroke="#6d91a8" stroke-width="1.5"/>
+              <path d="M85 23c1-5 4-8 9-8h16v19H85Z" fill="url(#orbitaTruckGlass)" stroke="#477a98" stroke-width="1"/>
+              <path d="M114 15c6 2 10 8 13 18l2 1h-15Z" fill="#a9e6f8" opacity=".8"/>
+              <path d="M80 43h56v5H80Z" fill="#0f3e6b"/>
+              <path d="M134 36h5v9h-5Z" fill="#fff3a8"/>
+              <path d="M137 44h5v4h-5Z" fill="#d5e5ee"/>
+              <path d="M77 25h-5v5h5Z" fill="#0b2a4a"/>
+              <path d="M33 49a9 9 0 0 0 18 0M103 49a9 9 0 0 0 18 0" fill="none" stroke="#e8f2f7" stroke-width="1.5"/>
+              <ellipse cx="131" cy="40" rx="2.5" ry="4" fill="#ffdd00" opacity=".95"/>
+              <text x="94" y="40" fill="#0b2a4a" font-size="4.5" font-weight="900">HR</text>
+              </g>
+            </g>
+          </g>
+        </svg>
+      </div>
       <header class="topbar topbar-spotlight">
         <div class="topbar-main-row">
           <div class="topbar-title-wrap">
@@ -80,7 +161,7 @@
           </div>
           <div class="topbar-actions">
             <div class="live-clock utility-pill" id="liveClock"><span class="pulse-dot"></span><span id="liveClockText">--:--:--</span></div>
-            <span class="release-badge utility-pill">v5.20</span>
+            <span class="release-badge utility-pill">v5.21</span>
             <span class="monitor-mode-badge hidden" id="monitorModeBadge">👁 SOMENTE LEITURA</span>
             <button class="btn-primary topbar-cta" id="newDeliveryBtn">＋ Registrar entrega</button>
           </div>
@@ -122,6 +203,6 @@
 
   <div class="toast-stack" id="toastStack"></div>
 
-  <script type="module" src="app.js?v=5.20"></script>
+  <script type="module" src="app.js?v=5.21"></script>
 </body>
 </html>

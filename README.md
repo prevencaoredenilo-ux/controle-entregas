@@ -1,4 +1,13 @@
-# Órbita — Controle de Entregas (v5.20)
+# Órbita — Controle de Entregas (v5.21)
+
+## v5.21 — Fundo orbital animado
+
+- A identidade do Órbita agora inclui uma Hyundai HR de entregas Nilo orbitando uma esfera luminosa, visível no fundo de todas as abas.
+- A animação é vetorial (SVG), leve, sem dependências externas, sem vídeo e sem temporizadores JavaScript.
+- O fundo fica atrás dos conteúdos, não bloqueia interações e se adapta a computador e celular.
+- Respeita a preferência de movimento reduzido do dispositivo.
+- Nenhuma regra operacional ou estrutura do banco foi alterada. Banco `orbita-v2` / versão 4 mantido; históricos e backups preservados.
+
 
 ## v5.20 — Exclusão segura de registros de quilometragem
 

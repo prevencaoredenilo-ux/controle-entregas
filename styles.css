@@ -141,6 +141,72 @@ nav.main-nav { display: flex; flex-direction: column; gap: 2px; flex: 1; overflo
   min-width: 0;
   display: flex;
   flex-direction: column;
+  position: relative;
+  isolation: isolate;
+  background: var(--paper);
+}
+
+/* v5.21 — identidade Órbita: Hyundai HR em trajetória orbital, presente em todas as abas. */
+.orbita-ambient {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 82% 76%, rgba(64, 151, 199, .10), transparent 42%);
+}
+.orbita-ambient-art {
+  position: absolute;
+  width: clamp(430px, 66vw, 820px);
+  height: auto;
+  right: -42px;
+  bottom: -72px;
+  overflow: visible;
+  opacity: .30;
+  filter: saturate(.9);
+}
+.orbita-track-back {
+  fill: none;
+  stroke: rgba(42, 125, 174, .22);
+  stroke-width: 2;
+  stroke-dasharray: 5 11;
+}
+.orbita-track-front {
+  fill: none;
+  stroke: rgba(47, 139, 190, .34);
+  stroke-width: 1.5;
+  stroke-dasharray: 2 13;
+  stroke-linecap: round;
+}
+.orbita-ring-far {
+  fill: none;
+  stroke: rgba(67, 153, 198, .16);
+  stroke-width: 1.2;
+  stroke-dasharray: 3 9;
+}
+.orbita-planet {
+  filter: drop-shadow(0 12px 26px rgba(16, 80, 121, .22));
+}
+.orbita-star { fill: #55a9d2; opacity: .65; animation: orbita-star-pulse 4.8s ease-in-out infinite; }
+.orbita-star-small { animation-delay: -2.2s; opacity: .45; }
+.orbita-truck-motion { filter: drop-shadow(0 5px 7px rgba(9, 42, 68, .22)); }
+.topbar, .view { position: relative; z-index: 1; }
+.topbar { background: rgba(255, 255, 255, .94); backdrop-filter: blur(9px); }
+.view { background: transparent; }
+@keyframes orbita-star-pulse { 0%,100% { opacity: .28; transform: scale(.85); } 50% { opacity: .8; transform: scale(1.18); } }
+@media (max-width: 900px) {
+  .orbita-ambient-art { width: clamp(390px, 76vw, 660px); right: -110px; bottom: -42px; opacity: .24; }
+}
+@media (max-width: 720px) {
+  .orbita-ambient { background: radial-gradient(ellipse at 78% 82%, rgba(64, 151, 199, .08), transparent 48%); }
+  .orbita-ambient-art { width: 510px; right: -235px; bottom: -22px; opacity: .17; }
+}
+@media (max-width: 430px) {
+  .orbita-ambient-art { width: 450px; right: -235px; bottom: -8px; opacity: .14; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .orbita-star { animation: none !important; }
+  #orbitaTruckMotion animateMotion { display: none !important; }
 }
 
 .topbar {
