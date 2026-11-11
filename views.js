@@ -1,7 +1,7 @@
-import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters } from './db.js?v=5.21';
-import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=5.21';
-import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=5.21';
-import { exportFullExcelReport } from './excel-report.js?v=5.21';
+import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters } from './db.js?v=5.22';
+import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=5.22';
+import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=5.22';
+import { exportFullExcelReport } from './excel-report.js?v=5.22';
 
 const DEFAULT_OPERATIONAL_TARGETS = { startMinutes:120, arrivalMinutes:210, warningMinutes:30, successTarget:90 };
 
@@ -1452,7 +1452,7 @@ export async function renderCycles() {
       <td>${escapeHtml(dName(c.driverId))}</td>
       <td>${items.length}</td>
       <td>${c.status === 'aberto' ? `<span class="badge transito">Aberto · ${pending} pendente(s)</span>` : `<span class="badge entregue">Fechado</span>`}</td>
-      <td>${c.status === 'aberto' ? `<div class="cycle-table-actions"><button class="btn-ghost btn-small cycle-edit-btn">Editar entregas</button><button class="btn-ghost btn-small cycle-close-btn">Finalizar</button></div><small class="delivery-times">${formatDuration((Date.now()-new Date(c.startedAt))/60000)}</small>` : `${dateTimeBR(c.closedAt)}<small class="delivery-times">${formatDuration((new Date(c.closedAt)-new Date(c.startedAt))/60000)}</small>`}</td>
+      <td><div class="cycle-table-actions"><button class="btn-ghost btn-small cycle-route-btn">Ver rota</button>${c.status === 'aberto' ? `<button class="btn-ghost btn-small cycle-edit-btn">Editar entregas</button><button class="btn-ghost btn-small cycle-close-btn">Finalizar</button>` : ''}</div>${c.status === 'aberto' ? `<small class="delivery-times">${formatDuration((Date.now()-new Date(c.startedAt))/60000)}</small>` : `${dateTimeBR(c.closedAt)}<small class="delivery-times">${formatDuration((new Date(c.closedAt)-new Date(c.startedAt))/60000)}</small>`}</td>
     </tr>`;
   }));
 
@@ -1460,6 +1460,12 @@ export async function renderCycles() {
 }
 
 export function wireCyclesEvents() {
+  $$('.cycle-route-btn').forEach((btn) => btn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const id = e.target.closest('tr').dataset.id;
+    const cycle = await Cycles.get(id);
+    if (cycle) openCycleRouteModal(cycle);
+  }));
   $$('.cycle-edit-btn').forEach((btn) => btn.addEventListener('click', async (e) => {
     e.stopPropagation();
     const id = e.target.closest('tr').dataset.id;
@@ -1471,6 +1477,58 @@ export function wireCyclesEvents() {
     const id = e.target.closest('tr').dataset.id;
     const cycle = await Cycles.get(id);
     openCloseCycleModal(cycle);
+  }));
+}
+
+async function openCycleRouteModal(cycle) {
+  const env = getEnv();
+  const [deliveries, neighborhoods] = await Promise.all([Deliveries.all(), Neighborhoods.all()]);
+  const byId = new Map(deliveries.filter((d) => d.environment === env).map((d) => [d.id, d]));
+  const ids = (cycle.routeOrderIds || cycle.deliveryIds || []).filter((id) => byId.has(id));
+  // Keep all cycle deliveries visible even for cycles created before routeOrderIds existed.
+  (cycle.deliveryIds || []).forEach((id) => { if (byId.has(id) && !ids.includes(id)) ids.push(id); });
+  const neighborhoodName = (id) => neighborhoods.find((n) => n.id === id)?.name || 'Bairro não informado';
+  const addressOf = (d) => [d.street, d.houseNumber ? `nº ${d.houseNumber}` : '', neighborhoodName(d.neighborhoodId)].filter(Boolean).join(', ');
+  const rows = ids.map((id, index) => {
+    const d = byId.get(id);
+    const priority = d.priority === 'alta';
+    return `<div class="orbita-route-row ${priority ? 'priority' : ''}" data-id="${id}" data-priority="${priority ? 'alta' : 'normal'}">
+      <strong class="orbita-route-position">${index + 1}</strong>
+      <div class="orbita-route-copy"><div><b>Entrega nº ${String(d.purchaseNumber ?? '—').padStart(3,'0')}</b>${priority ? '<span class="orbita-route-priority">PRIORITÁRIA</span>' : ''}</div>
+      <strong>${escapeHtml(d.clientName || 'Cliente: Não informado')}</strong><small>${escapeHtml(addressOf(d) || 'Endereço não informado')}</small></div>
+      ${cycle.status === 'aberto' ? `<div class="orbita-route-moves"><button type="button" class="btn-ghost btn-small route-up" aria-label="Subir">↑</button><button type="button" class="btn-ghost btn-small route-down" aria-label="Descer">↓</button></div>` : ''}
+    </div>`;
+  }).join('');
+  const body = `<div class="orbita-route-origin"><b>Saída:</b> Rua Teresina, nº 729 — Novo Horizonte, Nova Xavantina–MT</div>
+    <p class="orbita-route-note">Ordem independente da numeração original. As prioritárias ficam sempre antes das normais. A organização automática agrupa por bairro; a sequência de ruas pode ser ajustada manualmente.</p>
+    <div id="orbitaCycleRouteList" class="orbita-route-list">${rows || '<div class="cycle-edit-empty">Nenhuma entrega vinculada a este ciclo.</div>'}</div>`;
+  openModal({ title: 'Roteirização do ciclo', subtitle: `Veículo ${escapeHtml(cycle.vehicleId || '—')} · ${ids.length} entrega(s)`, body, actions: [
+    { label: 'Fechar', kind: 'ghost', onClick: closeModal },
+    ...(cycle.status === 'aberto' ? [{ label: 'Salvar ordem da rota', kind: 'primary', onClick: async () => {
+      const current = await Cycles.get(cycle.id);
+      if (!current || current.status !== 'aberto') return toast('Este ciclo já foi encerrado.', 'error');
+      const ordered = $$('#orbitaCycleRouteList .orbita-route-row').map((el) => el.dataset.id);
+      const priorityIds = ordered.filter((id) => byId.get(id)?.priority === 'alta');
+      const normalIds = ordered.filter((id) => byId.get(id)?.priority !== 'alta');
+      await Cycles.update(cycle.id, { routeOrderIds: [...priorityIds, ...normalIds] });
+      toast('Ordem da rota salva. A numeração original das entregas foi mantida.', 'success');
+      closeModal(); refreshApp();
+    }}] : [])
+  ]});
+  const list = $('#orbitaCycleRouteList');
+  if (!list || cycle.status !== 'aberto') return;
+  const renumber = () => $$('#orbitaCycleRouteList .orbita-route-row').forEach((el, i) => { el.querySelector('.orbita-route-position').textContent = String(i + 1); });
+  $$('#orbitaCycleRouteList .route-up').forEach((b) => b.addEventListener('click', (e) => {
+    const row = e.target.closest('.orbita-route-row'); const prev = row.previousElementSibling;
+    if (prev && prev.dataset.priority === row.dataset.priority) list.insertBefore(row, prev);
+    else if (prev) toast('As prioritárias precisam permanecer antes das entregas normais.', 'error');
+    renumber();
+  }));
+  $$('#orbitaCycleRouteList .route-down').forEach((b) => b.addEventListener('click', (e) => {
+    const row = e.target.closest('.orbita-route-row'); const next = row.nextElementSibling;
+    if (next && next.dataset.priority === row.dataset.priority) list.insertBefore(next, row);
+    else if (next) toast('As prioritárias precisam permanecer antes das entregas normais.', 'error');
+    renumber();
   }));
 }
 
@@ -1506,9 +1564,14 @@ export async function openStartCycleModal() {
       const bReady = b.status === 'na_loja' || isScheduledReleasedToStore(b, todayKey);
       if (aReady !== bReady) return aReady ? -1 : 1;
       if (a.status === 'programada' && b.status === 'programada') {
-        return new Date(a.scheduledAt || a.entryTime).getTime() - new Date(b.scheduledAt || b.entryTime).getTime();
+        const scheduledDiff = new Date(a.scheduledAt || a.entryTime).getTime() - new Date(b.scheduledAt || b.entryTime).getTime();
+        if (scheduledDiff) return scheduledDiff;
       }
-      return (neighOrder[a.neighborhoodId] || 0) - (neighOrder[b.neighborhoodId] || 0);
+      const routeDiff = (neighOrder[a.neighborhoodId] || 0) - (neighOrder[b.neighborhoodId] || 0);
+      if (routeDiff) return routeDiff;
+      const aNeighborhood = neighborhoods.find((n) => n.id === a.neighborhoodId)?.name || '';
+      const bNeighborhood = neighborhoods.find((n) => n.id === b.neighborhoodId)?.name || '';
+      return aNeighborhood.localeCompare(bNeighborhood, 'pt-BR');
     });
 
   if (!candidates.length) return toast('Não há entregas disponíveis na loja ou agendadas para formar um ciclo.', 'error');
@@ -1591,7 +1654,9 @@ export async function openStartCycleModal() {
         if (!form.reportValidity()) return;
         const fd = Object.fromEntries(new FormData(form).entries());
         const order = $$('.cycle-item').map((el) => el.dataset.id);
-        const checked = order.filter((id) => $(`.cycle-item[data-id="${id}"] input[type=checkbox]`).checked);
+        const selectedInScreenOrder = order.filter((id) => $(`.cycle-item[data-id="${id}"] input[type=checkbox]`).checked);
+        // Prioridade alta sempre abre a rota; a ordem manual é preservada dentro de cada grupo.
+        const checked = [...selectedInScreenOrder.filter((id) => candidates.find((d) => d.id === id)?.priority === 'alta'), ...selectedInScreenOrder.filter((id) => candidates.find((d) => d.id === id)?.priority !== 'alta')];
         if (!checked.length) return toast('Selecione ao menos uma entrega.', 'error');
         const currentKmLogs = (await OdometerLogs.active()).filter((l) => l.environment === env && l.shiftDate === todayKey && l.vehicleId === fd.vehicleId && l.kmStart != null && l.kmEnd == null);
         if (!currentKmLogs.length) return toast('Ciclo bloqueado: registre primeiro o KM inicial de hoje para este veículo.', 'error');
@@ -1605,7 +1670,7 @@ export async function openStartCycleModal() {
           status: 'aberto', startedAt, closedAt: null,
           startedAtRegisteredBy: getOperatorName(), startedAtRecordedAt: new Date().toISOString(),
           odometerLogId: odometerLog.id, shiftKmStart: odometerLog.kmStart,
-          deliveryIds: checked, deletedAt: null,
+          deliveryIds: checked, routeOrderIds: [...checked], deletedAt: null,
         });
         const leftStoreAt = cycle.startedAt;
         for (const id of checked) {
@@ -1745,6 +1810,12 @@ async function openEditCycleDeliveriesModal(cycle) {
 
         const nextIds = (currentCycle.deliveryIds || []).filter((id) => !removeIds.includes(id));
         addIds.forEach((id) => { if (!nextIds.includes(id)) nextIds.push(id); });
+        const nextRouteIds = (currentCycle.routeOrderIds || currentCycle.deliveryIds || []).filter((id) => !removeIds.includes(id));
+        const priorityAdds = addIds.filter((id) => liveById.get(id)?.priority === 'alta');
+        const normalAdds = addIds.filter((id) => liveById.get(id)?.priority !== 'alta');
+        const firstNormal = nextRouteIds.findIndex((id) => liveById.get(id)?.priority !== 'alta');
+        nextRouteIds.splice(firstNormal < 0 ? nextRouteIds.length : firstNormal, 0, ...priorityAdds);
+        nextRouteIds.push(...normalAdds);
         const adjustmentAt = new Date().toISOString();
         const operator = getOperatorName();
         const adjustments = [...(currentCycle.deliveryAdjustments || [])];
@@ -1768,7 +1839,7 @@ async function openEditCycleDeliveriesModal(cycle) {
           });
           adjustments.push({ action:'add', deliveryId:id, purchaseNumber:d.purchaseNumber, at:adjustmentAt, operator, leftStoreAt:joinedAt, previousStatus:d.status });
         }
-        await Cycles.update(currentCycle.id, { deliveryIds: nextIds, deliveryAdjustments: adjustments });
+        await Cycles.update(currentCycle.id, { deliveryIds: nextIds, routeOrderIds: nextRouteIds, deliveryAdjustments: adjustments });
 
         closeModal();
         const parts = [];
@@ -3675,7 +3746,7 @@ function openVehicleAddModal(record = null) {
    ========================================================= */
 export async function renderSettings() {
   const cfg = JSON.parse(localStorage.getItem('orbita_settings') || '{}');
-  const { listAutoBackups } = await import('./db.js?v=5.21');
+  const { listAutoBackups } = await import('./db.js?v=5.22');
   const autoBackups = await listAutoBackups();
   const backupReasonLabel = (reason = '') => reason === 'abertura' ? 'Abertura do sistema' : reason === 'periodico-1min' ? 'Segurança · 1 minuto' : reason ? 'Alteração salva' : 'Automático';
   const autoList = autoBackups.length
@@ -3713,13 +3784,13 @@ export async function renderSettings() {
 export function wireSettingsEvents() {
   $$('.auto-restore-btn').forEach((btn) => btn.addEventListener('click', async () => {
     if (!confirm('Restaurar esse backup automático vai substituir os dados atuais. Continuar?')) return;
-    const { restoreAutoBackup } = await import('./db.js?v=5.21');
+    const { restoreAutoBackup } = await import('./db.js?v=5.22');
     await restoreAutoBackup(btn.dataset.id);
     toast('Backup automático restaurado.', 'success');
     refreshApp();
   }));
   $('#settingsBackupBtn')?.addEventListener('click', async () => {
-    const data = await (await import('./db.js?v=5.21')).exportAll();
+    const data = await (await import('./db.js?v=5.22')).exportAll();
     downloadJSON(`orbita-backup-completo-${new Date().toISOString().slice(0,10)}.json`, data);
     toast('Backup completo gerado.', 'success');
   });
@@ -3727,12 +3798,12 @@ export function wireSettingsEvents() {
     const file = e.target.files[0];
     if (!file) return;
     if (!confirm('Isso vai substituir os dados atuais pelo conteúdo do backup. Um backup de segurança dos dados atuais será baixado antes. Continuar?')) { e.target.value = ''; return; }
-    const currentBackup = await (await import('./db.js?v=5.21')).exportAll();
+    const currentBackup = await (await import('./db.js?v=5.22')).exportAll();
     downloadJSON(`orbita-backup-seguranca-antes-restauracao-${Date.now()}.json`, currentBackup);
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      await (await import('./db.js?v=5.21')).importAll(data);
+      await (await import('./db.js?v=5.22')).importAll(data);
       toast('Backup restaurado.', 'success');
       refreshApp();
     } catch { toast('Arquivo de backup inválido.', 'error'); }

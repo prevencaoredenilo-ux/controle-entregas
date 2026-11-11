@@ -3309,3 +3309,20 @@ body[data-operator-role="consulta"] .monitor-readonly-form textarea:disabled {
 body[data-operator-role="consulta"] .monitor-readonly-form .delivery-number-edit-input:disabled {
   font-weight:900; color:var(--ink); -webkit-text-fill-color:var(--ink);
 }
+
+
+/* v5.22 — roteiro separado por ciclo, sem alterar a numeração original */
+.orbita-route-origin{padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--paper);font-size:11px;color:var(--text)}
+.orbita-route-note{margin:9px 0 12px;color:var(--text-muted);font-size:10px;line-height:1.5}
+.orbita-route-list{display:grid;gap:7px;max-height:55vh;overflow:auto;padding:1px}
+.orbita-route-row{display:grid;grid-template-columns:28px minmax(0,1fr) auto;align-items:center;gap:9px;padding:10px;border:1px solid var(--line);border-radius:11px;background:var(--card)}
+.orbita-route-row.priority{border-color:#efb5b5;background:#fff7f7}
+.orbita-route-position{display:grid;place-items:center;width:27px;height:27px;border-radius:50%;background:var(--ink-2);color:#fff;font-size:12px}
+.orbita-route-copy{display:grid;gap:3px;min-width:0}
+.orbita-route-copy>div{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.orbita-route-copy>div>b{font-size:11px;color:var(--ink-2)}
+.orbita-route-copy>strong{font-size:11px;color:var(--text)}
+.orbita-route-copy>small{font-size:10px;color:var(--text-muted);line-height:1.35;overflow-wrap:anywhere}
+.orbita-route-priority{padding:3px 6px;border-radius:5px;background:#c62828;color:#fff;font-size:8px;font-weight:900;letter-spacing:.04em}
+.orbita-route-moves{display:grid;gap:4px}
+.orbita-route-moves button{min-width:30px;padding:4px}

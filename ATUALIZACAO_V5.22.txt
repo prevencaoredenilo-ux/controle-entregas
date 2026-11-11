@@ -1,0 +1,9 @@
+ÓRBITA v5.22 — ROTEIRIZAÇÃO POR CICLO
+
+- Cria uma ordem de rota separada para cada ciclo, sem alterar o número original das entregas.
+- Exibe posição na rota, número original, cliente, endereço, bairro e prioridade em vermelho.
+- Prioritárias permanecem antes das normais.
+- Permite ajustar manualmente a ordem dentro de cada grupo de prioridade.
+- Inclusões e retiradas de entregas atualizam a lista de rota do ciclo.
+- Agrupamento inicial usa a ordem de bairros já cadastrada no sistema. Não calcula distância real de ruas sem serviço de mapas/geocodificação.
+- Não altera a versão do IndexedDB, não limpa tabelas e não regrava históricos ou backups existentes.
