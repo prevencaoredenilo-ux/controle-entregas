@@ -1,7 +1,7 @@
-import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters } from './db.js?v=13.16';
-import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, seasonalContext, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=13.16';
-import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=13.16';
-import { exportFullExcelReport } from './excel-report.js?v=13.16';
+import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters } from './db.js?v=13.17';
+import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, seasonalContext, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=13.17';
+import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=13.17';
+import { exportFullExcelReport } from './excel-report.js?v=13.17';
 
 const DEFAULT_OPERATIONAL_TARGETS = { startMinutes:120, arrivalMinutes:210, warningMinutes:30, successTarget:90 };
 
@@ -644,23 +644,39 @@ export function wireCentralEvents() {
     setTimeout(() => img.classList.remove('waving'), 900);
   }, 6000);
 
-  // a saudação alterna um nome por vez entre colaboradores e entregadores ativos
-  clearInterval(_nameTimer);
+  // A saudação alterna um nome por vez entre colaboradores e entregadores ativos.
+  // O estado fica fora do ciclo de renderização: trocar de tela ou atualizar a Central
+  // não reinicia os 30 segundos nem faz a rotação parecer travada.
   Promise.all([Collaborators.all(), Drivers.all()]).then(([collaboratorList, driverList]) => {
-    const active = [...new Map([...collaboratorList, ...driverList].filter((person) => person?.active !== false && person?.name).map((person) => [String(person.name).trim().toLowerCase(), person])).values()];
+    const active = [...new Map([...collaboratorList, ...driverList]
+      .filter((person) => person?.active !== false && !person?.deletedAt && String(person?.name || '').trim())
+      .map((person) => [String(person.name).trim().toLowerCase(), { ...person, name: String(person.name).trim() }]))
+      .values()];
     if (!active.length) return;
-    const selectedIndex = active.findIndex((c) => c.name === getOperatorName());
-    let i = selectedIndex >= 0 ? selectedIndex : 0;
-    _nameTimer = setInterval(() => {
+
+    const signature = active.map((person) => person.name.toLowerCase()).join('|');
+    const state = window.__orbitaGreetingRotation || (window.__orbitaGreetingRotation = { signature: '', index: 0, timer: null });
+    if (state.signature === signature && state.timer) return;
+    if (state.timer) clearInterval(state.timer);
+
+    const selectedName = String(getOperatorName() || '').trim().toLowerCase();
+    const selectedIndex = active.findIndex((person) => person.name.toLowerCase() === selectedName);
+    state.signature = signature;
+    state.index = selectedIndex >= 0 ? selectedIndex : 0;
+    const rotateGreeting = () => {
       const other = $('#greetName');
-      if (!other) { clearInterval(_nameTimer); return; }
-      i = (i + 1) % active.length;
+      if (!other) return;
+      state.index = (state.index + 1) % active.length;
       other.style.opacity = '0';
-      setTimeout(() => {
-        other.textContent = ', ' + active[i].name;
-        other.style.opacity = '1';
+      window.setTimeout(() => {
+        const current = $('#greetName');
+        if (!current) return;
+        current.textContent = ', ' + active[state.index].name;
+        current.style.opacity = '1';
       }, 220);
-    }, 30000);
+    };
+    state.timer = window.setInterval(rotateGreeting, 30000);
+    _nameTimer = state.timer;
   });
 
   const mascot = $('.mascot-frame.interactive');
@@ -3749,7 +3765,7 @@ function openVehicleAddModal(record = null) {
    ========================================================= */
 export async function renderSettings() {
   const cfg = JSON.parse(localStorage.getItem('orbita_settings') || '{}');
-  const { listAutoBackups } = await import('./db.js?v=13.16');
+  const { listAutoBackups } = await import('./db.js?v=13.17');
   const autoBackups = await listAutoBackups();
   const backupReasonLabel = (reason = '') => reason === 'abertura' ? 'Abertura do sistema' : reason === 'periodico-1min' ? 'Segurança · 1 minuto' : reason ? 'Alteração salva' : 'Automático';
   const autoList = autoBackups.length
@@ -3788,13 +3804,13 @@ export async function renderSettings() {
 export function wireSettingsEvents() {
   $$('.auto-restore-btn').forEach((btn) => btn.addEventListener('click', async () => {
     if (!confirm('Restaurar esse backup automático vai substituir os dados atuais. Continuar?')) return;
-    const { restoreAutoBackup } = await import('./db.js?v=13.16');
+    const { restoreAutoBackup } = await import('./db.js?v=13.17');
     await restoreAutoBackup(btn.dataset.id);
     toast('Backup automático restaurado.', 'success');
     refreshApp();
   }));
   $('#settingsBackupBtn')?.addEventListener('click', async () => {
-    const data = await (await import('./db.js?v=13.16')).exportAll();
+    const data = await (await import('./db.js?v=13.17')).exportAll();
     downloadJSON(`orbita-backup-completo-${new Date().toISOString().slice(0,10)}.json`, data);
     toast('Backup completo gerado.', 'success');
   });
@@ -3802,12 +3818,12 @@ export function wireSettingsEvents() {
     const file = e.target.files[0];
     if (!file) return;
     if (!confirm('Isso vai substituir os dados atuais pelo conteúdo do backup. Um backup de segurança dos dados atuais será baixado antes. Continuar?')) { e.target.value = ''; return; }
-    const currentBackup = await (await import('./db.js?v=13.16')).exportAll();
+    const currentBackup = await (await import('./db.js?v=13.17')).exportAll();
     downloadJSON(`orbita-backup-seguranca-antes-restauracao-${Date.now()}.json`, currentBackup);
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      await (await import('./db.js?v=13.16')).importAll(data);
+      await (await import('./db.js?v=13.17')).importAll(data);
       toast('Backup restaurado.', 'success');
       refreshApp();
     } catch { toast('Arquivo de backup inválido.', 'error'); }

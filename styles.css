@@ -5641,7 +5641,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--blue) !important
 }
 
 
-/* v13.16 — previsão automática ao lado do relógio */
+/* v13.17 — previsão automática ao lado do relógio */
 .app-v8 .weather-chip { display:flex; align-items:center; gap:7px; min-height:42px; padding:5px 10px; background:var(--theme-action-soft)!important; color:var(--theme-black)!important; border:2px solid var(--theme-black)!important; border-radius:12px!important; }
 .app-v8 .weather-chip .weather-icon { display:grid; place-items:center; width:22px; height:22px; color:var(--theme-black); font-size:18px; font-weight:900; }
 .app-v8 .weather-chip .weather-icon::before { content:attr(data-icon); }
@@ -5662,4 +5662,33 @@ input:focus, select:focus, textarea:focus { border-color: var(--blue) !important
   .app-v8 .weather-chip::before { font-size:15px; width:18px; height:18px; }
   .app-v8 .weather-chip>strong { font-size:14px; }
   .app-v8 .weather-copy b { display:none; }
+}
+
+/* v13.17 — cabeçalho simétrico: todos os controles na mesma altura */
+.app-v8 .header-line { align-items:center!important; }
+.app-v8 .header-actions { align-items:stretch!important; gap:10px!important; }
+.app-v8 .header-actions .clock-chip,
+.app-v8 .header-actions .weather-chip,
+.app-v8 .header-actions .version-chip,
+.app-v8 .header-actions .header-create {
+  box-sizing:border-box!important;
+  height:52px!important;
+  min-height:52px!important;
+  margin:0!important;
+  align-self:stretch!important;
+}
+.app-v8 .header-actions .clock-chip,
+.app-v8 .header-actions .version-chip { justify-content:center!important; }
+.app-v8 .header-actions .header-create { display:inline-flex!important; align-items:center!important; justify-content:center!important; }
+.app-v8 .header-actions .weather-chip { align-self:stretch!important; }
+@media(max-width:900px){
+  .app-v8 .header-actions { gap:7px!important; }
+  .app-v8 .header-actions .clock-chip,
+  .app-v8 .header-actions .weather-chip,
+  .app-v8 .header-actions .version-chip,
+  .app-v8 .header-actions .header-create { height:44px!important; min-height:44px!important; }
+}
+@media(max-width:620px){
+  .app-v8 .header-actions .weather-chip,
+  .app-v8 .header-actions .header-create { height:42px!important; min-height:42px!important; }
 }
