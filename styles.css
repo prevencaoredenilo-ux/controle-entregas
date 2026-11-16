@@ -5641,7 +5641,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--blue) !important
 }
 
 
-/* v13.19 — previsão automática ao lado do relógio */
+/* v13.20 — previsão automática ao lado do relógio */
 .app-v8 .weather-chip { display:flex; align-items:center; gap:7px; min-height:42px; padding:5px 10px; background:var(--theme-action-soft)!important; color:var(--theme-black)!important; border:2px solid var(--theme-black)!important; border-radius:12px!important; }
 .app-v8 .weather-chip .weather-icon { display:grid; place-items:center; width:22px; height:22px; color:var(--theme-black); font-size:18px; font-weight:900; }
 .app-v8 .weather-chip .weather-icon::before { content:attr(data-icon); }
@@ -5664,7 +5664,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--blue) !important
   .app-v8 .weather-copy b { display:none; }
 }
 
-/* v13.19 — cabeçalho simétrico: todos os controles na mesma altura */
+/* v13.20 — cabeçalho simétrico: todos os controles na mesma altura */
 .app-v8 .header-line { align-items:center!important; }
 .app-v8 .header-actions { align-items:stretch!important; gap:10px!important; }
 .app-v8 .header-actions .clock-chip,
@@ -5693,17 +5693,21 @@ input:focus, select:focus, textarea:focus { border-color: var(--blue) !important
   .app-v8 .header-actions .header-create { height:42px!important; min-height:42px!important; }
 }
 
-/* v13.19 — galeria para visualizar todos os feriados sem alterar o calendário */
+/* v13.20 — galeria para visualizar todos os feriados sem alterar o calendário */
 .app-v8 .seasonal-preview-intro { margin-bottom:16px; padding:14px 16px; background:var(--theme-action)!important; border:2px solid var(--theme-black); border-radius:12px; color:var(--theme-black)!important; }
 .app-v8 .seasonal-preview-intro strong { display:block; color:var(--theme-black)!important; font-family:var(--font-display); font-size:16px; }
 .app-v8 .seasonal-preview-intro p { margin:5px 0 0; color:var(--theme-black)!important; font-size:11px; line-height:1.45; }
 .app-v8 .seasonal-preview-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; max-height:58vh; overflow:auto; padding:2px 4px 8px 2px; }
 .app-v8 .seasonal-preview-card { min-width:0; background:var(--theme-white)!important; border:2px solid var(--theme-black); border-radius:14px; box-shadow:3px 3px 0 var(--theme-black); overflow:hidden; }
+.app-v8 button.seasonal-preview-card { display:block; width:100%; padding:0; text-align:left; cursor:pointer; transition:transform .16s ease, box-shadow .16s ease, background .16s ease; }
+.app-v8 button.seasonal-preview-card:hover,.app-v8 button.seasonal-preview-card:focus-visible { background:var(--theme-action-soft)!important; transform:translateY(-2px); box-shadow:5px 5px 0 var(--theme-black); }
 .app-v8 .seasonal-preview-stage { position:relative; height:92px; display:grid; place-items:center; overflow:hidden; background:var(--theme-black)!important; color:var(--theme-action)!important; }
 .app-v8 .seasonal-preview-stage>strong { position:relative; z-index:2; color:var(--theme-action)!important; font-size:28px; }
 .app-v8 .seasonal-preview-stage>small { position:absolute; z-index:2; bottom:8px; color:var(--theme-muted-light)!important; font-size:9px; font-weight:800; }
 .app-v8 .seasonal-preview-stage .seasonal-atmosphere { opacity:1; }
 .app-v8 .seasonal-preview-card h3 { margin:10px 12px 2px; color:var(--theme-black)!important; font-family:var(--font-display); font-size:13px; }
 .app-v8 .seasonal-preview-card>span { display:block; margin:0 12px 12px; color:var(--theme-gray)!important; font-size:10px; }
+.app-v8 .ops-v8-command-head.seasonal-preview-active { outline:3px solid var(--theme-action); outline-offset:4px; }
+.app-v8 .seasonal-preview-atmosphere-live { z-index:4!important; pointer-events:none!important; }
 @media(max-width:760px){ .app-v8 .seasonal-preview-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media(max-width:480px){ .app-v8 .seasonal-preview-grid { grid-template-columns:1fr; } }
