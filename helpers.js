@@ -171,6 +171,63 @@ export function motivationalPhrase(value) {
   return list[Math.floor(Math.random() * list.length)];
 }
 
+function easterDate(year) {
+  const a = year % 19, b = Math.floor(year / 100), c = year % 100;
+  const d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30, i = Math.floor(c / 4), k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31), day = ((h + l - 7 * m + 114) % 31) + 1;
+  return new Date(year, month - 1, day);
+}
+
+function shiftDate(date, days) {
+  const next = new Date(date); next.setDate(next.getDate() + days); return next;
+}
+
+function secondSunday(year, month) {
+  const first = new Date(year, month - 1, 1);
+  return new Date(year, month - 1, 8 + ((7 - first.getDay()) % 7));
+}
+
+function seasonalEvents(year) {
+  const easter = easterDate(year);
+  const fixed = (month, day, label, theme, icon, windowBefore = 0, windowAfter = 1) => ({ date: new Date(year, month - 1, day), label, theme, icon, windowBefore, windowAfter });
+  return [
+    fixed(1, 1, 'Ano Novo', 'new-year', '✦', 6, 6),
+    { date: shiftDate(easter, -47), label: 'Carnaval', theme: 'carnival', icon: '✦', windowBefore: 5, windowAfter: 2 },
+    { date: shiftDate(easter, -2), label: 'Sexta-feira Santa', theme: 'easter', icon: '✧', windowBefore: 2, windowAfter: 3 },
+    { date: easter, label: 'Páscoa', theme: 'easter', icon: '○', windowBefore: 4, windowAfter: 3 },
+    fixed(4, 21, 'Tiradentes', 'civic', '◆'),
+    fixed(5, 1, 'Dia do Trabalho', 'civic', '◆'),
+    { date: secondSunday(year, 5), label: 'Dia das Mães', theme: 'hearts', icon: '♥', windowBefore: 2, windowAfter: 1 },
+    fixed(6, 12, 'Dia dos Namorados', 'hearts', '♥', 2, 2),
+    fixed(6, 24, 'São João', 'june-festival', '⚑', 10, 8),
+    { date: shiftDate(easter, 60), label: 'Corpus Christi', theme: 'civic', icon: '◆', windowBefore: 1, windowAfter: 1 },
+    { date: secondSunday(year, 8), label: 'Dia dos Pais', theme: 'hearts', icon: '♥', windowBefore: 2, windowAfter: 1 },
+    fixed(9, 7, 'Independência do Brasil', 'civic', '◆'),
+    fixed(10, 12, 'Nossa Senhora Aparecida', 'civic', '◆'),
+    fixed(10, 12, 'Dia das Crianças', 'celebration', '✦'),
+    fixed(10, 31, 'Halloween', 'halloween', '🦇', 10, 2),
+    fixed(11, 2, 'Finados', 'civic', '◆'),
+    fixed(11, 15, 'Proclamação da República', 'civic', '◆'),
+    fixed(11, 20, 'Consciência Negra', 'civic', '◆'),
+    fixed(12, 25, 'Natal', 'christmas', '❄', 24, 12),
+  ];
+}
+
+export function seasonalContext(reference = new Date()) {
+  const now = new Date(reference); now.setHours(12, 0, 0, 0);
+  const events = [...seasonalEvents(now.getFullYear() - 1), ...seasonalEvents(now.getFullYear()), ...seasonalEvents(now.getFullYear() + 1)];
+  const active = events.find((event) => {
+    const start = shiftDate(event.date, -(event.windowBefore || 0)); start.setHours(0, 0, 0, 0);
+    const end = shiftDate(event.date, event.windowAfter || 0); end.setHours(23, 59, 59, 999);
+    return now >= start && now <= end;
+  });
+  const upcoming = events.filter((event) => event.date >= now).sort((a, b) => a.date - b.date)[0];
+  const diffDays = upcoming ? Math.max(0, Math.ceil((upcoming.date - now) / 86400000)) : null;
+  return { active: active || null, upcoming: upcoming || null, daysToUpcoming: diffDays };
+}
+
 let chartSequence = 0;
 
 // Gráfico offline, responsivo e diretamente legível — eixos, valores e tooltips reais.

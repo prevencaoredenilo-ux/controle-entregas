@@ -5606,3 +5606,36 @@ input:focus, select:focus, textarea:focus { border-color: var(--blue) !important
   .app-v8.sidebar-collapsed .nav-rail,
   .app-v8.sidebar-collapsed .nav-rail.open { width:0!important;flex-basis:0!important;min-width:0!important;padding:0!important;border:0!important;border-right:0!important;outline:0!important;box-shadow:none!important; }
 }
+
+
+/* v13.14 — calendário brasileiro, saudações coletivas e atmosfera sazonal */
+.app-v8 .ops-v8-command-head { position:relative; overflow:hidden; isolation:isolate; }
+.app-v8 .ops-v8-command-copy,
+.app-v8 .ops-v8-score { position:relative; z-index:2; }
+.app-v8 .seasonal-atmosphere { position:absolute; inset:0; z-index:1; pointer-events:none; overflow:hidden; opacity:.92; }
+.app-v8 .seasonal-atmosphere span { position:absolute; left:calc(5% + (var(--i) * 17%)); top:-24px; color:var(--theme-action); font-size:18px; line-height:1; text-shadow:0 2px 0 var(--theme-black); animation:seasonal-fall 7s ease-in-out infinite; animation-delay:calc(var(--i) * -.85s); }
+.app-v8 .seasonal-atmosphere span:nth-child(even) { font-size:12px; }
+.app-v8 .seasonal-christmas span { color:var(--theme-white); text-shadow:0 1px 0 var(--theme-black); animation-name:seasonal-snow; }
+.app-v8 .seasonal-halloween span { color:var(--theme-action); animation-name:seasonal-bat; }
+.app-v8 .seasonal-new-year span,
+.app-v8 .seasonal-carnival span { color:var(--theme-action); animation-name:seasonal-sparkle; }
+.app-v8 .seasonal-june-festival span { color:var(--theme-action); animation-name:seasonal-flag; }
+.app-v8 .seasonal-hearts span { color:var(--theme-action); animation-name:seasonal-heart; }
+.app-v8 .seasonal-easter span { color:var(--theme-white); animation-name:seasonal-bounce; }
+.app-v8 .seasonal-reminder { display:inline-block; margin-left:6px; color:var(--theme-action)!important; font-weight:800; }
+.app-v8 .seasonal-atmosphere + .ops-v8-command-copy .seasonal-reminder { position:relative; z-index:3; }
+@keyframes seasonal-fall { 0%{transform:translate3d(0,-20px,0) rotate(0deg);opacity:0} 15%{opacity:.9} 100%{transform:translate3d(18px,170px,0) rotate(180deg);opacity:0} }
+@keyframes seasonal-snow { 0%{transform:translate3d(0,-20px,0) rotate(0deg);opacity:0} 12%{opacity:.95} 50%{transform:translate3d(-16px,86px,0) rotate(90deg)} 100%{transform:translate3d(18px,190px,0) rotate(210deg);opacity:0} }
+@keyframes seasonal-bat { 0%{transform:translate3d(-12px,24px,0) scale(.75);opacity:0} 18%{opacity:1} 48%{transform:translate3d(60px,72px,0) scale(1.05) rotate(-8deg)} 100%{transform:translate3d(180px,18px,0) scale(.7) rotate(8deg);opacity:0} }
+@keyframes seasonal-sparkle { 0%,100%{transform:scale(.65) rotate(0deg);opacity:.15} 50%{transform:scale(1.25) rotate(45deg);opacity:1} }
+@keyframes seasonal-flag { 0%,100%{transform:translateY(0) rotate(-8deg);opacity:.35} 50%{transform:translateY(22px) rotate(8deg);opacity:1} }
+@keyframes seasonal-heart { 0%{transform:translateY(24px) scale(.7);opacity:0} 35%{opacity:1} 100%{transform:translateY(-86px) scale(1.2);opacity:0} }
+@keyframes seasonal-bounce { 0%,100%{transform:translateY(8px) rotate(-8deg);opacity:.35} 50%{transform:translateY(-16px) rotate(8deg);opacity:1} }
+@media (prefers-reduced-motion:reduce) {
+  .app-v8 .seasonal-atmosphere span { animation:none!important; opacity:.35; top:18px; }
+}
+@media (max-width:520px) {
+  .app-v8 .seasonal-atmosphere { opacity:.6; }
+  .app-v8 .seasonal-atmosphere span { font-size:14px; }
+  .app-v8 .seasonal-reminder { display:block; margin:5px 0 0; }
+}

@@ -1,7 +1,7 @@
-import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters } from './db.js?v=13.12';
-import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=13.12';
-import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=13.12';
-import { exportFullExcelReport } from './excel-report.js?v=13.13';
+import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters } from './db.js?v=13.14';
+import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, seasonalContext, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=13.14';
+import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=13.14';
+import { exportFullExcelReport } from './excel-report.js?v=13.14';
 
 const DEFAULT_OPERATIONAL_TARGETS = { startMinutes:120, arrivalMinutes:210, warningMinutes:30, successTarget:90 };
 
@@ -214,8 +214,17 @@ export async function renderCentral() {
   const hour = new Date().getHours();
   const greet = hour < 12 ? 'Bom dia' : hour < 18 ? 'Boa tarde' : 'Boa noite';
   const activeCollaborators = collaborators.filter((c) => c.active !== false);
+  const greetingPeople = [...new Map([...activeCollaborators, ...drivers.filter((d) => d.active !== false)].filter((person) => person?.name).map((person) => [String(person.name).trim().toLowerCase(), person])).values()];
   const selectedName = getOperatorName();
+  const greetingNames = greetingPeople.map((person) => String(person.name).trim()).filter(Boolean);
+  const greetingNamesText = greetingNames.length === 1 ? greetingNames[0] : greetingNames.length === 2 ? `${greetingNames[0]} e ${greetingNames[1]}` : greetingNames.length > 2 ? `${greetingNames.slice(0, -1).join(', ')} e ${greetingNames.at(-1)}` : '';
   const firstName = activeCollaborators.find((c) => c.name === selectedName)?.name || activeCollaborators[0]?.name || '';
+  const seasonal = seasonalContext(now);
+  const seasonalEvent = seasonal.active || seasonal.upcoming;
+  const seasonalIsUpcoming = !seasonal.active && seasonal.upcoming;
+  const seasonalParticles = seasonal.active ? ({ christmas:['❄','✦','❄','✧','❄'], 'new-year':['✦','✧','◆','✦','✧'], halloween:['🦇','✦','🦇','✧'], carnival:['✦','◆','✧','●'], 'june-festival':['⚑','✦','⚑','◆'], hearts:['♥','✦','♥'], easter:['○','✦','○'], celebration:['✦','◆','✧'], civic:['◆','✦'] }[seasonal.active.theme] || ['✦','◆','✧']) : [];
+  const seasonalMarkup = seasonal.active ? `<div class="seasonal-atmosphere seasonal-${seasonal.active.theme}" aria-hidden="true">${seasonalParticles.map((particle, index) => `<span style="--i:${index}">${particle}</span>`).join('')}</div>` : '';
+  const seasonalReminder = seasonalEvent ? (seasonalIsUpcoming ? `Próxima data: ${seasonalEvent.label} em ${seasonal.daysToUpcoming === 0 ? 'hoje' : `${seasonal.daysToUpcoming} dia(s)`}.` : `Hoje: ${seasonalEvent.label}.`) : '';
 
   const activeVehicles = vehicles.filter((v) => v.active);
   const todayKmLogs = kmLogs.filter((l) => l.environment === env && isToday(l.shiftDate));
@@ -276,10 +285,11 @@ export async function renderCentral() {
   return `
     <div class="ops-v8-screen">
       <section class="ops-v8-command-head">
+        ${seasonalMarkup}
         <div class="ops-v8-command-copy">
           <span class="ops-v8-kicker">CONTROLE DE TURNO · ${env === 'treino' ? 'TREINAMENTO' : 'OPERAÇÃO REAL'}</span>
-          <h2>${greet}${firstName ? ', ' + escapeHtml(firstName) : ''}. O que precisa ser resolvido agora?</h2>
-          <p>${phrase}</p>
+          <h2>${greet}${greetingNamesText ? ', ' + escapeHtml(greetingNamesText) : firstName ? ', ' + escapeHtml(firstName) : ''}. O que precisa ser resolvido agora?</h2>
+          <p>${phrase}${seasonalReminder ? ` <span class="seasonal-reminder">${escapeHtml(seasonalReminder)}</span>` : ''}</p>
           <div class="ops-v8-command-actions">
             <button class="btn-primary" id="qaNewDelivery">＋ Nova entrega</button>
             <button class="btn-ghost" id="qaStartCycle">🚚 Formar ciclo</button>
@@ -3739,7 +3749,7 @@ function openVehicleAddModal(record = null) {
    ========================================================= */
 export async function renderSettings() {
   const cfg = JSON.parse(localStorage.getItem('orbita_settings') || '{}');
-  const { listAutoBackups } = await import('./db.js?v=13.12');
+  const { listAutoBackups } = await import('./db.js?v=13.14');
   const autoBackups = await listAutoBackups();
   const backupReasonLabel = (reason = '') => reason === 'abertura' ? 'Abertura do sistema' : reason === 'periodico-1min' ? 'Segurança · 1 minuto' : reason ? 'Alteração salva' : 'Automático';
   const autoList = autoBackups.length
@@ -3778,13 +3788,13 @@ export async function renderSettings() {
 export function wireSettingsEvents() {
   $$('.auto-restore-btn').forEach((btn) => btn.addEventListener('click', async () => {
     if (!confirm('Restaurar esse backup automático vai substituir os dados atuais. Continuar?')) return;
-    const { restoreAutoBackup } = await import('./db.js?v=13.12');
+    const { restoreAutoBackup } = await import('./db.js?v=13.14');
     await restoreAutoBackup(btn.dataset.id);
     toast('Backup automático restaurado.', 'success');
     refreshApp();
   }));
   $('#settingsBackupBtn')?.addEventListener('click', async () => {
-    const data = await (await import('./db.js?v=13.12')).exportAll();
+    const data = await (await import('./db.js?v=13.14')).exportAll();
     downloadJSON(`orbita-backup-completo-${new Date().toISOString().slice(0,10)}.json`, data);
     toast('Backup completo gerado.', 'success');
   });
@@ -3792,12 +3802,12 @@ export function wireSettingsEvents() {
     const file = e.target.files[0];
     if (!file) return;
     if (!confirm('Isso vai substituir os dados atuais pelo conteúdo do backup. Um backup de segurança dos dados atuais será baixado antes. Continuar?')) { e.target.value = ''; return; }
-    const currentBackup = await (await import('./db.js?v=13.12')).exportAll();
+    const currentBackup = await (await import('./db.js?v=13.14')).exportAll();
     downloadJSON(`orbita-backup-seguranca-antes-restauracao-${Date.now()}.json`, currentBackup);
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      await (await import('./db.js?v=13.12')).importAll(data);
+      await (await import('./db.js?v=13.14')).importAll(data);
       toast('Backup restaurado.', 'success');
       refreshApp();
     } catch { toast('Arquivo de backup inválido.', 'error'); }
