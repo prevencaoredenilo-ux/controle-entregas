@@ -1,7 +1,7 @@
-import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters } from './db.js?v=13.20';
-import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, seasonalContext, SEASONAL_PREVIEW_CATALOG, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=13.20';
-import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=13.20';
-import { exportFullExcelReport } from './excel-report.js?v=13.20';
+import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters } from './db.js?v=13.21';
+import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, seasonalContext, SEASONAL_PREVIEW_CATALOG, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=13.21';
+import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=13.21';
+import { exportFullExcelReport } from './excel-report.js?v=13.21';
 
 const DEFAULT_OPERATIONAL_TARGETS = { startMinutes:120, arrivalMinutes:210, warningMinutes:30, successTarget:90 };
 
@@ -222,7 +222,7 @@ export async function renderCentral() {
   const seasonal = seasonalContext(now);
   const seasonalEvent = seasonal.active || seasonal.upcoming;
   const seasonalIsUpcoming = !seasonal.active && seasonal.upcoming;
-  const seasonalParticles = seasonal.active ? ({ christmas:['❄','✦','❄','✧','❄'], 'new-year':['✦','✧','◆','✦','✧'], halloween:['🦇','✦','🦇','✧'], carnival:['✦','◆','✧','●'], 'june-festival':['⚑','✦','⚑','◆'], hearts:['♥','✦','♥'], easter:['○','✦','○'], celebration:['✦','◆','✧'], civic:['◆','✦'] }[seasonal.active.theme] || ['✦','◆','✧']) : [];
+  const seasonalParticles = seasonal.active ? ({ christmas:['❄','✦','❄','✧','❄','★'], 'new-year':['✦','✧','◆','★','✦','✺'], halloween:['🦇','✦','🦇','✧','🕸'], carnival:['✦','◆','✧','●','◆','✦'], 'june-festival':['⚑','⚑','⚑','⚑','⚑','⚑'], hearts:['♥','♥','♥','✦','♥','♥'], easter:['🥚','○','🐣','✦','🥚'], celebration:['✦','◆','✧','●','★','✦'], civic:['◆','✦','◆','✧','◆','✦'] }[seasonal.active.theme] || ['✦','◆','✧']) : [];
   const seasonalMarkup = seasonal.active ? `<div class="seasonal-atmosphere seasonal-${seasonal.active.theme}" aria-hidden="true">${seasonalParticles.map((particle, index) => `<span style="--i:${index}">${particle}</span>`).join('')}</div>` : '';
   const seasonalReminder = seasonalEvent ? (seasonalIsUpcoming ? `Próxima data: ${seasonalEvent.label} em ${seasonal.daysToUpcoming === 0 ? 'hoje' : `${seasonal.daysToUpcoming} dia(s)`}.` : `Hoje: ${seasonalEvent.label}.`) : '';
 
@@ -474,7 +474,8 @@ async function openRecalculateDayNumbersModal() {
 }
 
 export function openSeasonalPreview() {
-  const particles = (item) => Array.from({ length: 7 }, (_, index) => `<span style="--i:${index}">${item.icon}</span>`).join('');
+  const particleSet = (theme, fallback) => ({ christmas:['❄','✦','❄','✧','❄','★','❄'], 'new-year':['✦','✧','◆','★','✦','✺','◆'], halloween:['🦇','✦','🦇','✧','🕸','🦇','✦'], carnival:['✦','◆','✧','●','◆','✦','●'], 'june-festival':['⚑','⚑','⚑','⚑','⚑','⚑','⚑'], hearts:['♥','♥','♥','✦','♥','♥','♥'], easter:['🥚','○','🐣','✦','🥚','○','🐣'], celebration:['✦','◆','✧','●','★','✦','◆'], civic:['◆','✦','◆','✧','◆','✦','◆'] }[theme] || Array(7).fill(fallback));
+  const particles = (item) => particleSet(item.theme, item.icon).map((particle, index) => `<span style="--i:${index}">${particle}</span>`).join('');
   const body = `<div class="seasonal-preview-intro"><strong>Prévia visual das animações</strong><p>Selecione um feriado para executar a animação no painel real por 20 segundos. Depois, ela sai automaticamente e o sistema volta ao estado normal.</p></div><div class="seasonal-preview-grid">${SEASONAL_PREVIEW_CATALOG.map((item) => `<button type="button" class="seasonal-preview-card" data-preview-theme="${item.theme}" data-preview-icon="${item.icon}" data-preview-label="${item.label}"><div class="seasonal-preview-stage"><div class="seasonal-atmosphere seasonal-preview-atmosphere seasonal-${item.theme}" aria-hidden="true">${particles(item)}</div><strong>${item.icon}</strong><small>${item.effect}</small></div><h3>${item.label}</h3><span>${item.theme === 'civic' ? 'Tema cívico' : 'Clique para experimentar por 20s'}</span></button>`).join('')}</div>`;
   openModal({
     title: 'Prévia dos feriados',
@@ -500,7 +501,8 @@ function runSeasonalPreview(theme, icon, label) {
   const atmosphere = document.createElement('div');
   atmosphere.className = `seasonal-atmosphere seasonal-preview-atmosphere seasonal-preview-atmosphere-live seasonal-${theme}`;
   atmosphere.setAttribute('aria-hidden', 'true');
-  atmosphere.innerHTML = Array.from({ length: 9 }, (_, index) => `<span style="--i:${index}">${icon}</span>`).join('');
+  const symbols = ({ christmas:['❄','✦','❄','✧','❄','★','❄','✦','❄'], 'new-year':['✦','✧','◆','★','✦','✺','◆','✧','★'], halloween:['🦇','✦','🦇','✧','🕸','🦇','✦','🦇','✧'], carnival:['✦','◆','✧','●','◆','✦','●','◆','✧'], 'june-festival':['⚑','⚑','⚑','⚑','⚑','⚑','⚑','⚑','⚑'], hearts:['♥','♥','♥','✦','♥','♥','♥','♥','✦'], easter:['🥚','○','🐣','✦','🥚','○','🐣','✦','🥚'], celebration:['✦','◆','✧','●','★','✦','◆','✧','●'], civic:['◆','✦','◆','✧','◆','✦','◆','✧','◆'] }[theme] || Array(9).fill(icon));
+  atmosphere.innerHTML = symbols.map((particle, index) => `<span style="--i:${index}">${particle}</span>`).join('');
   commandHead.appendChild(atmosphere);
   toast(`${label}: prévia ativa por 20 segundos.`, 'success');
   window.__seasonalPreviewTimer = window.setTimeout(() => {
@@ -3804,7 +3806,7 @@ function openVehicleAddModal(record = null) {
    ========================================================= */
 export async function renderSettings() {
   const cfg = JSON.parse(localStorage.getItem('orbita_settings') || '{}');
-  const { listAutoBackups } = await import('./db.js?v=13.20');
+  const { listAutoBackups } = await import('./db.js?v=13.21');
   const autoBackups = await listAutoBackups();
   const backupReasonLabel = (reason = '') => reason === 'abertura' ? 'Abertura do sistema' : reason === 'periodico-1min' ? 'Segurança · 1 minuto' : reason ? 'Alteração salva' : 'Automático';
   const autoList = autoBackups.length
@@ -3843,13 +3845,13 @@ export async function renderSettings() {
 export function wireSettingsEvents() {
   $$('.auto-restore-btn').forEach((btn) => btn.addEventListener('click', async () => {
     if (!confirm('Restaurar esse backup automático vai substituir os dados atuais. Continuar?')) return;
-    const { restoreAutoBackup } = await import('./db.js?v=13.20');
+    const { restoreAutoBackup } = await import('./db.js?v=13.21');
     await restoreAutoBackup(btn.dataset.id);
     toast('Backup automático restaurado.', 'success');
     refreshApp();
   }));
   $('#settingsBackupBtn')?.addEventListener('click', async () => {
-    const data = await (await import('./db.js?v=13.20')).exportAll();
+    const data = await (await import('./db.js?v=13.21')).exportAll();
     downloadJSON(`orbita-backup-completo-${new Date().toISOString().slice(0,10)}.json`, data);
     toast('Backup completo gerado.', 'success');
   });
@@ -3857,12 +3859,12 @@ export function wireSettingsEvents() {
     const file = e.target.files[0];
     if (!file) return;
     if (!confirm('Isso vai substituir os dados atuais pelo conteúdo do backup. Um backup de segurança dos dados atuais será baixado antes. Continuar?')) { e.target.value = ''; return; }
-    const currentBackup = await (await import('./db.js?v=13.20')).exportAll();
+    const currentBackup = await (await import('./db.js?v=13.21')).exportAll();
     downloadJSON(`orbita-backup-seguranca-antes-restauracao-${Date.now()}.json`, currentBackup);
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      await (await import('./db.js?v=13.20')).importAll(data);
+      await (await import('./db.js?v=13.21')).importAll(data);
       toast('Backup restaurado.', 'success');
       refreshApp();
     } catch { toast('Arquivo de backup inválido.', 'error'); }

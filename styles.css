@@ -5641,7 +5641,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--blue) !important
 }
 
 
-/* v13.20 — previsão automática ao lado do relógio */
+/* v13.21 — previsão automática ao lado do relógio */
 .app-v8 .weather-chip { display:flex; align-items:center; gap:7px; min-height:42px; padding:5px 10px; background:var(--theme-action-soft)!important; color:var(--theme-black)!important; border:2px solid var(--theme-black)!important; border-radius:12px!important; }
 .app-v8 .weather-chip .weather-icon { display:grid; place-items:center; width:22px; height:22px; color:var(--theme-black); font-size:18px; font-weight:900; }
 .app-v8 .weather-chip .weather-icon::before { content:attr(data-icon); }
@@ -5664,7 +5664,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--blue) !important
   .app-v8 .weather-copy b { display:none; }
 }
 
-/* v13.20 — cabeçalho simétrico: todos os controles na mesma altura */
+/* v13.21 — cabeçalho simétrico: todos os controles na mesma altura */
 .app-v8 .header-line { align-items:center!important; }
 .app-v8 .header-actions { align-items:stretch!important; gap:10px!important; }
 .app-v8 .header-actions .clock-chip,
@@ -5693,7 +5693,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--blue) !important
   .app-v8 .header-actions .header-create { height:42px!important; min-height:42px!important; }
 }
 
-/* v13.20 — galeria para visualizar todos os feriados sem alterar o calendário */
+/* v13.21 — galeria para visualizar todos os feriados sem alterar o calendário */
 .app-v8 .seasonal-preview-intro { margin-bottom:16px; padding:14px 16px; background:var(--theme-action)!important; border:2px solid var(--theme-black); border-radius:12px; color:var(--theme-black)!important; }
 .app-v8 .seasonal-preview-intro strong { display:block; color:var(--theme-black)!important; font-family:var(--font-display); font-size:16px; }
 .app-v8 .seasonal-preview-intro p { margin:5px 0 0; color:var(--theme-black)!important; font-size:11px; line-height:1.45; }
@@ -5711,3 +5711,35 @@ input:focus, select:focus, textarea:focus { border-color: var(--blue) !important
 .app-v8 .seasonal-preview-atmosphere-live { z-index:4!important; pointer-events:none!important; }
 @media(max-width:760px){ .app-v8 .seasonal-preview-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media(max-width:480px){ .app-v8 .seasonal-preview-grid { grid-template-columns:1fr; } }
+
+/* v13.21 — animações sazonais enriquecidas e datas comemorativas com efeito próprio */
+.app-v8 .seasonal-hearts span { color:#dc2626!important; text-shadow:0 1px 0 #fff,0 2px 0 var(--theme-black); animation-name:seasonal-heart-color; }
+.app-v8 .seasonal-hearts span:nth-child(2n) { color:#ff6b81!important; }
+.app-v8 .seasonal-hearts span:nth-child(3n) { color:var(--theme-action)!important; }
+.app-v8 .seasonal-hearts span:nth-child(4n) { color:#991b1b!important; }
+.app-v8 .seasonal-june-festival span { width:22px!important; height:16px!important; font-size:0!important; top:-18px; background:var(--theme-action); clip-path:polygon(0 0,100% 0,78% 100%,0 100%); animation-name:seasonal-flag-color!important; filter:drop-shadow(0 2px 0 var(--theme-black)); }
+.app-v8 .seasonal-june-festival span:nth-child(2n) { background:#dc2626!important; }
+.app-v8 .seasonal-june-festival span:nth-child(3n) { background:#16a34a!important; }
+.app-v8 .seasonal-june-festival span:nth-child(4n) { background:#2563eb!important; }
+.app-v8 .seasonal-june-festival span:nth-child(5n) { background:#f97316!important; }
+.app-v8 .seasonal-new-year span { color:var(--theme-action)!important; animation-name:seasonal-firework!important; text-shadow:0 0 8px var(--theme-action); }
+.app-v8 .seasonal-new-year span:nth-child(2n) { color:#dc2626!important; }
+.app-v8 .seasonal-new-year span:nth-child(3n) { color:#16a34a!important; }
+.app-v8 .seasonal-carnival span,.app-v8 .seasonal-celebration span { animation-name:seasonal-confetti!important; }
+.app-v8 .seasonal-carnival span:nth-child(3n) { color:#dc2626!important; }
+.app-v8 .seasonal-carnival span:nth-child(3n+1) { color:#2563eb!important; }
+.app-v8 .seasonal-carnival span:nth-child(3n+2) { color:#16a34a!important; }
+.app-v8 .seasonal-celebration span:nth-child(2n) { color:#dc2626!important; }
+.app-v8 .seasonal-celebration span:nth-child(3n) { color:#16a34a!important; }
+.app-v8 .seasonal-easter span { color:#dc2626!important; animation-name:seasonal-egg-hop!important; }
+.app-v8 .seasonal-easter span:nth-child(2n) { color:var(--theme-action)!important; }
+.app-v8 .seasonal-easter span:nth-child(3n) { color:#16a34a!important; }
+.app-v8 .seasonal-civic span { color:var(--theme-action)!important; animation-name:seasonal-civic-burst!important; }
+.app-v8 .seasonal-civic span:nth-child(2n) { color:#dc2626!important; }
+.app-v8 .seasonal-civic span:nth-child(3n) { color:#16a34a!important; }
+@keyframes seasonal-heart-color { 0%{transform:translate3d(0,24px,0) scale(.55) rotate(-14deg);opacity:0} 25%{opacity:1} 55%{transform:translate3d(12px,-24px,0) scale(1.08) rotate(12deg)} 100%{transform:translate3d(-20px,-132px,0) scale(1.25) rotate(-18deg);opacity:0} }
+@keyframes seasonal-flag-color { 0%{transform:translate3d(0,-12px,0) rotate(-8deg);opacity:0} 20%{opacity:1} 55%{transform:translate3d(20px,76px,0) rotate(9deg)} 100%{transform:translate3d(-14px,188px,0) rotate(-10deg);opacity:0} }
+@keyframes seasonal-firework { 0%,100%{transform:scale(.35) rotate(0);opacity:0} 18%{opacity:1} 52%{transform:scale(1.55) rotate(120deg);opacity:1} 78%{transform:scale(.7) rotate(240deg);opacity:.5} }
+@keyframes seasonal-confetti { 0%{transform:translate3d(0,-24px,0) rotate(0) scale(.7);opacity:0} 18%{opacity:1} 100%{transform:translate3d(28px,190px,0) rotate(540deg) scale(1);opacity:0} }
+@keyframes seasonal-egg-hop { 0%,100%{transform:translate3d(0,10px,0) rotate(-10deg);opacity:.35} 45%{transform:translate3d(12px,-24px,0) rotate(10deg) scale(1.12);opacity:1} }
+@keyframes seasonal-civic-burst { 0%,100%{transform:scale(.55) rotate(0);opacity:.1} 45%{transform:scale(1.35) rotate(90deg);opacity:1} 75%{transform:scale(.8) rotate(180deg);opacity:.55} }
