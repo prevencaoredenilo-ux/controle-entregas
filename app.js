@@ -1,6 +1,6 @@
-import { ensureSeed, saveAutoBackup, enableWriteThroughAutoBackup } from './db.js?v=13.18';
-import { $, $$, toast, initTooltips, animateStatCards, performanceProfile } from './helpers.js?v=13.18';
-import * as V from './views.js?v=13.18';
+import { ensureSeed, saveAutoBackup, enableWriteThroughAutoBackup } from './db.js?v=13.19';
+import { $, $$, toast, initTooltips, animateStatCards, performanceProfile } from './helpers.js?v=13.19';
+import * as V from './views.js?v=13.19';
 
 let currentView = 'central';
 let currentRegistryTab = 'vehicles';
@@ -487,10 +487,14 @@ async function render() {
   updateBadges();
   updateMascot();
   animateStatCards(view);
+  if (currentView === 'central' && new URLSearchParams(window.location.search).get('preview') === 'feriados' && !window.__seasonalPreviewAutoOpened) {
+    window.__seasonalPreviewAutoOpened = true;
+    window.setTimeout(() => V.openSeasonalPreview(), 120);
+  }
 }
 
 async function updateBadges() {
-  const { Deliveries, Cycles } = await import('./db.js?v=13.18');
+  const { Deliveries, Cycles } = await import('./db.js?v=13.19');
   const rows = await Deliveries.active(environment);
   $('#pendingBadge').textContent = rows.filter((r) => r.status === 'na_loja').length;
   const trashed = await Deliveries.trashed(environment);

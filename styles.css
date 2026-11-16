@@ -5641,7 +5641,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--blue) !important
 }
 
 
-/* v13.18 — previsão automática ao lado do relógio */
+/* v13.19 — previsão automática ao lado do relógio */
 .app-v8 .weather-chip { display:flex; align-items:center; gap:7px; min-height:42px; padding:5px 10px; background:var(--theme-action-soft)!important; color:var(--theme-black)!important; border:2px solid var(--theme-black)!important; border-radius:12px!important; }
 .app-v8 .weather-chip .weather-icon { display:grid; place-items:center; width:22px; height:22px; color:var(--theme-black); font-size:18px; font-weight:900; }
 .app-v8 .weather-chip .weather-icon::before { content:attr(data-icon); }
@@ -5664,7 +5664,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--blue) !important
   .app-v8 .weather-copy b { display:none; }
 }
 
-/* v13.18 — cabeçalho simétrico: todos os controles na mesma altura */
+/* v13.19 — cabeçalho simétrico: todos os controles na mesma altura */
 .app-v8 .header-line { align-items:center!important; }
 .app-v8 .header-actions { align-items:stretch!important; gap:10px!important; }
 .app-v8 .header-actions .clock-chip,
@@ -5693,7 +5693,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--blue) !important
   .app-v8 .header-actions .header-create { height:42px!important; min-height:42px!important; }
 }
 
-/* v13.18 — galeria para visualizar todos os feriados sem alterar o calendário */
+/* v13.19 — galeria para visualizar todos os feriados sem alterar o calendário */
 .app-v8 .seasonal-preview-intro { margin-bottom:16px; padding:14px 16px; background:var(--theme-action)!important; border:2px solid var(--theme-black); border-radius:12px; color:var(--theme-black)!important; }
 .app-v8 .seasonal-preview-intro strong { display:block; color:var(--theme-black)!important; font-family:var(--font-display); font-size:16px; }
 .app-v8 .seasonal-preview-intro p { margin:5px 0 0; color:var(--theme-black)!important; font-size:11px; line-height:1.45; }
