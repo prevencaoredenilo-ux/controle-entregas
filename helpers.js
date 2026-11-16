@@ -215,6 +215,29 @@ function seasonalEvents(year) {
   ];
 }
 
+// Catálogo visual usado pela galeria de prévias. A prévia não altera o calendário real.
+export const SEASONAL_PREVIEW_CATALOG = [
+  { label: 'Ano Novo', theme: 'new-year', icon: '✦', effect: 'Brilhos festivos' },
+  { label: 'Carnaval', theme: 'carnival', icon: '◆', effect: 'Confetes em movimento' },
+  { label: 'Sexta-feira Santa', theme: 'easter', icon: '✧', effect: 'Símbolos suaves' },
+  { label: 'Páscoa', theme: 'easter', icon: '○', effect: 'Movimento de Páscoa' },
+  { label: 'Tiradentes', theme: 'civic', icon: '◆', effect: 'Destaque cívico' },
+  { label: 'Dia do Trabalho', theme: 'civic', icon: '◆', effect: 'Destaque cívico' },
+  { label: 'Dia das Mães', theme: 'hearts', icon: '♥', effect: 'Corações flutuantes' },
+  { label: 'Dia dos Namorados', theme: 'hearts', icon: '♥', effect: 'Corações flutuantes' },
+  { label: 'São João', theme: 'june-festival', icon: '⚑', effect: 'Bandeirinhas dançantes' },
+  { label: 'Corpus Christi', theme: 'civic', icon: '◆', effect: 'Destaque cívico' },
+  { label: 'Dia dos Pais', theme: 'hearts', icon: '♥', effect: 'Corações flutuantes' },
+  { label: 'Independência do Brasil', theme: 'civic', icon: '◆', effect: 'Destaque cívico' },
+  { label: 'Nossa Senhora Aparecida', theme: 'civic', icon: '◆', effect: 'Destaque cívico' },
+  { label: 'Dia das Crianças', theme: 'celebration', icon: '✦', effect: 'Celebração' },
+  { label: 'Halloween', theme: 'halloween', icon: '🦇', effect: 'Morcegos atravessando o painel' },
+  { label: 'Finados', theme: 'civic', icon: '◆', effect: 'Destaque cívico' },
+  { label: 'Proclamação da República', theme: 'civic', icon: '◆', effect: 'Destaque cívico' },
+  { label: 'Consciência Negra', theme: 'civic', icon: '◆', effect: 'Destaque cívico' },
+  { label: 'Natal', theme: 'christmas', icon: '❄', effect: 'Neve caindo' },
+];
+
 export function seasonalContext(reference = new Date()) {
   const now = new Date(reference); now.setHours(12, 0, 0, 0);
   const events = [...seasonalEvents(now.getFullYear() - 1), ...seasonalEvents(now.getFullYear()), ...seasonalEvents(now.getFullYear() + 1)];
