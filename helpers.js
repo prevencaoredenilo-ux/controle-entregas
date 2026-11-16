@@ -219,9 +219,9 @@ export function seasonalContext(reference = new Date()) {
   const now = new Date(reference); now.setHours(12, 0, 0, 0);
   const events = [...seasonalEvents(now.getFullYear() - 1), ...seasonalEvents(now.getFullYear()), ...seasonalEvents(now.getFullYear() + 1)];
   const active = events.find((event) => {
-    const start = shiftDate(event.date, -(event.windowBefore || 0)); start.setHours(0, 0, 0, 0);
-    const end = shiftDate(event.date, event.windowAfter || 0); end.setHours(23, 59, 59, 999);
-    return now >= start && now <= end;
+    return event.date.getFullYear() === now.getFullYear()
+      && event.date.getMonth() === now.getMonth()
+      && event.date.getDate() === now.getDate();
   });
   const upcoming = events.filter((event) => event.date >= now).sort((a, b) => a.date - b.date)[0];
   const diffDays = upcoming ? Math.max(0, Math.ceil((upcoming.date - now) / 86400000)) : null;

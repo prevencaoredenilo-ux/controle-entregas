@@ -1,6 +1,6 @@
-import { ensureSeed, saveAutoBackup, enableWriteThroughAutoBackup } from './db.js?v=13.15';
-import { $, $$, toast, initTooltips, animateStatCards, performanceProfile } from './helpers.js?v=13.15';
-import * as V from './views.js?v=13.15';
+import { ensureSeed, saveAutoBackup, enableWriteThroughAutoBackup } from './db.js?v=13.16';
+import { $, $$, toast, initTooltips, animateStatCards, performanceProfile } from './helpers.js?v=13.16';
+import * as V from './views.js?v=13.16';
 
 let currentView = 'central';
 let currentRegistryTab = 'vehicles';
@@ -69,6 +69,7 @@ async function startApp() {
   startKnowledgeTicker();
   initTooltips(document);
   startLiveClock();
+  startWeatherWidget();
   startAutoBackup();
   render();
 }
@@ -127,6 +128,47 @@ function startLiveClock() {
   const tick = () => { if (el) el.textContent = new Date().toLocaleTimeString('pt-BR'); };
   tick();
   setInterval(tick, 1000);
+}
+
+function startWeatherWidget() {
+  const widget = $('#weatherWidget');
+  if (!widget) return;
+  const temp = $('#weatherTemperature');
+  const label = $('#weatherLabel');
+  const detail = $('#weatherDetail');
+  const weatherCodeLabel = (code) => {
+    if (code === 0) return 'Céu limpo';
+    if ([1, 2].includes(code)) return 'Poucas nuvens';
+    if (code === 3) return 'Nublado';
+    if ([45, 48].includes(code)) return 'Neblina';
+    if ([51, 53, 55, 56, 57].includes(code)) return 'Garoa';
+    if ([61, 63, 65, 80, 81, 82].includes(code)) return 'Chuva';
+    if ([95, 96, 97, 98, 99].includes(code)) return 'Tempestade';
+    return 'Condição variável';
+  };
+  const weatherIcon = (code) => code === 0 ? '☀' : [1, 2].includes(code) ? '◐' : [3, 45, 48].includes(code) ? '☁' : [95, 96, 97, 98, 99].includes(code) ? '⚡' : '☂';
+  const update = async () => {
+    try {
+      const url = 'https://api.open-meteo.com/v1/forecast?latitude=-14.6761&longitude=-52.3503&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&temperature_unit=celsius&wind_speed_unit=kmh&timezone=America%2FSao_Paulo';
+      const response = await fetch(url, { cache: 'no-store' });
+      if (!response.ok) throw new Error('weather_unavailable');
+      const data = await response.json();
+      const current = data.current || {};
+      const code = Number(current.weather_code);
+      if (temp) temp.textContent = `${Math.round(Number(current.temperature_2m))}°`;
+      if (label) label.textContent = weatherCodeLabel(code);
+      if (detail) detail.textContent = `Nova Xavantina · ${Math.round(Number(current.relative_humidity_2m))}% umid. · atualizado ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+      widget.dataset.icon = weatherIcon(code);
+      widget.classList.remove('weather-error');
+      widget.title = 'Previsão atualizada automaticamente pela Open-Meteo';
+    } catch {
+      if (label) label.textContent = 'Tempo indisponível';
+      if (detail) detail.textContent = 'Nova Xavantina · tente novamente em alguns minutos';
+      widget.classList.add('weather-error');
+    }
+  };
+  update();
+  setInterval(update, 10 * 60 * 1000);
 }
 
 // backup automático v5.6:
@@ -448,7 +490,7 @@ async function render() {
 }
 
 async function updateBadges() {
-  const { Deliveries, Cycles } = await import('./db.js?v=13.15');
+  const { Deliveries, Cycles } = await import('./db.js?v=13.16');
   const rows = await Deliveries.active(environment);
   $('#pendingBadge').textContent = rows.filter((r) => r.status === 'na_loja').length;
   const trashed = await Deliveries.trashed(environment);

@@ -5639,3 +5639,27 @@ input:focus, select:focus, textarea:focus { border-color: var(--blue) !important
   .app-v8 .seasonal-atmosphere span { font-size:14px; }
   .app-v8 .seasonal-reminder { display:block; margin:5px 0 0; }
 }
+
+
+/* v13.16 — previsão automática ao lado do relógio */
+.app-v8 .weather-chip { display:flex; align-items:center; gap:7px; min-height:42px; padding:5px 10px; background:var(--theme-action-soft)!important; color:var(--theme-black)!important; border:2px solid var(--theme-black)!important; border-radius:12px!important; }
+.app-v8 .weather-chip .weather-icon { display:grid; place-items:center; width:22px; height:22px; color:var(--theme-black); font-size:18px; font-weight:900; }
+.app-v8 .weather-chip .weather-icon::before { content:attr(data-icon); }
+.app-v8 .weather-chip::before { content:attr(data-icon); display:grid; place-items:center; width:22px; height:22px; color:var(--theme-black); font-size:18px; font-weight:900; }
+.app-v8 .weather-chip .weather-icon { display:none; }
+.app-v8 .weather-chip>strong { color:var(--theme-black)!important; font-family:var(--font-display); font-size:17px; line-height:1; }
+.app-v8 .weather-copy { display:grid; gap:1px; min-width:118px; }
+.app-v8 .weather-copy b { color:var(--theme-black)!important; font-size:9px; line-height:1.1; }
+.app-v8 .weather-copy small { color:var(--theme-black)!important; font-size:8px; line-height:1.1; white-space:nowrap; }
+.app-v8 .weather-chip.weather-error { background:var(--theme-white)!important; }
+.app-v8 .weather-chip.weather-error::before { content:'!'; }
+@media (max-width:850px) {
+  .app-v8 .weather-copy { min-width:0; }
+  .app-v8 .weather-copy small { display:none; }
+}
+@media (max-width:620px) {
+  .app-v8 .weather-chip { min-height:36px; padding:4px 7px; gap:4px; }
+  .app-v8 .weather-chip::before { font-size:15px; width:18px; height:18px; }
+  .app-v8 .weather-chip>strong { font-size:14px; }
+  .app-v8 .weather-copy b { display:none; }
+}
