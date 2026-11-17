@@ -80,6 +80,43 @@ body[data-operator-role="consulta"] .command-dock,body[data-operator-role="consu
 .boot-bar span { display: block; height: 100%; width: 40%; background: var(--accent); animation: load 1.1s ease-in-out infinite; }
 @keyframes load { 0% { transform: translateX(-100%); } 100% { transform: translateX(340%); } }
 
+/* v13.31 — abertura corporativa da plataforma */
+.app-v8 ~ * { }
+.boot-screen { z-index:9999!important; padding:24px!important; place-items:center!important; background:#111111!important; background-image:repeating-linear-gradient(135deg,#111111 0 18px,#1a1a1a 18px 36px)!important; color:#ffffff!important; overflow:hidden!important; }
+.boot-screen::before,.boot-screen::after { content:""; position:absolute; border:2px solid #ffee00; border-radius:50%; opacity:.18; pointer-events:none; }
+.boot-screen::before { width:min(720px,110vw); height:min(720px,110vw); transform:translate(-38vw,-28vh); }
+.boot-screen::after { width:min(520px,90vw); height:min(520px,90vw); transform:translate(42vw,34vh); }
+.boot-card { position:relative!important; width:min(470px,94vw)!important; min-height:450px; display:flex!important; flex-direction:column!important; justify-content:center!important; gap:0!important; padding:28px!important; text-align:left!important; background:#fffbe0!important; color:#111111!important; border:3px solid #111111!important; border-radius:24px!important; box-shadow:10px 10px 0 #ffee00!important; overflow:hidden!important; }
+.boot-card::after { content:""; position:absolute; inset:0; pointer-events:none; background:repeating-linear-gradient(135deg,transparent 0 22px,rgba(17,17,17,.035) 22px 24px); }
+.boot-topline,.boot-brand,.boot-copy,.boot-progress-label,.boot-bar,.boot-foot { position:relative; z-index:2; }
+.boot-topline { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:16px; color:#4b5563; font-size:9px; font-weight:900; letter-spacing:.14em; }
+.boot-topline i { padding:5px 8px; background:#dcfce7; color:#166534; border:2px solid #111111; border-radius:999px; font-size:8px; font-style:normal; letter-spacing:.06em; }
+.boot-visual { position:relative; z-index:1; height:142px; margin:-4px 0 16px; display:grid; place-items:center; background:#111111; border:2px solid #111111; border-radius:18px; overflow:hidden; }
+.boot-visual::before { content:""; position:absolute; inset:0; background:repeating-linear-gradient(135deg,#111111 0 16px,#1a1a1a 16px 32px); opacity:.96; }
+.boot-orbit { position:absolute; width:210px; height:76px; border:2px solid #ffee00; border-radius:50%; transform:rotate(-18deg); opacity:.8; animation:boot-orbit 4s linear infinite; }
+.boot-orbit-b { width:280px; height:110px; transform:rotate(28deg); opacity:.28; animation-duration:6s; animation-direction:reverse; }
+.boot-mascot { position:relative; z-index:2; display:grid; place-items:center; width:72px; height:72px; background:#ffee00; color:#111111; border:3px solid #111111; border-radius:20px 20px 20px 8px; box-shadow:5px 5px 0 #111111; transform:rotate(-4deg); animation:boot-mascot 1.8s ease-in-out infinite; }
+.boot-mascot b { font-family:"Space Grotesk",sans-serif; font-size:34px; line-height:1; }
+.boot-mascot span { position:absolute; right:-10px; bottom:-7px; width:20px; height:20px; background:#16a34a; border:3px solid #111111; border-radius:50%; }
+.boot-brand { display:flex; align-items:center; gap:12px; }
+.boot-brand .brand-logo-chip { width:48px; height:48px; background:#ffee00!important; color:#111111!important; border:2px solid #111111; box-shadow:3px 3px 0 #111111; }
+.boot-brand h1 { margin:0; color:#111111!important; font-family:"Space Grotesk",sans-serif; font-size:27px; letter-spacing:-.04em; }
+.boot-brand p { margin:2px 0 0; color:#4b5563!important; font-size:11px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }
+.boot-copy { display:grid; gap:4px; margin:24px 0 20px; }
+.boot-copy strong { color:#111111!important; font-family:"Space Grotesk",sans-serif; font-size:21px; }
+.boot-copy span { color:#4b5563!important; font-size:12px; }
+.boot-progress-label { display:flex; justify-content:space-between; gap:10px; margin-bottom:7px; color:#4b5563; font-size:10px; font-weight:800; }
+.boot-progress-label b { color:#111111; font-size:9px; letter-spacing:.1em; }
+.boot-bar { width:100%!important; height:12px!important; padding:2px; background:#ffffff!important; border:2px solid #111111; border-radius:999px!important; overflow:hidden; }
+.boot-bar span { width:42%!important; height:100%; border-radius:999px; background:#ffee00!important; box-shadow:2px 0 0 #111111; animation:boot-progress 1.35s ease-in-out infinite!important; }
+.boot-foot { display:flex; align-items:center; gap:7px; margin-top:18px; color:#4b5563; font-size:10px; font-weight:700; }
+.boot-pulse { width:8px; height:8px; background:#16a34a; border:2px solid #111111; border-radius:50%; animation:boot-pulse 1.4s ease-in-out infinite; }
+@keyframes boot-progress { 0%{transform:translateX(-115%)} 100%{transform:translateX(265%)} }
+@keyframes boot-orbit { to{transform:rotate(342deg)} }
+@keyframes boot-mascot { 0%,100%{transform:rotate(-4deg) translateY(0)} 50%{transform:rotate(4deg) translateY(-5px)} }
+@keyframes boot-pulse { 0%,100%{opacity:.45;transform:scale(.8)} 50%{opacity:1;transform:scale(1.2)} }
+@media(max-width:520px){ .boot-card{min-height:420px;padding:20px!important;border-radius:20px!important;box-shadow:7px 7px 0 #ffee00!important}.boot-visual{height:125px}.boot-copy strong{font-size:18px}.boot-topline{font-size:8px} }
+
 .auth-card { text-align: left; width: min(340px, 90vw); }
 .auth-card form { display: grid; gap: 10px; width: 100%; }
 .auth-card label { display: grid; gap: 5px; font-size: 12px; opacity: .8; }
@@ -5641,7 +5678,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--blue) !important
 }
 
 
-/* v13.30 — previsão automática ao lado do relógio */
+/* v13.31 — previsão automática ao lado do relógio */
 .app-v8 .weather-chip { display:flex; align-items:center; gap:7px; min-height:42px; padding:5px 10px; background:var(--theme-action-soft)!important; color:var(--theme-black)!important; border:2px solid var(--theme-black)!important; border-radius:12px!important; }
 .app-v8 .weather-chip .weather-icon { display:grid; place-items:center; width:22px; height:22px; color:var(--theme-black); font-size:18px; font-weight:900; }
 .app-v8 .weather-chip .weather-icon::before { content:attr(data-icon); }
@@ -5664,7 +5701,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--blue) !important
   .app-v8 .weather-copy b { display:none; }
 }
 
-/* v13.30 — cabeçalho simétrico: todos os controles na mesma altura */
+/* v13.31 — cabeçalho simétrico: todos os controles na mesma altura */
 .app-v8 .header-line { align-items:center!important; }
 .app-v8 .header-actions { align-items:stretch!important; gap:10px!important; }
 .app-v8 .header-actions .clock-chip,
@@ -5693,7 +5730,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--blue) !important
   .app-v8 .header-actions .header-create { height:42px!important; min-height:42px!important; }
 }
 
-/* v13.30 — galeria para visualizar todos os feriados sem alterar o calendário */
+/* v13.31 — galeria para visualizar todos os feriados sem alterar o calendário */
 .app-v8 .seasonal-preview-intro { margin-bottom:16px; padding:14px 16px; background:var(--theme-action)!important; border:2px solid var(--theme-black); border-radius:12px; color:var(--theme-black)!important; }
 .app-v8 .seasonal-preview-intro strong { display:block; color:var(--theme-black)!important; font-family:var(--font-display); font-size:16px; }
 .app-v8 .seasonal-preview-intro p { margin:5px 0 0; color:var(--theme-black)!important; font-size:11px; line-height:1.45; }
@@ -5712,7 +5749,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--blue) !important
 @media(max-width:760px){ .app-v8 .seasonal-preview-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media(max-width:480px){ .app-v8 .seasonal-preview-grid { grid-template-columns:1fr; } }
 
-/* v13.30 — animações sazonais enriquecidas e datas comemorativas com efeito próprio */
+/* v13.31 — animações sazonais enriquecidas e datas comemorativas com efeito próprio */
 .app-v8 .seasonal-hearts span { color:#dc2626!important; text-shadow:0 1px 0 #fff,0 2px 0 var(--theme-black); animation-name:seasonal-heart-color; }
 .app-v8 .seasonal-hearts span:nth-child(2n) { color:#ff6b81!important; }
 .app-v8 .seasonal-hearts span:nth-child(3n) { color:var(--theme-action)!important; }

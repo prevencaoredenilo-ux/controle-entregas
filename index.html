@@ -9,13 +9,21 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@700&display=swap" rel="stylesheet" />
-<link rel="manifest" href="manifest.webmanifest?v=13.30" />
-<link rel="stylesheet" href="styles.css?v=13.30" />
+<link rel="manifest" href="manifest.webmanifest?v=13.31" />
+<link rel="stylesheet" href="styles.css?v=13.31" />
 <title>Órbita • Controle de Entregas</title>
 </head>
 <body>
   <div id="bootScreen" class="boot-screen">
-    <div class="boot-card"><div class="brand-logo-chip brand-initial">Ó</div><h1>Órbita</h1><p>Preparando o sistema operacional…</p><div class="boot-bar"><span></span></div></div>
+    <div class="boot-card">
+      <div class="boot-topline"><span>PLATAFORMA OPERACIONAL</span><i>AO VIVO</i></div>
+      <div class="boot-visual" aria-hidden="true"><div class="boot-orbit boot-orbit-a"></div><div class="boot-orbit boot-orbit-b"></div><div class="boot-mascot"><b>↗</b><span></span></div></div>
+      <div class="boot-brand"><div class="brand-logo-chip brand-initial">Ó</div><div><h1>Órbita</h1><p>Controle de entregas</p></div></div>
+      <div class="boot-copy"><strong>Preparando sua operação</strong><span>Organizando dados, rotas e indicadores.</span></div>
+      <div class="boot-progress-label"><span>Inicialização segura</span><b>CARREGANDO</b></div>
+      <div class="boot-bar"><span></span></div>
+      <div class="boot-foot"><span class="boot-pulse"></span><span>Estação local</span><span>•</span><span>Offline-first</span></div>
+    </div>
   </div>
 
   <div id="appShell" class="app-v8 hidden">
@@ -53,7 +61,7 @@
       <header class="app-header">
         <div class="header-line">
           <div class="header-context"><button id="menuBtn" class="header-menu" type="button" aria-label="Abrir menu" aria-controls="sidebar" aria-expanded="false">☰</button><div><div class="eyebrow">CENTRO DE CONTROLE <span>•</span> OPERAÇÃO</div><h1 id="viewTitle">Centro de comando</h1><p id="viewSubtitle">Visão ao vivo das entregas, ciclos, prazos e pendências da operação.</p></div></div>
-          <div class="header-actions"><div id="liveClock" class="clock-chip"><span class="pulse-dot"></span><span id="liveClockText">--:--:--</span></div><div id="weatherWidget" class="weather-chip" role="status" aria-live="polite" data-icon="☀"><span class="weather-icon" aria-hidden="true"></span><strong id="weatherTemperature">--°</strong><span class="weather-copy"><b id="weatherLabel">Carregando tempo</b><small id="weatherDetail">Nova Xavantina · atualizando</small></span></div><span class="version-chip">v13.30</span><span class="monitor-mode-badge hidden" id="monitorModeBadge">SOMENTE LEITURA</span><button class="btn-primary header-create" id="newDeliveryBtn">＋ Nova entrega</button></div>
+          <div class="header-actions"><div id="liveClock" class="clock-chip"><span class="pulse-dot"></span><span id="liveClockText">--:--:--</span></div><div id="weatherWidget" class="weather-chip" role="status" aria-live="polite" data-icon="☀"><span class="weather-icon" aria-hidden="true"></span><strong id="weatherTemperature">--°</strong><span class="weather-copy"><b id="weatherLabel">Carregando tempo</b><small id="weatherDetail">Nova Xavantina · atualizando</small></span></div><span class="version-chip">v13.31</span><span class="monitor-mode-badge hidden" id="monitorModeBadge">SOMENTE LEITURA</span><button class="btn-primary header-create" id="newDeliveryBtn">＋ Nova entrega</button></div>
         </div>
         <nav class="quick-nav" aria-label="Atalhos principais"><span class="quick-label">ACESSO RÁPIDO</span><button class="quick-item active" data-view="central"><b>01</b>Comando</button><button class="quick-item" data-view="dashboard"><b>02</b>Inteligência</button><button class="quick-item" data-view="search"><b>03</b>Localizar</button><button class="quick-item" data-view="cycles"><b>04</b>Rotas</button><button class="quick-item" data-view="reports"><b>05</b>Relatórios</button><span class="quick-spacer"></span><button class="quick-all" id="workspaceMoreBtn" type="button">Todas as áreas <b>＋</b></button></nav>
         <div class="knowledge-bar"><div class="knowledge-heading"><span class="command-pulse"></span><strong>Conhecimento rápido</strong><small>prevenção e operação</small></div><button class="knowledge-card" id="funBreakBtn" type="button" data-tip="Clique para ver a resposta e navegar pelas perguntas."><span class="nq-category" id="knowledgeTickerGroup">PREVENÇÃO</span><strong id="knowledgeTickerQuestion">Carregando pergunta…</strong><span class="nq-counter" id="knowledgeTickerCounter">1/100</span><span class="knowledge-open" id="knowledgeTickerMeta">Ver resposta ›</span><span class="nq-difficulty easy" id="knowledgeTickerDifficulty">FÁCIL</span><span class="nq-helper" id="knowledgeTickerHelper">Uma dica para proteger a operação</span></button></div>
@@ -64,6 +72,6 @@
 
   <div class="modal-wrap hidden" id="modalWrap" aria-hidden="true"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle"><div class="modal-head"><div><h2 id="modalTitle"></h2><p id="modalSubtitle"></p></div><button class="modal-close" id="modalClose" type="button" aria-label="Fechar janela">✕</button></div><div id="modalBody" class="modal-body"></div><div class="modal-actions" id="modalActions"></div></div></div>
   <div class="toast-stack" id="toastStack"></div>
-  <script type="module" src="app.js?v=13.30"></script>
+  <script type="module" src="app.js?v=13.31"></script>
 </body>
 </html>
