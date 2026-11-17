@@ -1,6 +1,6 @@
-import { ensureSeed, saveAutoBackup, enableWriteThroughAutoBackup } from './db.js?v=13.31';
-import { $, $$, toast, initTooltips, animateStatCards, performanceProfile } from './helpers.js?v=13.31';
-import * as V from './views.js?v=13.31';
+import { ensureSeed, saveAutoBackup, enableWriteThroughAutoBackup } from './db.js?v=13.32';
+import { $, $$, toast, initTooltips, animateStatCards, performanceProfile } from './helpers.js?v=13.32';
+import * as V from './views.js?v=13.32';
 
 let currentView = 'central';
 let currentRegistryTab = 'vehicles';
@@ -9,7 +9,11 @@ let environment = localStorage.getItem('orbita_env') || 'real';
 // Mantemos um operador interno administrativo para preservar auditoria e permissões existentes.
 let operatorName = 'Operação local';
 let operatorRole = 'Administrador';
-let intelligenceUnlocked = sessionStorage.getItem('orbita_intelligence_unlocked') === '1';
+const INTELLIGENCE_CREDENTIAL_KEY = 'orbita_intelligence_credential_v1';
+const INTELLIGENCE_SESSION_KEY = 'orbita_intelligence_session_v1';
+const INTELLIGENCE_SESSION_MS = 15 * 60 * 1000;
+let intelligenceUnlocked = false;
+let intelligenceLockedUntil = 0;
 
 export function getEnv() { return environment; }
 export function getOperatorName() { return operatorName; }
@@ -233,24 +237,41 @@ function wireNav() {
   });
 }
 
+function base64FromBytes(bytes) { let text = ''; bytes.forEach((byte) => { text += String.fromCharCode(byte); }); return btoa(text); }
+function bytesFromBase64(value) { const text = atob(value); return Uint8Array.from(text, (char) => char.charCodeAt(0)); }
+async function passwordDigest(password, salt) {
+  const material = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: 120000, hash: 'SHA-256' }, material, 256);
+  return base64FromBytes(new Uint8Array(bits));
+}
+function storedIntelligenceCredential() { try { return JSON.parse(localStorage.getItem(INTELLIGENCE_CREDENTIAL_KEY) || 'null'); } catch { return null; } }
+function validIntelligenceSession() { const at = Number(sessionStorage.getItem(INTELLIGENCE_SESSION_KEY)); return Number.isFinite(at) && Date.now() - at < INTELLIGENCE_SESSION_MS; }
+function clearIntelligenceSession() { intelligenceUnlocked = false; sessionStorage.removeItem(INTELLIGENCE_SESSION_KEY); }
+async function saveIntelligenceCredential(password) { const salt = crypto.getRandomValues(new Uint8Array(16)); const hash = await passwordDigest(password, salt); localStorage.setItem(INTELLIGENCE_CREDENTIAL_KEY, JSON.stringify({ version: 1, algorithm: 'PBKDF2-SHA-256', iterations: 120000, salt: base64FromBytes(salt), hash, createdAt: new Date().toISOString() })); }
+async function verifyIntelligencePassword(password) { const credential = storedIntelligenceCredential(); if (!credential?.salt || !credential?.hash) return false; const digest = await passwordDigest(password, bytesFromBase64(credential.salt)); return digest === credential.hash; }
+function intelligencePasswordValid(password) { return typeof password === 'string' && password.length >= 8 && /[A-Za-z]/.test(password) && /\d/.test(password); }
 function ensureIntelligenceAccess() {
-  if (intelligenceUnlocked) return Promise.resolve(true);
+  if (intelligenceUnlocked && validIntelligenceSession()) return Promise.resolve(true);
+  clearIntelligenceSession();
+  if (Date.now() < intelligenceLockedUntil) { toast('A Central está temporariamente bloqueada após várias tentativas.', 'error'); return Promise.resolve(false); }
+  const configured = Boolean(storedIntelligenceCredential());
   return new Promise((resolve) => {
+    let attempts = 0;
+    const body = `<form id="intelligenceAccessForm"><label>${configured ? 'Senha de acesso' : 'Crie uma senha local'}<input name="password" type="password" autocomplete="new-password" minlength="8" required autofocus placeholder="Mínimo de 8 caracteres, com letra e número" /></label>${configured ? '' : '<label>Confirme a senha<input name="passwordConfirm" type="password" autocomplete="new-password" minlength="8" required placeholder="Repita a senha" /></label>'}<p class="access-note">${configured ? 'Sessão válida por 15 minutos. Esta proteção local não substitui autenticação de servidor.' : 'A senha será guardada somente neste navegador como hash. Não existe senha padrão.'}</p></form>`;
     openModal({
       title: 'Central de Inteligência',
       subtitle: 'Esta área concentra indicadores, SLA, financeiro e qualidade dos dados.',
-      body: '<form id="intelligenceAccessForm"><label>Senha de acesso<input name="password" type="password" inputmode="numeric" autocomplete="off" required autofocus placeholder="Digite a senha" /></label><p class="access-note">As demais áreas do sistema continuam abertas.</p></form>',
+      body,
       actions: [
         { label: 'Cancelar', kind: 'ghost', onClick: () => { closeModal(); resolve(false); } },
-        { label: 'Entrar na Inteligência', kind: 'primary', onClick: () => {
-          const form = $('#intelligenceAccessForm');
-          if (!form.reportValidity()) return;
-          const password = String(new FormData(form).get('password') || '');
-          if (password !== '1234') return toast('Senha incorreta. A Central de Inteligência permanece bloqueada.', 'error');
-          intelligenceUnlocked = true;
-          sessionStorage.setItem('orbita_intelligence_unlocked', '1');
-          closeModal();
-          resolve(true);
+        { label: configured ? 'Entrar na Inteligência' : 'Salvar senha e entrar', kind: 'primary', onClick: async () => {
+          const form = $('#intelligenceAccessForm'); if (!form.reportValidity()) return;
+          const values = new FormData(form); const password = String(values.get('password') || '');
+          if (!intelligencePasswordValid(password)) return toast('Use pelo menos 8 caracteres, com uma letra e um número.', 'error');
+          if (!configured && password !== String(values.get('passwordConfirm') || '')) return toast('As senhas não coincidem.', 'error');
+          if (configured && !(await verifyIntelligencePassword(password))) { attempts += 1; if (attempts >= 5) { intelligenceLockedUntil = Date.now() + 30 * 1000; closeModal(); toast('Muitas tentativas. Aguarde 30 segundos antes de tentar novamente.', 'error'); resolve(false); return; } return toast(`Senha incorreta. Tentativa ${attempts} de 5.`, 'error'); }
+          if (!configured) await saveIntelligenceCredential(password);
+          intelligenceUnlocked = true; sessionStorage.setItem(INTELLIGENCE_SESSION_KEY, String(Date.now())); closeModal(); resolve(true);
         } },
       ],
     });
@@ -423,7 +444,8 @@ export function openModal({ title, subtitle = '', body, actions = [] }) {
   $('#modalTitle').textContent = title;
   $('#modalSubtitle').textContent = subtitle;
   $('#modalBody').innerHTML = body;
-  $('#modalActions').innerHTML = actions.map((a, i) => `<button class="btn-${a.kind === 'primary' ? 'primary' : a.kind === 'danger' ? 'danger-text' : 'ghost'}" data-idx="${i}">${a.label}</button>`).join('');
+  const modalActions = $('#modalActions');
+  modalActions.replaceChildren(...actions.map((a, i) => { const button = document.createElement('button'); button.type = 'button'; button.className = `btn-${a.kind === 'primary' ? 'primary' : a.kind === 'danger' ? 'danger-text' : 'ghost'}`; button.dataset.idx = String(i); button.textContent = String(a.label ?? 'Continuar'); return button; }));
   $$('#modalActions button').forEach((btn, i) => {
     let busy = false;
     btn.addEventListener('click', async () => {
@@ -494,7 +516,7 @@ async function render() {
 }
 
 async function updateBadges() {
-  const { Deliveries, Cycles } = await import('./db.js?v=13.31');
+  const { Deliveries, Cycles } = await import('./db.js?v=13.32');
   const rows = await Deliveries.active(environment);
   $('#pendingBadge').textContent = rows.filter((r) => r.status === 'na_loja').length;
   const trashed = await Deliveries.trashed(environment);

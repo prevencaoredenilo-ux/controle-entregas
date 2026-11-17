@@ -521,6 +521,23 @@ export async function importAll(data) {
   if (collections.some((key) => !Array.isArray(data[key]))) {
     throw new Error('Backup inválido: faltam coleções de dados obrigatórias.');
   }
+  let serializedSize = 0;
+  for (const key of collections) {
+    const rows = data[key];
+    if (rows.length > 100000) throw new Error(`Backup inválido: a coleção ${key} excede o limite seguro.`);
+    const ids = new Set();
+    for (const row of rows) {
+      if (!row || typeof row !== 'object' || Array.isArray(row)) throw new Error(`Backup inválido: registro malformado em ${key}.`);
+      if (row.id !== undefined && row.id !== null) {
+        const id = String(row.id);
+        if (!id || id.length > 240 || ids.has(id)) throw new Error(`Backup inválido: ID ausente, repetido ou excessivo em ${key}.`);
+        ids.add(id);
+      }
+      serializedSize += JSON.stringify(row).length;
+    }
+  }
+  if (serializedSize > 50 * 1024 * 1024) throw new Error('Backup inválido: o tamanho dos dados excede 50 MB.');
+  if (data.schema && data.schema !== 'orbita-v2') throw new Error('Backup incompatível: esquema não reconhecido.');
   await Deliveries.replaceAll(data.deliveries || []);
   await Vehicles.replaceAll(data.vehicles || []);
   await Drivers.replaceAll(data.drivers || []);

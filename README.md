@@ -6,7 +6,7 @@ A aplicação ganhou uma nova casca de sistema, com navegação reorganizada por
 
 A opção de perfil/operador foi removida da interface. A estação funciona como uma operação local administrativa, mantendo o nome interno “Operação local” somente para preservar a rastreabilidade dos registros.
 
-A Central de Inteligência é a única área protegida. Ao acessá-la, o sistema solicita a senha padrão `1234`; depois do desbloqueio, o acesso permanece válido somente durante a sessão atual do navegador. As outras áreas não solicitam senha.
+A Central de Inteligência solicita uma senha local configurada no primeiro acesso. A senha não possui valor padrão, é armazenada apenas como hash PBKDF2 neste navegador e a sessão expira após 15 minutos. Essa proteção é local e não substitui autenticação e autorização de servidor.
 
 A nova identidade usa azul-marinho, azul moderno, ciano, branco e grafite, com cartões mais objetivos, painéis operacionais, formulários revisados, tabelas mais legíveis e responsividade para computador, tablet e celular.
 
