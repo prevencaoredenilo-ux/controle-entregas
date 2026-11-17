@@ -238,6 +238,8 @@ export const SEASONAL_PREVIEW_CATALOG = [
   { key: 'christmas', label: 'Natal', theme: 'christmas', icon: '❄', effect: 'Neve, estrelas e luzes' },
 ];
 
+export const SEASONAL_ANIMATION_CONFIG = Object.fromEntries(SEASONAL_PREVIEW_CATALOG.map((item) => [item.key, item]));
+
 export function seasonalContext(reference = new Date()) {
   const now = new Date(reference); now.setHours(12, 0, 0, 0);
   const events = [...seasonalEvents(now.getFullYear() - 1), ...seasonalEvents(now.getFullYear()), ...seasonalEvents(now.getFullYear() + 1)];
