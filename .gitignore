@@ -9,3 +9,10 @@ Sistema_Controle_Entregas_Nilo_V14_PC_OFFLINE_APK_READY (1)/
 # Ambiente/editor
 .DS_Store
 node_modules/
+
+# Secrets e artefatos locais
+.env
+.env.*
+!.env.example
+coverage/
+supabase/.temp/

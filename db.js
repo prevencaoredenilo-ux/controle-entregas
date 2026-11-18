@@ -513,14 +513,11 @@ export async function exportAll() {
   return { version: 4, schema: 'orbita-v2', exportedAt: new Date().toISOString(), deliveries, vehicles, drivers, collaborators, neighborhoods, costCategories, returnReasons, cycles, odometerLogs, costs, dayClosures };
 }
 
-export async function importAll(data) {
+export function validateBackupData(data) {
   const collections = ['deliveries','vehicles','drivers','collaborators','neighborhoods','costCategories','returnReasons','cycles','odometerLogs','costs','dayClosures'];
-  if (!data || typeof data !== 'object' || ![3, 4].includes(Number(data.version))) {
-    throw new Error('Backup incompatível: versão de dados não reconhecida.');
-  }
-  if (collections.some((key) => !Array.isArray(data[key]))) {
-    throw new Error('Backup inválido: faltam coleções de dados obrigatórias.');
-  }
+  if (!data || typeof data !== 'object' || Array.isArray(data) || ![3, 4].includes(Number(data.version))) throw new Error('Backup incompatível: versão de dados não reconhecida.');
+  if (data.schema && data.schema !== 'orbita-v2') throw new Error('Backup incompatível: esquema não reconhecido.');
+  if (collections.some((key) => !Array.isArray(data[key]))) throw new Error('Backup inválido: faltam coleções de dados obrigatórias.');
   let serializedSize = 0;
   for (const key of collections) {
     const rows = data[key];
@@ -528,27 +525,30 @@ export async function importAll(data) {
     const ids = new Set();
     for (const row of rows) {
       if (!row || typeof row !== 'object' || Array.isArray(row)) throw new Error(`Backup inválido: registro malformado em ${key}.`);
-      if (row.id !== undefined && row.id !== null) {
-        const id = String(row.id);
-        if (!id || id.length > 240 || ids.has(id)) throw new Error(`Backup inválido: ID ausente, repetido ou excessivo em ${key}.`);
-        ids.add(id);
-      }
+      const id = row.id == null ? '' : String(row.id);
+      if (!id || id.length > 240 || ids.has(id)) throw new Error(`Backup inválido: ID ausente, repetido ou excessivo em ${key}.`);
+      ids.add(id);
       serializedSize += JSON.stringify(row).length;
     }
   }
   if (serializedSize > 50 * 1024 * 1024) throw new Error('Backup inválido: o tamanho dos dados excede 50 MB.');
-  if (data.schema && data.schema !== 'orbita-v2') throw new Error('Backup incompatível: esquema não reconhecido.');
-  await Deliveries.replaceAll(data.deliveries || []);
-  await Vehicles.replaceAll(data.vehicles || []);
-  await Drivers.replaceAll(data.drivers || []);
-  await Collaborators.replaceAll(data.collaborators || []);
-  await Neighborhoods.replaceAll(data.neighborhoods || []);
-  await CostCategories.replaceAll(data.costCategories || []);
-  await ReturnReasons.replaceAll(data.returnReasons || []);
-  await Cycles.replaceAll(data.cycles || []);
-  await OdometerLogs.replaceAll(data.odometerLogs || []);
-  await Costs.replaceAll(data.costs || []);
-  await DayClosures.replaceAll(data.dayClosures || []);
+  return collections;
+}
+
+export async function importAll(data) {
+  const collections = validateBackupData(data);
+  const database = await openDB();
+  await new Promise((resolve, reject) => {
+    const transaction = database.transaction(collections, 'readwrite');
+    transaction.oncomplete = resolve;
+    transaction.onerror = () => reject(transaction.error || new Error('Não foi possível restaurar o backup.'));
+    transaction.onabort = () => reject(transaction.error || new Error('Restauração abortada; os dados anteriores foram preservados.'));
+    for (const key of collections) {
+      const store = transaction.objectStore(key);
+      store.clear();
+      for (const row of data[key]) store.put(row);
+    }
+  });
   requestWriteThroughBackup('importacao-completa');
 }
 
@@ -627,8 +627,11 @@ export async function restoreAutoBackup(id) {
     const req = store.get(id);
     req.onsuccess = async () => {
       if (!req.result) return reject(new Error('Backup não encontrado'));
-      await importAll(req.result.data);
-      resolve();
+      try {
+        await createAutoBackup('antes-restauracao-automatica');
+        await importAll(req.result.data);
+        resolve();
+      } catch (error) { reject(error); }
     };
     req.onerror = () => reject(req.error);
   });
