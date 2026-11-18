@@ -1,0 +1,11 @@
+{
+  "name": "orbita-controle-entregas",
+  "private": true,
+  "version": "13.32.0",
+  "description": "Órbita — controle de entregas offline-first",
+  "type": "module",
+  "scripts": {
+    "check:syntax": "node --check app.js && node --check db.js && node --check excel-report.js && node --check helpers.js && node --check views.js && node --check sw.js && node --check tests/project-integrity.test.js",
+    "test": "node --test tests/*.test.js"
+  }
+}
