@@ -1,7 +1,7 @@
 # Plano — novo sistema Órbita Controle de Entregas
 
 ## Objetivo
-Criar uma nova experiência de aplicação sobre os módulos existentes, preservando dados e funcionalidades, removendo o seletor de perfil/usuário e protegendo somente a Central de Inteligência com a senha local `1234`.
+Manter a experiência da aplicação sobre os módulos existentes, preservando dados e funcionalidades, sem tratar senha local, IndexedDB ou ocultação de botões como autenticação confiável. A autorização entre usuários e dispositivos depende de backend integrado.
 
 ## Escopo
 - `index.html`: nova casca, navegação, cabeçalho, modais e referências de cache.
@@ -29,8 +29,8 @@ Criar uma nova experiência de aplicação sobre os módulos existentes, preserv
 ## Regras novas
 - Não exibir escolha de perfil ou operador.
 - Manter perfil administrativo interno para que todos os fluxos existentes continuem disponíveis.
-- Solicitar a senha `1234` somente ao entrar na Central de Inteligência.
-- Manter o desbloqueio da Inteligência apenas durante a sessão atual do navegador.
+- A proteção local da Central de Inteligência é apenas uma barreira de interface e não substitui autenticação server-side.
+- O armazenamento local é adequado para operação offline, mas não oferece controle de acesso entre dispositivos.
 
 ## Preservação
 `db.js`, `views.js`, `helpers.js` e `excel-report.js` continuam sendo a base funcional. A lógica de negócio, cálculos, banco, cadastros, entregas, ciclos, frota, quilometragem, custos, relatórios, auditoria, lixeira, backups, filtros e exportações permanecem preservados.

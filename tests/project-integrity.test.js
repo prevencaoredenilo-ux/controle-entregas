@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { validateBackupData } from '../db.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
@@ -56,4 +57,15 @@ test('arquivos ASSETS do service worker existem', () => {
   assert.ok(assets.length > 0, 'lista ASSETS vazia');
   const missing = assets.map(localPath).filter((asset) => !exists(asset));
   assert.deepEqual(missing, [], `assets inexistentes: ${missing.join(', ')}`);
+});
+
+test('validador de backup rejeita coleções ausentes, registros sem ID e duplicidades', () => {
+  const base = { version: 4, schema: 'orbita-v2' };
+  assert.throws(() => validateBackupData(base), /coleções de dados obrigatórias/);
+  const collections = ['deliveries','vehicles','drivers','collaborators','neighborhoods','costCategories','returnReasons','cycles','odometerLogs','costs','dayClosures'];
+  const valid = Object.fromEntries(collections.map((key) => [key, []]));
+  valid.deliveries = [{ id: 'delivery_1' }];
+  assert.deepEqual(validateBackupData({ ...base, ...valid }), collections);
+  assert.throws(() => validateBackupData({ ...base, ...valid, deliveries: [{},] }), /ID ausente/);
+  assert.throws(() => validateBackupData({ ...base, ...valid, deliveries: [{ id: 'same' }, { id: 'same' }] }), /repetido/);
 });
