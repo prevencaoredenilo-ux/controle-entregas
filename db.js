@@ -4,7 +4,7 @@
  * "environment" separa Operação Real de Treinamento sem duplicar cadastros.
  */
 const DB_NAME = 'orbita-v2';
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 
 const STORES = {
   deliveries: 'id',
@@ -21,6 +21,7 @@ const STORES = {
   counters: 'key',
   autoBackups: 'id',
   dayClosures: 'id',
+  driverPayouts: 'id',
 };
 
 export const MAX_DELIVERY_TRIPS = 20;
@@ -219,6 +220,7 @@ export const Deliveries = {
 
 export const Vehicles = genericStore('vehicles');
 export const Drivers = genericStore('drivers');
+export const DriverPayouts = genericStore('driverPayouts');
 export const Collaborators = genericStore('collaborators');
 export const Neighborhoods = genericStore('neighborhoods');
 export const CostCategories = genericStore('costCategories');
@@ -521,16 +523,17 @@ export const Counters = {
 
 /* ---------- backup completo (todas as entidades) ---------- */
 export async function exportAll() {
-  const [deliveries, vehicles, drivers, collaborators, neighborhoods, costCategories, returnReasons, cycles, odometerLogs, costs, dayClosures] = await Promise.all([
-    Deliveries.all(), Vehicles.all(), Drivers.all(), Collaborators.all(), Neighborhoods.all(), CostCategories.all(),
+  const [deliveries, vehicles, drivers, driverPayouts, collaborators, neighborhoods, costCategories, returnReasons, cycles, odometerLogs, costs, dayClosures] = await Promise.all([
+    Deliveries.all(), Vehicles.all(), Drivers.all(), DriverPayouts.all(), Collaborators.all(), Neighborhoods.all(), CostCategories.all(),
     ReturnReasons.all(), Cycles.all(), OdometerLogs.all(), Costs.all(), DayClosures.all(),
   ]);
-  return { version: 4, schema: 'orbita-v2', exportedAt: new Date().toISOString(), deliveries, vehicles, drivers, collaborators, neighborhoods, costCategories, returnReasons, cycles, odometerLogs, costs, dayClosures };
+  return { version: 5, schema: 'orbita-v2', exportedAt: new Date().toISOString(), deliveries, vehicles, drivers, driverPayouts, collaborators, neighborhoods, costCategories, returnReasons, cycles, odometerLogs, costs, dayClosures };
 }
 
 export function validateBackupData(data) {
   const collections = ['deliveries','vehicles','drivers','collaborators','neighborhoods','costCategories','returnReasons','cycles','odometerLogs','costs','dayClosures'];
-  if (!data || typeof data !== 'object' || Array.isArray(data) || ![3, 4].includes(Number(data.version))) throw new Error('Backup incompatível: versão de dados não reconhecida.');
+  if (Number(data?.version) >= 5) collections.splice(3, 0, 'driverPayouts');
+  if (!data || typeof data !== 'object' || Array.isArray(data) || ![3, 4, 5].includes(Number(data.version))) throw new Error('Backup incompatível: versão de dados não reconhecida.');
   if (data.schema && data.schema !== 'orbita-v2') throw new Error('Backup incompatível: esquema não reconhecido.');
   if (collections.some((key) => !Array.isArray(data[key]))) throw new Error('Backup inválido: faltam coleções de dados obrigatórias.');
   let serializedSize = 0;

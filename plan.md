@@ -12,6 +12,9 @@ Manter a experiência da aplicação sobre os módulos existentes, preservando d
 - `excel-report.js`: relatório Excel XML com abas analíticas.
 - `styles.css`: nova identidade, cartões, painéis, tabelas, formulários e responsividade.
 - `sw.js`/`manifest.webmanifest`: cache e instalação PWA.
+- `db.js`: novo armazenamento auditado de fechamentos de repasse a entregadores terceirizados.
+- `views.js`: cadastro de terceirizados, vínculo visível nas entregas e painel de repasses quinzenais/mensais.
+- `excel-report.js`: aba analítica de repasses terceirizados no dossiê executivo.
 
 ## Decisões de design
 **Estilos considerados:** console logístico claro (0,06), cockpit escuro de frota (0,04), dashboard SaaS genérico (0,03). Escolhido: console logístico claro, com azul-marinho, azul moderno, ciano, branco e grafite.
@@ -34,3 +37,10 @@ Manter a experiência da aplicação sobre os módulos existentes, preservando d
 
 ## Preservação
 `db.js`, `views.js`, `helpers.js` e `excel-report.js` continuam sendo a base funcional. A lógica de negócio, cálculos, banco, cadastros, entregas, ciclos, frota, quilometragem, custos, relatórios, auditoria, lixeira, backups, filtros e exportações permanecem preservados.
+
+## Repasses terceirizados
+- Entregador pode ser classificado como `Interno` ou `Terceirizado`.
+- Terceirizado possui periodicidade de pagamento `Quinzenal` ou `Mensal`, além de documento, telefone e chave PIX opcionais.
+- Cada entrega finalizada por terceirizado gera repasse integral da taxa registrada, exceto quando a taxa foi reembolsada.
+- Entregas retiradas pelo cliente na loja não geram repasse, pois não houve execução de rota pelo entregador.
+- O fechamento usa o período informado no relatório; o sistema mostra valor devido, quantidade de entregas, situação e permite marcar o repasse como pago.

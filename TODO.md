@@ -26,3 +26,10 @@
 - [x] Verificação de referências de HTML e imports.
 - [x] Servir a raiz por HTTP e verificar `index.html`, assets, módulos e Service Worker.
 - [x] Gerar ZIP final somente com a pasta do projeto.
+
+## 6. Repasses a entregadores terceirizados
+- [ ] Cadastrar entregador como interno ou terceirizado, com periodicidade quinzenal/mensal e dados de pagamento.
+- [ ] Calcular automaticamente o repasse integral da taxa nas entregas finalizadas por terceirizados.
+- [ ] Excluir do repasse retiradas na loja e taxas reembolsadas.
+- [ ] Exibir fechamento por período, marcar como pago e manter histórico auditado.
+- [ ] Incluir os repasses na exportação CSV e no Dossiê Excel.
