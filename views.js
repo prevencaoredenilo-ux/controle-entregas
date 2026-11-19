@@ -1,13 +1,13 @@
-import { Deliveries, Vehicles, Drivers, DriverPayouts, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters, MAX_DELIVERY_TRIPS, normalizeTripCount, buildDeliveryTrips } from './db.js?v=13.41';
-import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, seasonalContext, SEASONAL_PREVIEW_CATALOG, SEASONAL_ANIMATION_CONFIG, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=13.41';
-import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=13.41';
-import { exportFullExcelReport } from './excel-report.js?v=13.41';
+import { Deliveries, Vehicles, Drivers, DriverPayouts, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters, MAX_DELIVERY_TRIPS, normalizeTripCount, buildDeliveryTrips } from './db.js?v=13.42';
+import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, seasonalContext, SEASONAL_PREVIEW_CATALOG, SEASONAL_ANIMATION_CONFIG, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=13.42';
+import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=13.42';
+import { exportFullExcelReport } from './excel-report.js?v=13.42';
 
 const DEFAULT_OPERATIONAL_TARGETS = { startMinutes:120, arrivalMinutes:210, warningMinutes:30, successTarget:90 };
 
 function seasonalDecorations(key, includeControls = false) {
-  if (key === 'halloween') return `<div class="seasonal-decor seasonal-halloween-decor" aria-hidden="true"><div class="seasonal-spiderweb web-left">🕸️</div><div class="seasonal-spiderweb web-right">🕸️</div><div class="seasonal-bat-flight"><b>🦇</b><b>🦇</b><b>🦇</b><b>🦇</b></div><div class="seasonal-pumpkin-ground"><span>🎃</span><span>🎃</span><span>🎃</span></div></div>`;
-  if (key === 'christmas') return `<div class="seasonal-decor seasonal-christmas-decor" aria-hidden="true"><div class="seasonal-christmas-garland"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="seasonal-santa-flight"><b>🎅</b><span>🛷</span></div><div class="seasonal-tree"><b>★</b><span>🎄</span><i class="tree-trunk"></i><small class="tree-shadow"></small></div><div class="seasonal-presents"><b>🎁</b><b>🎁</b><b>🎁</b></div><div class="seasonal-snowmen"><div class="seasonal-snowman-cheerful"><i class="snow-head"><em></em><em></em><strong></strong></i><i class="snow-body"></i><i class="snow-base"></i><b class="snow-arm arm-left"></b><b class="snow-arm arm-right"></b><span class="snow-hat"></span></div></div></div>`;
+  if (key === 'halloween') return `<div class="seasonal-decor seasonal-halloween-decor" aria-hidden="true"><div class="seasonal-bat-flight"><b>🦇</b><b>🦇</b><b>🦇</b><b>🦇</b></div><div class="seasonal-pumpkin-ground"><span>🎃</span><span>🎃</span><span>🎃</span></div></div>`;
+  if (key === 'christmas') return `<div class="seasonal-decor seasonal-christmas-decor" aria-hidden="true"><div class="seasonal-christmas-garland"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="seasonal-santa-flight"><b>🎅</b><span>🛷</span></div><div class="seasonal-christmas-gifts"><b>🎁</b><b>🎁</b><b>🎁</b><span>🔔</span></div></div>`;
   return '';
 }
 
@@ -228,7 +228,7 @@ export async function renderCentral() {
   const seasonal = seasonalContext(now);
   const seasonalEvent = seasonal.active || seasonal.upcoming;
   const seasonalIsUpcoming = !seasonal.active && seasonal.upcoming;
-  const seasonalEventParticles = { 'Ano Novo':['✦','★','✺','✧','◆','★'], 'Carnaval':['◆','●','✦','◆','●','✧'], 'Sexta-feira Santa':['✧','○','✧','✦','○','✧'], 'Páscoa':['🥚','🐣','○','🥚','✦','🐣'], 'Tiradentes':['⚔','✦','⚔','◆','✦','⚔'], 'Dia do Trabalho':['⚒','◆','⚒','✦','⚒','◆'], 'Dia das Mães':['♥','✿','♥','✦','♥','✿'], 'Dia dos Namorados':['♥','♥','♡','♥','✦','♥'], 'São João':['⚑','⚑','⚑','⚑','⚑','⚑'], 'Corpus Christi':['✧','✦','✧','○','✦','✧'], 'Dia dos Pais':['★','🎁','★','✦','★','🎁'], 'Independência do Brasil':['◆','✦','◆','⚑','✦','◆'], 'Nossa Senhora Aparecida':['✦','✧','✦','○','✧','✦'], 'Dia das Crianças':['●','🎈','●','✦','🎈','●'], 'Halloween':['🦇','✦','🦇','✧','🕸','🦇'], 'Finados':['✧','🕯','✧','○','🕯','✧'], 'Proclamação da República':['⚑','◆','⚑','✦','◆','⚑'], 'Consciência Negra':['✊','✦','✊','◆','✦','✊'], Natal:['❄','✦','❄','✧','❄','★'] };
+  const seasonalEventParticles = { 'Ano Novo':['✦','★','✺','✧','◆','★'], 'Carnaval':['◆','●','✦','◆','●','✧'], 'Sexta-feira Santa':['✧','○','✧','✦','○','✧'], 'Páscoa':['🥚','🐰','🍫','🐇','🥚','🍫'], 'Tiradentes':['⚔','✦','⚔','◆','✦','⚔'], 'Dia do Trabalho':['⚒','◆','⚒','✦','⚒','◆'], 'Dia das Mães':['♥','✿','♥','✦','♥','✿'], 'Dia dos Namorados':['♥','♥','♡','♥','✦','♥'], 'São João':['⚑','⚑','⚑','⚑','⚑','⚑'], 'Corpus Christi':['✧','✦','✧','○','✦','✧'], 'Dia dos Pais':['★','🎁','★','✦','★','🎁'], 'Independência do Brasil':['◆','✦','◆','⚑','✦','◆'], 'Nossa Senhora Aparecida':['✦','✧','✦','○','✧','✦'], 'Dia das Crianças':['●','🎈','●','✦','🎈','●'], 'Halloween':['🦇','✦','🦇','✧','🦇','🦇'], 'Finados':['✧','🕯','✧','○','🕯','✧'], 'Proclamação da República':['⚑','◆','⚑','✦','◆','⚑'], 'Consciência Negra':['✊','✦','✊','◆','✦','✊'], Natal:['❄','✦','❄','✧','❄','★'] };
   const activeSeasonalEvents = seasonal.activeEvents || (seasonal.active ? [seasonal.active] : []);
   const seasonalMarkup = activeSeasonalEvents.map((event) => {
     const particles = seasonalEventParticles[event.label] || ['✦','◆','✧'];
@@ -486,7 +486,7 @@ async function openRecalculateDayNumbersModal() {
 }
 
 export function openSeasonalPreview() {
-  const particleSet = (key, theme, fallback) => ({ 'new-year':['✦','★','✺','✧','◆','★','✦'], carnival:['◆','●','✦','◆','●','✧','◆'], 'good-friday':['✧','○','✧','✦','○','✧','○'], easter:['🥚','🐣','○','🥚','✦','🐣','○'], tiradentes:['⚔','✦','⚔','◆','✦','⚔','✧'], 'labor-day':['⚒','◆','⚒','✦','⚒','◆','✧'], 'mothers-day':['♥','✿','♥','✦','♥','✿','♥'], 'valentines-day':['♥','♥','♡','♥','✦','♥','♡'], 'sao-joao':['⚑','⚑','⚑','⚑','⚑','⚑','⚑'], 'corpus-christi':['✧','✦','✧','○','✦','✧','○'], 'fathers-day':['★','🎁','★','✦','★','🎁','★'], independence:['◆','✦','◆','⚑','✦','◆','⚑'], aparecida:['✦','✧','✦','○','✧','✦','○'], 'children-day':['●','🎈','●','✦','🎈','●','✦'], halloween:['🦇','✦','🦇','✧','🕸','🦇','✦'], 'all-souls':['✧','🕯','✧','○','🕯','✧','○'], republic:['⚑','◆','⚑','✦','◆','⚑','✧'], 'black-consciousness':['✊','✦','✊','◆','✦','✊','◆'], christmas:['❄','✦','❄','✧','❄','★','❄'] }[key] || ({ christmas:['❄','✦','❄','✧','❄','★','❄'], 'new-year':['✦','✧','◆','★','✦','✺','◆'], halloween:['🦇','✦','🦇','✧','🕸','🦇','✦'], carnival:['✦','◆','✧','●','◆','✦','●'], 'june-festival':['⚑','⚑','⚑','⚑','⚑','⚑','⚑'], hearts:['♥','♥','♥','✦','♥','♥','♥'], easter:['🥚','○','🐣','✦','🥚','○','🐣'], celebration:['✦','◆','✧','●','★','✦','◆'], civic:['◆','✦','◆','✧','◆','✦','◆'] }[theme] || Array(7).fill(fallback)));
+  const particleSet = (key, theme, fallback) => ({ 'new-year':['✦','★','✺','✧','◆','★','✦'], carnival:['◆','●','✦','◆','●','✧','◆'], 'good-friday':['✧','○','✧','✦','○','✧','○'], easter:['🥚','🐰','🍫','🐇','🥚','🍫','🐰'], tiradentes:['⚔','✦','⚔','◆','✦','⚔','✧'], 'labor-day':['⚒','◆','⚒','✦','⚒','◆','✧'], 'mothers-day':['♥','✿','♥','✦','♥','✿','♥'], 'valentines-day':['♥','♥','♡','♥','✦','♥','♡'], 'sao-joao':['⚑','⚑','⚑','⚑','⚑','⚑','⚑'], 'corpus-christi':['✧','✦','✧','○','✦','✧','○'], 'fathers-day':['★','🎁','★','✦','★','🎁','★'], independence:['◆','✦','◆','⚑','✦','◆','⚑'], aparecida:['✦','✧','✦','○','✧','✦','○'], 'children-day':['●','🎈','●','✦','🎈','●','✦'], halloween:['🦇','✦','🦇','✧','🦇','✦','🦇'], 'all-souls':['✧','🕯','✧','○','🕯','✧','○'], republic:['⚑','◆','⚑','✦','◆','⚑','✧'], 'black-consciousness':['✊','✦','✊','◆','✦','✊','◆'], christmas:['❄','✦','❄','✧','❄','★','❄'] }[key] || ({ christmas:['❄','✦','❄','✧','❄','★','❄'], 'new-year':['✦','✧','◆','★','✦','✺','◆'], halloween:['🦇','✦','🦇','✧','🦇','✦','🦇'], carnival:['✦','◆','✧','●','◆','✦','●'], 'june-festival':['⚑','⚑','⚑','⚑','⚑','⚑','⚑'], hearts:['♥','♥','♥','✦','♥','♥','♥'], easter:['🥚','🐰','🍫','🐇','🥚','🍫','🐰'], celebration:['✦','◆','✧','●','★','✦','◆'], civic:['◆','✦','◆','✧','◆','✦','◆'] }[theme] || Array(7).fill(fallback)));
   const particles = (item) => { const config = SEASONAL_ANIMATION_CONFIG[item.key] || item; const set = particleSet(config.key, config.theme, config.icon); return Array.from({ length: 36 }, (_, index) => `<span style="--i:${index}">${set[index % set.length]}</span>`).join(''); };
   const body = `<div class="seasonal-preview-intro"><strong>Prévia individual por feriado</strong><p>Cada cartão tem sua própria animação. Selecione um feriado para executar o efeito no painel real por 20 segundos.</p></div><div class="seasonal-preview-grid">${SEASONAL_PREVIEW_CATALOG.map((item) => `<button type="button" class="seasonal-preview-card" data-preview-key="${item.key}" data-preview-theme="${item.theme}" data-preview-icon="${item.icon}" data-preview-label="${item.label}"><div class="seasonal-preview-stage"><div class="seasonal-atmosphere seasonal-preview-atmosphere seasonal-${item.theme} event-${item.key}" aria-hidden="true">${particles(item)}${seasonalDecorations(item.key, false)}</div><strong>${item.icon}</strong><small>${item.effect}</small></div><h3>${item.label}</h3><span>Clique para experimentar por 20s</span></button>`).join('')}</div>`;
   openModal({
@@ -515,7 +515,7 @@ function runSeasonalPreview(key, theme, icon, label) {
   atmosphere.className = `seasonal-atmosphere seasonal-preview-atmosphere seasonal-preview-atmosphere-live seasonal-force-motion seasonal-${theme} event-${key}`;
   atmosphere.dataset.seasonalKey = key;
   atmosphere.setAttribute('aria-hidden', 'true');
-  const symbols = ({ 'new-year':['✦','★','✺','✧','◆'], carnival:['◆','●','✦','◆','●'], 'good-friday':['✧','○','✧','✦','○'], easter:['🥚','🐣','○','🥚','✦'], tiradentes:['⚔','✦','⚔','◆','✦'], 'labor-day':['⚒','◆','⚒','✦','⚒'], 'mothers-day':['♥','✿','♥','✦','♥'], 'valentines-day':['♥','♥','♡','♥','✦'], 'sao-joao':['⚑','⚑','⚑','⚑','⚑'], 'corpus-christi':['✧','✦','✧','○','✦'], 'fathers-day':['★','🎁','★','✦','★'], independence:['◆','✦','◆','⚑','✦'], aparecida:['✦','✧','✦','○','✧'], 'children-day':['●','🎈','●','✦','🎈'], halloween:['🦇','✦','🦇','✧','🕸'], 'all-souls':['✧','🕯','✧','○','🕯'], republic:['⚑','◆','⚑','✦','◆'], 'black-consciousness':['✊','✦','✊','◆','✦'], christmas:['❄','✦','❄','✧','❄'] }[key] || Array(5).fill(icon));
+  const symbols = ({ 'new-year':['✦','★','✺','✧','◆'], carnival:['◆','●','✦','◆','●'], 'good-friday':['✧','○','✧','✦','○'], easter:['🥚','🐰','🍫','🐇','🥚'], tiradentes:['⚔','✦','⚔','◆','✦'], 'labor-day':['⚒','◆','⚒','✦','⚒'], 'mothers-day':['♥','✿','♥','✦','♥'], 'valentines-day':['♥','♥','♡','♥','✦'], 'sao-joao':['⚑','⚑','⚑','⚑','⚑'], 'corpus-christi':['✧','✦','✧','○','✦'], 'fathers-day':['★','🎁','★','✦','★'], independence:['◆','✦','◆','⚑','✦'], aparecida:['✦','✧','✦','○','✧'], 'children-day':['●','🎈','●','✦','🎈'], halloween:['🦇','✦','🦇','✧','🦇'], 'all-souls':['✧','🕯','✧','○','🕯'], republic:['⚑','◆','⚑','✦','◆'], 'black-consciousness':['✊','✦','✊','◆','✦'], christmas:['❄','✦','❄','✧','❄'] }[key] || Array(5).fill(icon));
   atmosphere.innerHTML = Array.from({ length: 36 }, (_, index) => `<span style="--i:${index}">${symbols[index % symbols.length]}</span>`).join('') + seasonalDecorations(key, true);
   commandHead.appendChild(atmosphere);
   toast(`${label}: prévia ativa por 20 segundos.`, 'success');
@@ -3958,7 +3958,7 @@ function openVehicleAddModal(record = null) {
    ========================================================= */
 export async function renderSettings() {
   const cfg = JSON.parse(localStorage.getItem('orbita_settings') || '{}');
-  const { listAutoBackups } = await import('./db.js?v=13.41');
+  const { listAutoBackups } = await import('./db.js?v=13.42');
   const autoBackups = await listAutoBackups();
   const backupReasonLabel = (reason = '') => reason === 'abertura' ? 'Abertura do sistema' : reason === 'periodico-1min' ? 'Segurança · 1 minuto' : reason ? 'Alteração salva' : 'Automático';
   const autoList = autoBackups.length
@@ -3997,13 +3997,13 @@ export async function renderSettings() {
 export function wireSettingsEvents() {
   $$('.auto-restore-btn').forEach((btn) => btn.addEventListener('click', async () => {
     if (!confirm('Restaurar esse backup automático vai substituir os dados atuais. Continuar?')) return;
-    const { restoreAutoBackup } = await import('./db.js?v=13.41');
+    const { restoreAutoBackup } = await import('./db.js?v=13.42');
     await restoreAutoBackup(btn.dataset.id);
     toast('Backup automático restaurado.', 'success');
     refreshApp();
   }));
   $('#settingsBackupBtn')?.addEventListener('click', async () => {
-    const data = await (await import('./db.js?v=13.41')).exportAll();
+    const data = await (await import('./db.js?v=13.42')).exportAll();
     downloadJSON(`orbita-backup-completo-${new Date().toISOString().slice(0,10)}.json`, data);
     toast('Backup completo gerado.', 'success');
   });
@@ -4011,12 +4011,12 @@ export function wireSettingsEvents() {
     const file = e.target.files[0];
     if (!file) return;
     if (!confirm('Isso vai substituir os dados atuais pelo conteúdo do backup. Um backup de segurança dos dados atuais será baixado antes. Continuar?')) { e.target.value = ''; return; }
-    const currentBackup = await (await import('./db.js?v=13.41')).exportAll();
+    const currentBackup = await (await import('./db.js?v=13.42')).exportAll();
     downloadJSON(`orbita-backup-seguranca-antes-restauracao-${Date.now()}.json`, currentBackup);
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      await (await import('./db.js?v=13.41')).importAll(data);
+      await (await import('./db.js?v=13.42')).importAll(data);
       toast('Backup restaurado.', 'success');
       refreshApp();
     } catch { toast('Arquivo de backup inválido.', 'error'); }
