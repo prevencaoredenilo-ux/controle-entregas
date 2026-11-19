@@ -5958,3 +5958,25 @@ input:focus, select:focus, textarea:focus { border-color: var(--blue) !important
 @keyframes seasonal-santa-crossing { 0%{transform:translate(-18px,12px) rotate(-3deg);opacity:0} 12%{opacity:1} 48%{transform:translate(250px,-18px) rotate(3deg);opacity:1} 72%{transform:translate(490px,3px) rotate(-2deg);opacity:1} 100%{transform:translate(760px,-12px) rotate(2deg);opacity:0} }
 @media(max-width:520px){.app-v8 .seasonal-pumpkin-ground span{font-size:23px!important}.app-v8 .seasonal-pumpkin-ground span:nth-child(2){font-size:32px!important}.app-v8 .seasonal-santa-flight b{font-size:23px}.app-v8 .seasonal-santa-flight span{font-size:18px!important}}
 @media(prefers-reduced-motion:reduce){.app-v8 .seasonal-pumpkin-ground span,.app-v8 .seasonal-santa-flight{animation:none!important}}
+
+/* v13.41 — teias nos cantos e cenário natalício com boneco de neve estruturado */
+.app-v8 .seasonal-spiderweb { position:absolute; z-index:21; color:#d1d5db; font-size:64px; line-height:1; opacity:.82; filter:drop-shadow(2px 2px 0 #111); animation:seasonal-web-sway 4s ease-in-out infinite; }
+.app-v8 .seasonal-spiderweb.web-left { left:-10px; top:-7px; transform-origin:top left; }.app-v8 .seasonal-spiderweb.web-right { right:-10px; top:-7px; transform-origin:top right; animation-delay:-1.8s; transform:scaleX(-1); }
+.app-v8 .seasonal-tree { bottom:0; right:9%; min-width:84px; padding-bottom:15px; }
+.app-v8 .seasonal-tree span { z-index:2; }.app-v8 .seasonal-tree .tree-trunk { position:absolute; z-index:1; bottom:7px; width:20px; height:24px; background:#8b5a2b; border:3px solid #111; border-radius:5px; }
+.app-v8 .seasonal-tree .tree-shadow { position:absolute; z-index:0; bottom:3px; width:112px; height:14px; border-radius:50%; background:#111; opacity:.55; }
+.app-v8 .seasonal-snowmen { bottom:3px!important; left:26%!important; right:auto!important; }
+.app-v8 .seasonal-snowman-cheerful { position:relative; width:72px; height:90px; filter:drop-shadow(2px 2px 0 #111); animation:seasonal-snowman-cheer 3.5s ease-in-out infinite; }
+.app-v8 .seasonal-snowman-cheerful .snow-head,.app-v8 .seasonal-snowman-cheerful .snow-body,.app-v8 .seasonal-snowman-cheerful .snow-base { position:absolute; display:block; border:3px solid #111; border-radius:50%; background:#fff; }
+.app-v8 .seasonal-snowman-cheerful .snow-head { z-index:3; left:19px; top:4px; width:42px; height:38px; }
+.app-v8 .seasonal-snowman-cheerful .snow-body { z-index:2; left:11px; top:32px; width:55px; height:45px; }.app-v8 .seasonal-snowman-cheerful .snow-base { z-index:1; left:3px; top:59px; width:70px; height:31px; }
+.app-v8 .seasonal-snowman-cheerful .snow-head em { position:absolute; top:12px; width:6px; height:6px; border-radius:50%; background:#111; }.app-v8 .seasonal-snowman-cheerful .snow-head em:first-child{left:10px}.app-v8 .seasonal-snowman-cheerful .snow-head em:nth-child(2){right:10px}
+.app-v8 .seasonal-snowman-cheerful .snow-head strong { position:absolute; left:27px; top:17px; width:0; height:0; border-top:5px solid transparent; border-bottom:5px solid transparent; border-left:15px solid #f97316; transform:rotate(-3deg); }
+.app-v8 .seasonal-snowman-cheerful .snow-head::after { content:""; position:absolute; left:12px; top:25px; width:17px; height:7px; border-bottom:3px solid #111; border-radius:50%; }
+.app-v8 .seasonal-snowman-cheerful .snow-body::after { content:"●  ●  ●"; position:absolute; left:13px; top:11px; color:#16a34a; font-size:9px; letter-spacing:1px; }
+.app-v8 .seasonal-snowman-cheerful .snow-arm { position:absolute; z-index:4; top:45px; width:31px; height:4px; background:#8b5a2b; border:2px solid #111; border-radius:5px; }.app-v8 .seasonal-snowman-cheerful .arm-left{left:-15px;transform:rotate(-25deg)}.app-v8 .seasonal-snowman-cheerful .arm-right{right:-15px;transform:rotate(25deg)}
+.app-v8 .seasonal-snowman-cheerful .snow-hat { position:absolute; z-index:5; left:14px; top:-3px; width:51px; height:9px; background:#111; border-radius:5px; }.app-v8 .seasonal-snowman-cheerful .snow-hat::before { content:""; position:absolute; left:11px; bottom:5px; width:29px; height:18px; background:#111; border-radius:4px 4px 0 0; }
+@keyframes seasonal-web-sway { 0%,100%{opacity:.55;transform:rotate(-2deg)} 50%{opacity:1;transform:rotate(3deg)} }
+@keyframes seasonal-snowman-cheer { 0%,100%{transform:translateY(0) rotate(-2deg)} 50%{transform:translateY(-4px) rotate(2deg)} }
+@media(max-width:520px){.app-v8 .seasonal-spiderweb{font-size:46px}.app-v8 .seasonal-snowman-cheerful{transform:scale(.78);transform-origin:bottom left}.app-v8 .seasonal-tree{right:4%;transform:scale(.8);transform-origin:bottom right}}
+@media(prefers-reduced-motion:reduce){.app-v8 .seasonal-spiderweb,.app-v8 .seasonal-snowman-cheerful{animation:none!important}}
