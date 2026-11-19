@@ -5944,3 +5944,17 @@ input:focus, select:focus, textarea:focus { border-color: var(--blue) !important
 @keyframes seasonal-present-hop { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
 @media(max-width:520px){.app-v8 .seasonal-tree span{font-size:44px!important}.app-v8 .seasonal-tree{right:5%;bottom:17px}.app-v8 .seasonal-presents{right:25%}.app-v8 .seasonal-bat-flight b{font-size:18px}}
 @media(prefers-reduced-motion:reduce){.app-v8 .seasonal-bat-flight b,.app-v8 .seasonal-tree span,.app-v8 .seasonal-tree b,.app-v8 .seasonal-presents b{animation:none!important}}
+
+/* v13.40 — Halloween com abóboras no chão e Natal sem neve acumulada */
+.app-v8 .seasonal-pumpkin-ground { position:absolute; left:4%; right:4%; bottom:0; z-index:19; display:flex; align-items:flex-end; justify-content:space-around; gap:12px; padding:0 8px 2px; border-bottom:4px solid #111; }
+.app-v8 .seasonal-pumpkin-ground::before { content:""; position:absolute; left:0; right:0; bottom:-4px; height:7px; background:#111; border-radius:50%; opacity:.55; }
+.app-v8 .seasonal-pumpkin-ground span { position:relative!important; inset:auto!important; z-index:1; display:block; min-width:0!important; min-height:0!important; font-size:31px!important; line-height:1!important; color:initial!important; text-shadow:2px 2px 0 #111!important; animation:seasonal-pumpkin-ground-bob 3s ease-in-out infinite!important; }
+.app-v8 .seasonal-pumpkin-ground span:nth-child(2){font-size:44px!important;animation-delay:-1.1s!important}.app-v8 .seasonal-pumpkin-ground span:nth-child(3){animation-delay:-2.1s!important}
+.app-v8 .seasonal-snow-floor,.app-v8 .seasonal-snow-clear { display:none!important; }
+.app-v8 .seasonal-santa-flight { position:absolute; left:4%; top:34%; z-index:17; display:flex; align-items:center; gap:0; filter:drop-shadow(2px 2px 0 #111); animation:seasonal-santa-crossing 8s ease-in-out infinite; }
+.app-v8 .seasonal-santa-flight b { font-size:29px; line-height:1; }.app-v8 .seasonal-santa-flight span { position:relative!important; inset:auto!important; min-width:0!important; min-height:0!important; font-size:22px!important; line-height:1!important; }
+.app-v8 .seasonal-christmas-decor .seasonal-snowmen { bottom:7px; left:26%; right:auto; }.app-v8 .seasonal-christmas-decor .seasonal-snowmen b { font-size:32px; }
+@keyframes seasonal-pumpkin-ground-bob { 0%,100%{transform:translateY(0) rotate(-2deg)} 50%{transform:translateY(-3px) rotate(2deg)} }
+@keyframes seasonal-santa-crossing { 0%{transform:translate(-18px,12px) rotate(-3deg);opacity:0} 12%{opacity:1} 48%{transform:translate(250px,-18px) rotate(3deg);opacity:1} 72%{transform:translate(490px,3px) rotate(-2deg);opacity:1} 100%{transform:translate(760px,-12px) rotate(2deg);opacity:0} }
+@media(max-width:520px){.app-v8 .seasonal-pumpkin-ground span{font-size:23px!important}.app-v8 .seasonal-pumpkin-ground span:nth-child(2){font-size:32px!important}.app-v8 .seasonal-santa-flight b{font-size:23px}.app-v8 .seasonal-santa-flight span{font-size:18px!important}}
+@media(prefers-reduced-motion:reduce){.app-v8 .seasonal-pumpkin-ground span,.app-v8 .seasonal-santa-flight{animation:none!important}}
