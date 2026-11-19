@@ -1,9 +1,9 @@
 const CACHE_PREFIX = 'orbita-v13-32-safe-';
 const CACHE = `${CACHE_PREFIX}1`;
 const ASSETS = [
-  './', './index.html', './styles.css?v=13.42', './app.js?v=13.42', './db.js?v=13.42', './helpers.js?v=13.42', './views.js?v=13.42', './excel-report.js?v=13.42', './manifest.webmanifest?v=13.42',
+  './', './index.html', './styles.css?v=13.43', './app.js?v=13.43', './db.js?v=13.43', './helpers.js?v=13.43', './views.js?v=13.43', './excel-report.js?v=13.43', './manifest.webmanifest?v=13.43',
  
-  './icons/icon-192.png', './icons/icon-512.png', './assets/delivery-courier-mascot.png',
+  './icons/icon-192.png', './icons/icon-512.png', './assets/delivery-courier-mascot.png', './assets/christmas-tree-reference.png', './assets/snowman-reference.png',
 ];
 
 self.addEventListener('install', (event) => {
