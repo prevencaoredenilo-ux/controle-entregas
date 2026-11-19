@@ -5980,3 +5980,11 @@ input:focus, select:focus, textarea:focus { border-color: var(--blue) !important
 @keyframes seasonal-snowman-cheer { 0%,100%{transform:translateY(0) rotate(-2deg)} 50%{transform:translateY(-4px) rotate(2deg)} }
 @media(max-width:520px){.app-v8 .seasonal-spiderweb{font-size:46px}.app-v8 .seasonal-snowman-cheerful{transform:scale(.78);transform-origin:bottom left}.app-v8 .seasonal-tree{right:4%;transform:scale(.8);transform-origin:bottom right}}
 @media(prefers-reduced-motion:reduce){.app-v8 .seasonal-spiderweb,.app-v8 .seasonal-snowman-cheerful{animation:none!important}}
+
+/* v13.42 — composição natalícia limpa sem árvore ou boneco de neve */
+.app-v8 .seasonal-christmas-gifts { position:absolute; left:12%; bottom:1px; z-index:19; display:flex; align-items:flex-end; gap:5px; padding:0 8px 3px; border-bottom:4px solid #111; filter:drop-shadow(0 3px 0 rgba(17,17,17,.45)); }
+.app-v8 .seasonal-christmas-gifts b { font-size:31px; line-height:1; animation:seasonal-gift-wiggle 3.2s ease-in-out infinite; }.app-v8 .seasonal-christmas-gifts b:nth-child(2){font-size:25px;animation-delay:-1s}.app-v8 .seasonal-christmas-gifts span{font-size:24px;line-height:1;animation:seasonal-bell-ring 2.2s ease-in-out infinite}
+@keyframes seasonal-gift-wiggle { 0%,100%{transform:translateY(0) rotate(-2deg)} 50%{transform:translateY(-4px) rotate(2deg)} }
+@keyframes seasonal-bell-ring { 0%,100%{transform:rotate(0)} 20%{transform:rotate(-12deg)} 40%{transform:rotate(12deg)} 60%{transform:rotate(-5deg)} }
+@media(max-width:520px){.app-v8 .seasonal-christmas-gifts{left:6%}.app-v8 .seasonal-christmas-gifts b{font-size:24px}.app-v8 .seasonal-christmas-gifts span{font-size:19px}}
+@media(prefers-reduced-motion:reduce){.app-v8 .seasonal-christmas-gifts b,.app-v8 .seasonal-christmas-gifts span{animation:none!important}}

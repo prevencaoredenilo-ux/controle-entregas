@@ -220,7 +220,7 @@ export const SEASONAL_PREVIEW_CATALOG = [
   { key: 'new-year', label: 'Ano Novo', theme: 'new-year', icon: '✦', effect: 'Fogos e brilhos dourados' },
   { key: 'carnival', label: 'Carnaval', theme: 'carnival', icon: '◆', effect: 'Confetes coloridos' },
   { key: 'good-friday', label: 'Sexta-feira Santa', theme: 'easter', icon: '✧', effect: 'Luz suave e reverente' },
-  { key: 'easter', label: 'Páscoa', theme: 'easter', icon: '○', effect: 'Ovos e coelhinhos' },
+  { key: 'easter', label: 'Páscoa', theme: 'easter', icon: '🐰', effect: 'Ovos de chocolate e coelhos' },
   { key: 'tiradentes', label: 'Tiradentes', theme: 'civic', icon: '⚔', effect: 'Faíscas históricas' },
   { key: 'labor-day', label: 'Dia do Trabalho', theme: 'civic', icon: '⚒', effect: 'Engrenagens e energia' },
   { key: 'mothers-day', label: 'Dia das Mães', theme: 'hearts', icon: '♥', effect: 'Corações floridos' },
@@ -231,11 +231,11 @@ export const SEASONAL_PREVIEW_CATALOG = [
   { key: 'independence', label: 'Independência do Brasil', theme: 'civic', icon: '◆', effect: 'Faixas verde e amarela' },
   { key: 'aparecida', label: 'Nossa Senhora Aparecida', theme: 'civic', icon: '✦', effect: 'Aureola azul e dourada' },
   { key: 'children-day', label: 'Dia das Crianças', theme: 'celebration', icon: '●', effect: 'Balões e brinquedos' },
-  { key: 'halloween', label: 'Halloween', theme: 'halloween', icon: '🦇', effect: 'Morcegos e teias' },
+  { key: 'halloween', label: 'Halloween', theme: 'halloween', icon: '🦇', effect: 'Morcegos e abóboras' },
   { key: 'all-souls', label: 'Finados', theme: 'civic', icon: '✧', effect: 'Velas suaves' },
   { key: 'republic', label: 'Proclamação da República', theme: 'civic', icon: '⚑', effect: 'Bandeira nacional' },
   { key: 'black-consciousness', label: 'Consciência Negra', theme: 'civic', icon: '✊', effect: 'Cores e união' },
-  { key: 'christmas', label: 'Natal', theme: 'christmas', icon: '❄', effect: 'Neve, estrelas e luzes' },
+  { key: 'christmas', label: 'Natal', theme: 'christmas', icon: '🎅', effect: 'Papai Noel, presentes e luzes' },
 ];
 
 export const SEASONAL_ANIMATION_CONFIG = Object.fromEntries(SEASONAL_PREVIEW_CATALOG.map((item) => [item.key, item]));
