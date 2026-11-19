@@ -1,9 +1,15 @@
-import { Deliveries, Vehicles, Drivers, DriverPayouts, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters, MAX_DELIVERY_TRIPS, normalizeTripCount, buildDeliveryTrips } from './db.js?v=13.37';
-import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, seasonalContext, SEASONAL_PREVIEW_CATALOG, SEASONAL_ANIMATION_CONFIG, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=13.37';
-import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=13.37';
-import { exportFullExcelReport } from './excel-report.js?v=13.37';
+import { Deliveries, Vehicles, Drivers, DriverPayouts, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters, MAX_DELIVERY_TRIPS, normalizeTripCount, buildDeliveryTrips } from './db.js?v=13.38';
+import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, seasonalContext, SEASONAL_PREVIEW_CATALOG, SEASONAL_ANIMATION_CONFIG, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=13.38';
+import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=13.38';
+import { exportFullExcelReport } from './excel-report.js?v=13.38';
 
 const DEFAULT_OPERATIONAL_TARGETS = { startMinutes:120, arrivalMinutes:210, warningMinutes:30, successTarget:90 };
+
+function seasonalDecorations(key, includeControls = false) {
+  if (key === 'halloween') return `<div class="seasonal-decor seasonal-halloween-decor" aria-hidden="true"><div class="seasonal-web">✣</div><div class="seasonal-pumpkins"><span>🎃</span><span>🎃</span><span>🎃</span></div></div>`;
+  if (key === 'christmas') return `<div class="seasonal-decor seasonal-christmas-decor" aria-hidden="true"><div class="seasonal-string-lights"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="seasonal-snow-floor"><span></span><span></span><span></span></div><div class="seasonal-snowmen"><b>☃</b><b>☃</b></div>${includeControls ? '<button type="button" class="seasonal-snow-clear" data-snow-clear aria-label="Limpar neve">🧹 Limpar neve</button>' : ''}</div>`;
+  return '';
+}
 
 function operationalTargets() {
   try { return { ...DEFAULT_OPERATIONAL_TARGETS, ...JSON.parse(localStorage.getItem('orbita_operational_targets') || '{}') }; }
@@ -228,7 +234,7 @@ export async function renderCentral() {
     const particles = seasonalEventParticles[event.label] || ['✦','◆','✧'];
     const config = SEASONAL_PREVIEW_CATALOG.find((item) => item.label === event.label) || { key: event.label };
     const key = `event-${config.key}`;
-    return `<div class="seasonal-atmosphere seasonal-force-motion seasonal-${event.theme} ${key}" data-seasonal-key="${config.key}" aria-hidden="true">${Array.from({ length: 36 }, (_, index) => `<span style="--i:${index}">${particles[index % particles.length]}</span>`).join('')}</div>`;
+    return `<div class="seasonal-atmosphere seasonal-force-motion seasonal-${event.theme} ${key}" data-seasonal-key="${config.key}" aria-hidden="true">${Array.from({ length: 36 }, (_, index) => `<span style="--i:${index}">${particles[index % particles.length]}</span>`).join('')}${seasonalDecorations(config.key, true)}</div>`;
   }).join('');
   const seasonalReminder = seasonalEvent ? (seasonalIsUpcoming ? `Próxima data: ${seasonalEvent.label} em ${seasonal.daysToUpcoming === 0 ? 'hoje' : `${seasonal.daysToUpcoming} dia(s)`}.` : `Hoje: ${activeSeasonalEvents.map((event) => event.label).join(' e ')}.`) : '';
 
@@ -482,7 +488,7 @@ async function openRecalculateDayNumbersModal() {
 export function openSeasonalPreview() {
   const particleSet = (key, theme, fallback) => ({ 'new-year':['✦','★','✺','✧','◆','★','✦'], carnival:['◆','●','✦','◆','●','✧','◆'], 'good-friday':['✧','○','✧','✦','○','✧','○'], easter:['🥚','🐣','○','🥚','✦','🐣','○'], tiradentes:['⚔','✦','⚔','◆','✦','⚔','✧'], 'labor-day':['⚒','◆','⚒','✦','⚒','◆','✧'], 'mothers-day':['♥','✿','♥','✦','♥','✿','♥'], 'valentines-day':['♥','♥','♡','♥','✦','♥','♡'], 'sao-joao':['⚑','⚑','⚑','⚑','⚑','⚑','⚑'], 'corpus-christi':['✧','✦','✧','○','✦','✧','○'], 'fathers-day':['★','🎁','★','✦','★','🎁','★'], independence:['◆','✦','◆','⚑','✦','◆','⚑'], aparecida:['✦','✧','✦','○','✧','✦','○'], 'children-day':['●','🎈','●','✦','🎈','●','✦'], halloween:['🦇','✦','🦇','✧','🕸','🦇','✦'], 'all-souls':['✧','🕯','✧','○','🕯','✧','○'], republic:['⚑','◆','⚑','✦','◆','⚑','✧'], 'black-consciousness':['✊','✦','✊','◆','✦','✊','◆'], christmas:['❄','✦','❄','✧','❄','★','❄'] }[key] || ({ christmas:['❄','✦','❄','✧','❄','★','❄'], 'new-year':['✦','✧','◆','★','✦','✺','◆'], halloween:['🦇','✦','🦇','✧','🕸','🦇','✦'], carnival:['✦','◆','✧','●','◆','✦','●'], 'june-festival':['⚑','⚑','⚑','⚑','⚑','⚑','⚑'], hearts:['♥','♥','♥','✦','♥','♥','♥'], easter:['🥚','○','🐣','✦','🥚','○','🐣'], celebration:['✦','◆','✧','●','★','✦','◆'], civic:['◆','✦','◆','✧','◆','✦','◆'] }[theme] || Array(7).fill(fallback)));
   const particles = (item) => { const config = SEASONAL_ANIMATION_CONFIG[item.key] || item; const set = particleSet(config.key, config.theme, config.icon); return Array.from({ length: 36 }, (_, index) => `<span style="--i:${index}">${set[index % set.length]}</span>`).join(''); };
-  const body = `<div class="seasonal-preview-intro"><strong>Prévia individual por feriado</strong><p>Cada cartão tem sua própria animação. Selecione um feriado para executar o efeito no painel real por 20 segundos.</p></div><div class="seasonal-preview-grid">${SEASONAL_PREVIEW_CATALOG.map((item) => `<button type="button" class="seasonal-preview-card" data-preview-key="${item.key}" data-preview-theme="${item.theme}" data-preview-icon="${item.icon}" data-preview-label="${item.label}"><div class="seasonal-preview-stage"><div class="seasonal-atmosphere seasonal-preview-atmosphere seasonal-${item.theme} event-${item.key}" aria-hidden="true">${particles(item)}</div><strong>${item.icon}</strong><small>${item.effect}</small></div><h3>${item.label}</h3><span>Clique para experimentar por 20s</span></button>`).join('')}</div>`;
+  const body = `<div class="seasonal-preview-intro"><strong>Prévia individual por feriado</strong><p>Cada cartão tem sua própria animação. Selecione um feriado para executar o efeito no painel real por 20 segundos.</p></div><div class="seasonal-preview-grid">${SEASONAL_PREVIEW_CATALOG.map((item) => `<button type="button" class="seasonal-preview-card" data-preview-key="${item.key}" data-preview-theme="${item.theme}" data-preview-icon="${item.icon}" data-preview-label="${item.label}"><div class="seasonal-preview-stage"><div class="seasonal-atmosphere seasonal-preview-atmosphere seasonal-${item.theme} event-${item.key}" aria-hidden="true">${particles(item)}${seasonalDecorations(item.key, false)}</div><strong>${item.icon}</strong><small>${item.effect}</small></div><h3>${item.label}</h3><span>Clique para experimentar por 20s</span></button>`).join('')}</div>`;
   openModal({
     title: 'Prévia dos feriados',
     subtitle: 'Todas as animações sazonais disponíveis no sistema',
@@ -510,7 +516,7 @@ function runSeasonalPreview(key, theme, icon, label) {
   atmosphere.dataset.seasonalKey = key;
   atmosphere.setAttribute('aria-hidden', 'true');
   const symbols = ({ 'new-year':['✦','★','✺','✧','◆'], carnival:['◆','●','✦','◆','●'], 'good-friday':['✧','○','✧','✦','○'], easter:['🥚','🐣','○','🥚','✦'], tiradentes:['⚔','✦','⚔','◆','✦'], 'labor-day':['⚒','◆','⚒','✦','⚒'], 'mothers-day':['♥','✿','♥','✦','♥'], 'valentines-day':['♥','♥','♡','♥','✦'], 'sao-joao':['⚑','⚑','⚑','⚑','⚑'], 'corpus-christi':['✧','✦','✧','○','✦'], 'fathers-day':['★','🎁','★','✦','★'], independence:['◆','✦','◆','⚑','✦'], aparecida:['✦','✧','✦','○','✧'], 'children-day':['●','🎈','●','✦','🎈'], halloween:['🦇','✦','🦇','✧','🕸'], 'all-souls':['✧','🕯','✧','○','🕯'], republic:['⚑','◆','⚑','✦','◆'], 'black-consciousness':['✊','✦','✊','◆','✦'], christmas:['❄','✦','❄','✧','❄'] }[key] || Array(5).fill(icon));
-  atmosphere.innerHTML = Array.from({ length: 36 }, (_, index) => `<span style="--i:${index}">${symbols[index % symbols.length]}</span>`).join('');
+  atmosphere.innerHTML = Array.from({ length: 36 }, (_, index) => `<span style="--i:${index}">${symbols[index % symbols.length]}</span>`).join('') + seasonalDecorations(key, true);
   commandHead.appendChild(atmosphere);
   toast(`${label}: prévia ativa por 20 segundos.`, 'success');
   window.__seasonalPreviewTimer = window.setTimeout(() => {
@@ -548,6 +554,13 @@ export function wireCentralEvents() {
   $('#qaCloseDay')?.addEventListener('click', () => openDayCloseAssistant());
   $('#qaQuickCloseDay')?.addEventListener('click', () => openDayCloseAssistant());
   $('#seasonalPreviewBtn')?.addEventListener('click', openSeasonalPreview);
+  $$('[data-snow-clear]').forEach((button) => button.addEventListener('click', (event) => {
+    event.stopPropagation();
+    const atmosphere = event.currentTarget.closest('.seasonal-atmosphere');
+    atmosphere?.classList.add('snow-cleared');
+    event.currentTarget.textContent = '☃ Neve limpa';
+    toast('A neve foi limpa do painel.', 'success');
+  }));
   $('#heroKmAction')?.addEventListener('click', async (e) => {
     if (Number(e.currentTarget.dataset.missing || 0) > 0) return openKmStartModal();
     const today = localDateKey();
@@ -3945,7 +3958,7 @@ function openVehicleAddModal(record = null) {
    ========================================================= */
 export async function renderSettings() {
   const cfg = JSON.parse(localStorage.getItem('orbita_settings') || '{}');
-  const { listAutoBackups } = await import('./db.js?v=13.37');
+  const { listAutoBackups } = await import('./db.js?v=13.38');
   const autoBackups = await listAutoBackups();
   const backupReasonLabel = (reason = '') => reason === 'abertura' ? 'Abertura do sistema' : reason === 'periodico-1min' ? 'Segurança · 1 minuto' : reason ? 'Alteração salva' : 'Automático';
   const autoList = autoBackups.length
@@ -3984,13 +3997,13 @@ export async function renderSettings() {
 export function wireSettingsEvents() {
   $$('.auto-restore-btn').forEach((btn) => btn.addEventListener('click', async () => {
     if (!confirm('Restaurar esse backup automático vai substituir os dados atuais. Continuar?')) return;
-    const { restoreAutoBackup } = await import('./db.js?v=13.37');
+    const { restoreAutoBackup } = await import('./db.js?v=13.38');
     await restoreAutoBackup(btn.dataset.id);
     toast('Backup automático restaurado.', 'success');
     refreshApp();
   }));
   $('#settingsBackupBtn')?.addEventListener('click', async () => {
-    const data = await (await import('./db.js?v=13.37')).exportAll();
+    const data = await (await import('./db.js?v=13.38')).exportAll();
     downloadJSON(`orbita-backup-completo-${new Date().toISOString().slice(0,10)}.json`, data);
     toast('Backup completo gerado.', 'success');
   });
@@ -3998,12 +4011,12 @@ export function wireSettingsEvents() {
     const file = e.target.files[0];
     if (!file) return;
     if (!confirm('Isso vai substituir os dados atuais pelo conteúdo do backup. Um backup de segurança dos dados atuais será baixado antes. Continuar?')) { e.target.value = ''; return; }
-    const currentBackup = await (await import('./db.js?v=13.37')).exportAll();
+    const currentBackup = await (await import('./db.js?v=13.38')).exportAll();
     downloadJSON(`orbita-backup-seguranca-antes-restauracao-${Date.now()}.json`, currentBackup);
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      await (await import('./db.js?v=13.37')).importAll(data);
+      await (await import('./db.js?v=13.38')).importAll(data);
       toast('Backup restaurado.', 'success');
       refreshApp();
     } catch { toast('Arquivo de backup inválido.', 'error'); }
