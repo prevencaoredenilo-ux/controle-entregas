@@ -1,7 +1,7 @@
-import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters, MAX_DELIVERY_TRIPS, normalizeTripCount, buildDeliveryTrips } from './db.js?v=13.35';
-import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, seasonalContext, SEASONAL_PREVIEW_CATALOG, SEASONAL_ANIMATION_CONFIG, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=13.35';
-import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=13.35';
-import { exportFullExcelReport } from './excel-report.js?v=13.35';
+import { Deliveries, Vehicles, Drivers, DriverPayouts, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters, MAX_DELIVERY_TRIPS, normalizeTripCount, buildDeliveryTrips } from './db.js?v=13.36';
+import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, seasonalContext, SEASONAL_PREVIEW_CATALOG, SEASONAL_ANIMATION_CONFIG, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=13.36';
+import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=13.36';
+import { exportFullExcelReport } from './excel-report.js?v=13.36';
 
 const DEFAULT_OPERATIONAL_TARGETS = { startMinutes:120, arrivalMinutes:210, warningMinutes:30, successTarget:90 };
 
@@ -1026,7 +1026,7 @@ export async function openDeliveryModal(record = null) {
         <label>Entregador
           <select name="driverId">
             <option value="">—</option>
-            ${drivers.map((d) => `<option value="${d.id}" ${record?.driverId === d.id ? 'selected' : ''}>${escapeHtml(d.name)}</option>`).join('')}
+            ${drivers.map((d) => `<option value="${d.id}" ${record?.driverId === d.id ? 'selected' : ''}>${escapeHtml(d.name)}${d.kind === 'terceirizado' ? ' · Terceirizado' : ''}</option>`).join('')}
           </select>
         </label>
       </div>
@@ -1673,7 +1673,7 @@ export async function openStartCycleModal() {
         <label>Entregador *
           <select name="driverId" required>
             <option value="">Selecione…</option>
-            ${drivers.map((d) => `<option value="${d.id}" ${busyDrivers.has(d.id) ? 'disabled' : ''}>${escapeHtml(d.name)}${busyDrivers.has(d.id) ? ' (em uso)' : ''}</option>`).join('')}
+            ${drivers.map((d) => `<option value="${d.id}" ${busyDrivers.has(d.id) ? 'disabled' : ''}>${escapeHtml(d.name)}${d.kind === 'terceirizado' ? ' · Terceirizado' : ''}${busyDrivers.has(d.id) ? ' (em uso)' : ''}</option>`).join('')}
           </select>
         </label>
       </div>
@@ -3297,10 +3297,34 @@ export function wireSearchEvents() {
 /* =========================================================
    RELATÓRIOS (seção 14)
    ========================================================= */
+async function renderThirdPartyPayouts(env, period) {
+  const [drivers, deliveries, payouts] = await Promise.all([Drivers.all(), Deliveries.active(env), DriverPayouts.all()]);
+  const thirdParty = drivers.filter((d) => d.active !== false && d.kind === 'terceirizado');
+  const eligible = deliveries.filter((d) => d.status === 'finalizada' && !d.refunded && inReportPeriod(d.deliveredAt || d.entryTime, period) && Number(d.deliveryFee || 0) > 0 && thirdParty.some((driver) => driver.id === d.driverId));
+  const periodStart = period.start || '';
+  const periodEnd = period.end || '';
+  const rows = thirdParty.map((driver) => {
+    const items = eligible.filter((d) => d.driverId === driver.id);
+    const amount = items.reduce((sum, d) => sum + Number(d.deliveryFee || 0), 0);
+    const paid = payouts.find((p) => p.environment === env && p.driverId === driver.id && p.periodStart === periodStart && p.periodEnd === periodEnd && p.status === 'pago');
+    return { driver, items, amount, paid };
+  }).filter((row) => row.items.length || row.paid);
+  if (!rows.length) return `<section class="page-table-card payout-panel"><div class="table-card-heading"><div><span>REPASSES TERCEIRIZADOS</span><strong>Nenhum repasse no período</strong></div><small>finalizadas sem reembolso</small></div><div class="empty-state"><strong>Sem entregas terceirizadas elegíveis</strong><span>O repasse considera somente entregas finalizadas por terceirizados. Retirada na loja e taxa reembolsada ficam fora.</span></div></section>`;
+  const total = rows.reduce((sum, row) => sum + row.amount, 0);
+  const body = rows.map(({ driver, items, amount, paid }) => `<tr>
+    <td><strong>${escapeHtml(driver.name)}</strong><br><small>${driver.paymentPeriod === 'mensal' ? 'Mensal' : 'Quinzenal'} · PIX ${escapeHtml(driver.pixKey || 'não informado')}</small></td>
+    <td>${items.length}</td><td>${money(amount)}</td>
+    <td>${paid ? `<span class="badge entregue">Pago em ${dateBR(paid.paidAt)}</span>` : '<span class="badge pendente">Pendente</span>'}</td>
+    <td>${paid ? '—' : `<button class="btn-primary btn-small payout-pay-btn" data-driver-id="${driver.id}" data-start="${escapeHtml(periodStart)}" data-end="${escapeHtml(periodEnd)}" data-amount="${amount}" data-count="${items.length}">Marcar como pago</button>`}</td>
+  </tr>`).join('');
+  return `<section class="page-table-card payout-panel"><div class="table-card-heading"><div><span>REPASSES TERCEIRIZADOS</span><strong>${money(total)} no período</strong></div><small>somente finalizadas sem reembolso</small></div><div class="table-wrap"><table><thead><tr><th>Entregador / ciclo</th><th>Entregas</th><th>Valor devido</th><th>Situação</th><th>Ação</th></tr></thead><tbody>${body}</tbody></table></div></section>`;
+}
+
 export async function renderReports() {
   const today = new Date();
   const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
   const localISO = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  const defaultPeriod = { start: localISO(monthStart), end: localISO(today) };
   return `
     ${pageIntro('GESTÃO · SAÍDAS', 'Relatórios e exportações', 'Defina o período uma vez e escolha a saída gerencial, CSV ou Excel completo.')}
     <div class="report-period-card">
@@ -3325,6 +3349,7 @@ export async function renderReports() {
           <button class="btn-ghost btn-small export-btn" data-kind="cycles">Ciclos</button>
           <button class="btn-ghost btn-small export-btn" data-kind="km">Quilometragem</button>
           <button class="btn-ghost btn-small export-btn" data-kind="costs">Custos</button>
+          <button class="btn-ghost btn-small export-btn" data-kind="payouts">Repasses terceirizados</button>
           <button class="btn-ghost btn-small export-btn" data-kind="audit">Auditoria</button>
           <button class="btn-ghost btn-small export-btn" data-kind="clients">Clientes</button>
           <button class="btn-ghost btn-small export-btn" data-kind="dias_semana">Dias da semana</button>
@@ -3337,6 +3362,7 @@ export async function renderReports() {
         </div>
       </div>
     </div>
+    ${await renderThirdPartyPayouts(getEnv(), defaultPeriod)}
     <div id="printArea" class="hidden"></div>
   `;
 }
@@ -3383,6 +3409,17 @@ async function buildExport(kind, env, period = null) {
     const header = ['Data', 'Categoria', 'Veículo', 'Entregador', 'Valor', 'Observação'];
     const lines = rows.map((c) => [dateBR(c.date), categories.find((cat) => cat.id === c.categoryId)?.name || '', vName(c.vehicleId), dName(c.driverId), c.amount, c.note]);
     return { name: 'custos', header, lines };
+  }
+  if (kind === 'payouts') {
+    const [drivers, deliveries, payouts] = await Promise.all([Drivers.all(), Deliveries.active(env), DriverPayouts.all()]);
+    const thirdParty = drivers.filter((d) => d.kind === 'terceirizado');
+    const rows = thirdParty.map((driver) => {
+      const items = deliveries.filter((d) => d.status === 'finalizada' && !d.refunded && d.driverId === driver.id && inReportPeriod(d.deliveredAt || d.entryTime, period));
+      const amount = items.reduce((sum, d) => sum + Number(d.deliveryFee || 0), 0);
+      const paid = payouts.find((p) => p.environment === env && p.driverId === driver.id && p.periodStart === (period?.start || '') && p.periodEnd === (period?.end || '') && p.status === 'pago');
+      return [driver.name, driver.paymentPeriod === 'mensal' ? 'Mensal' : 'Quinzenal', driver.pixKey || '', items.length, amount, paid ? 'Pago' : 'Pendente', paid?.paidAt ? dateTimeBR(paid.paidAt) : ''];
+    }).filter((row) => row[3] || row[5] === 'Pago');
+    return { name: 'repasses-terceirizados', header: ['Entregador', 'Periodicidade', 'PIX', 'Entregas elegíveis', 'Valor devido', 'Situação', 'Pago em'], lines: rows };
   }
   if (kind === 'audit') {
     const rows = (await AuditLog.all()).filter((e) => inReportPeriod(e.at, period));
@@ -3485,12 +3522,13 @@ export function wireReportsEvents() {
   const setPeriod = (start, end) => { if ($('#reportStart')) $('#reportStart').value = start; if ($('#reportEnd')) $('#reportEnd').value = end; };
   $('#reportTodayBtn')?.addEventListener('click', () => {
     const d = new Date(); const iso = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-    setPeriod(iso, iso);
+    setPeriod(iso, iso); refreshApp();
   });
   $('#reportMonthBtn')?.addEventListener('click', () => {
     const d = new Date(); const end = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-    setPeriod(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`, end);
+    setPeriod(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`, end); refreshApp();
   });
+  $$('#reportStart, #reportEnd').forEach((input) => input.addEventListener('change', () => refreshApp()));
   $$('.export-btn').forEach((btn) => btn.addEventListener('click', async () => {
     const env = getEnv();
     const period = readReportPeriod();
@@ -3498,6 +3536,20 @@ export function wireReportsEvents() {
     const { name, header, lines } = await buildExport(btn.dataset.kind, env, period);
     downloadCSV(`orbita-${name}-${env}-${new Date().toISOString().slice(0,10)}.csv`, [header, ...lines]);
     toast('Arquivo CSV gerado.', 'success');
+  }));
+
+  $$('.payout-pay-btn').forEach((btn) => btn.addEventListener('click', async () => {
+    if (!canPerform('delivery_edit')) return toast('Perfil Consulta / Monitor não pode fechar repasses.', 'error');
+    const driver = await Drivers.get(btn.dataset.driverId);
+    const amount = Number(btn.dataset.amount || 0);
+    if (!driver || !amount) return toast('Não há valor positivo para fechar neste período.', 'error');
+    const start = btn.dataset.start || '';
+    const end = btn.dataset.end || '';
+    const existing = (await DriverPayouts.all()).find((p) => p.environment === getEnv() && p.driverId === driver.id && p.periodStart === start && p.periodEnd === end && p.status === 'pago');
+    if (existing) return toast('Este repasse já está marcado como pago.', 'error');
+    await DriverPayouts.add({ environment: getEnv(), driverId: driver.id, driverName: driver.name, periodType: driver.paymentPeriod || 'quinzenal', periodStart: start, periodEnd: end, amount, deliveryCount: Number(btn.dataset.count || 0), status: 'pago', paidAt: new Date().toISOString(), paidBy: getOperatorName() });
+    toast(`Repasse de ${money(amount)} marcado como pago.`, 'success');
+    refreshApp();
   }));
 
   $('#exportAllBtn')?.addEventListener('click', async (e) => {
@@ -3651,7 +3703,7 @@ export async function renderRegistry(tab = 'vehicles') {
 
   let listHtml = '';
   if (tab === 'vehicles') listHtml = await vehicleList();
-  if (tab === 'drivers') listHtml = await registryList(Drivers, 'name', 'drivers');
+  if (tab === 'drivers') listHtml = await driverList();
   if (tab === 'collaborators') listHtml = await collaboratorList();
   if (tab === 'neighborhoods') listHtml = await registryList(Neighborhoods, 'name', 'neighborhoods', true);
   if (tab === 'costCategories') listHtml = await registryList(CostCategories, 'name', 'costCategories');
@@ -3673,6 +3725,21 @@ async function registryList(store, field, storeName, showOrder = false) {
       <td><div class="registry-actions"><button class="btn-ghost btn-small registry-edit">Editar</button><button class="btn-ghost btn-small registry-toggle">${r.active === false ? 'Reativar' : 'Desativar'}</button></div></td>
     </tr>`).join('');
   return `<div class="table-wrap"><table><thead><tr><th>Nome</th><th>Status</th><th></th></tr></thead><tbody>${trs}</tbody></table></div>`;
+}
+
+async function driverList() {
+  const rows = await Drivers.all();
+  if (!rows.length) return `<div class="empty-state"><strong>Nenhum entregador cadastrado</strong><span>Cadastre internos e terceirizados para vincular às entregas.</span></div>`;
+  const trs = rows.map((d) => `
+    <tr data-id="${d.id}" data-store="drivers">
+      <td><strong>${escapeHtml(d.name)}</strong><br><small>${escapeHtml(d.phone || 'Sem telefone')} ${d.document ? `· ${escapeHtml(d.document)}` : ''}</small></td>
+      <td>${d.kind === 'terceirizado' ? '<span class="badge pendente">Terceirizado</span>' : '<span class="badge entregue">Interno</span>'}</td>
+      <td>${d.kind === 'terceirizado' ? (d.paymentPeriod === 'mensal' ? 'Mensal' : 'Quinzenal') : '—'}</td>
+      <td>${escapeHtml(d.pixKey || '—')}</td>
+      <td>${d.active === false ? '<span class="badge problema">Inativo</span>' : '<span class="badge entregue">Ativo</span>'}</td>
+      <td><div class="registry-actions"><button class="btn-ghost btn-small registry-edit">Editar</button><button class="btn-ghost btn-small registry-toggle">${d.active === false ? 'Reativar' : 'Desativar'}</button></div></td>
+    </tr>`).join('');
+  return `<div class="table-wrap"><table><thead><tr><th>Entregador</th><th>Tipo</th><th>Pagamento</th><th>PIX</th><th>Status</th><th></th></tr></thead><tbody>${trs}</tbody></table></div>`;
 }
 
 async function collaboratorList() {
@@ -3730,6 +3797,7 @@ export function wireRegistryEvents(currentTab, onTabChange) {
 function openRegistryAddModal(tab, record = null) {
   if (tab === 'vehicles') return openVehicleAddModal(record);
   if (tab === 'collaborators') return openCollaboratorAddModal(record);
+  if (tab === 'drivers') return openDriverAddModal(record);
   const field = REGISTRY_FIELD[tab];
   const store = REGISTRY_STORES[tab];
   const isNeighborhood = tab === 'neighborhoods';
@@ -3755,6 +3823,32 @@ function openRegistryAddModal(tab, record = null) {
         closeModal();
         refreshApp();
       }},
+    ],
+  });
+}
+
+function openDriverAddModal(record = null) {
+  openModal({
+    title: record ? 'Editar entregador' : 'Novo entregador',
+    subtitle: 'Terceirizados recebem integralmente a taxa das entregas finalizadas, salvo reembolso.',
+    body: `<form id="driverForm">
+      <label>Nome *<input name="name" required value="${escapeHtml(record?.name || '')}" /></label>
+      <div class="field-row"><label>Tipo *<select name="kind"><option value="interno" ${record?.kind !== 'terceirizado' ? 'selected' : ''}>Interno</option><option value="terceirizado" ${record?.kind === 'terceirizado' ? 'selected' : ''}>Terceirizado</option></select></label><label>Telefone<input name="phone" value="${escapeHtml(record?.phone || '')}" /></label></div>
+      <div class="field-row"><label>Documento<input name="document" value="${escapeHtml(record?.document || '')}" /></label><label>Chave PIX<input name="pixKey" value="${escapeHtml(record?.pixKey || '')}" /></label></div>
+      <label>Periodicidade de pagamento<select name="paymentPeriod"><option value="quinzenal" ${record?.paymentPeriod !== 'mensal' ? 'selected' : ''}>Quinzenal (1º–15 e 16–fim do mês)</option><option value="mensal" ${record?.paymentPeriod === 'mensal' ? 'selected' : ''}>Mensal</option></select></label>
+    </form>`,
+    actions: [
+      { label: 'Cancelar', kind: 'ghost', onClick: closeModal },
+      { label: 'Salvar entregador', kind: 'primary', onClick: async () => {
+        const form = $('#driverForm');
+        if (!form.reportValidity()) return;
+        const fd = Object.fromEntries(new FormData(form).entries());
+        const payload = { name: fd.name.trim(), kind: fd.kind, phone: fd.phone.trim(), document: fd.document.trim(), pixKey: fd.pixKey.trim(), paymentPeriod: fd.kind === 'terceirizado' ? fd.paymentPeriod : null, active: record?.active ?? true };
+        if (record) await Drivers.update(record.id, payload); else await Drivers.add(payload);
+        toast(record ? 'Entregador atualizado.' : 'Entregador cadastrado.', 'success');
+        closeModal();
+        refreshApp();
+      } },
     ],
   });
 }
@@ -3838,7 +3932,7 @@ function openVehicleAddModal(record = null) {
    ========================================================= */
 export async function renderSettings() {
   const cfg = JSON.parse(localStorage.getItem('orbita_settings') || '{}');
-  const { listAutoBackups } = await import('./db.js?v=13.35');
+  const { listAutoBackups } = await import('./db.js?v=13.36');
   const autoBackups = await listAutoBackups();
   const backupReasonLabel = (reason = '') => reason === 'abertura' ? 'Abertura do sistema' : reason === 'periodico-1min' ? 'Segurança · 1 minuto' : reason ? 'Alteração salva' : 'Automático';
   const autoList = autoBackups.length
@@ -3877,13 +3971,13 @@ export async function renderSettings() {
 export function wireSettingsEvents() {
   $$('.auto-restore-btn').forEach((btn) => btn.addEventListener('click', async () => {
     if (!confirm('Restaurar esse backup automático vai substituir os dados atuais. Continuar?')) return;
-    const { restoreAutoBackup } = await import('./db.js?v=13.35');
+    const { restoreAutoBackup } = await import('./db.js?v=13.36');
     await restoreAutoBackup(btn.dataset.id);
     toast('Backup automático restaurado.', 'success');
     refreshApp();
   }));
   $('#settingsBackupBtn')?.addEventListener('click', async () => {
-    const data = await (await import('./db.js?v=13.35')).exportAll();
+    const data = await (await import('./db.js?v=13.36')).exportAll();
     downloadJSON(`orbita-backup-completo-${new Date().toISOString().slice(0,10)}.json`, data);
     toast('Backup completo gerado.', 'success');
   });
@@ -3891,12 +3985,12 @@ export function wireSettingsEvents() {
     const file = e.target.files[0];
     if (!file) return;
     if (!confirm('Isso vai substituir os dados atuais pelo conteúdo do backup. Um backup de segurança dos dados atuais será baixado antes. Continuar?')) { e.target.value = ''; return; }
-    const currentBackup = await (await import('./db.js?v=13.35')).exportAll();
+    const currentBackup = await (await import('./db.js?v=13.36')).exportAll();
     downloadJSON(`orbita-backup-seguranca-antes-restauracao-${Date.now()}.json`, currentBackup);
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      await (await import('./db.js?v=13.35')).importAll(data);
+      await (await import('./db.js?v=13.36')).importAll(data);
       toast('Backup restaurado.', 'success');
       refreshApp();
     } catch { toast('Arquivo de backup inválido.', 'error'); }

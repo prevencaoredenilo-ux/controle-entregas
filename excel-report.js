@@ -1,5 +1,5 @@
-import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, Cycles, OdometerLogs, Costs, DayClosures } from './db.js?v=13.35';
-import { STATUS_META } from './helpers.js?v=13.35';
+import { Deliveries, Vehicles, Drivers, DriverPayouts, Collaborators, Neighborhoods, CostCategories, Cycles, OdometerLogs, Costs, DayClosures } from './db.js?v=13.36';
+import { STATUS_META } from './helpers.js?v=13.36';
 
 const DEFAULT_TARGETS = { startMinutes:120, arrivalMinutes:210, warningMinutes:30, successTarget:90 };
 const DAY_NAMES = ['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'];
@@ -132,8 +132,8 @@ function dailyMetrics(dayRows, dayCosts, dayCycles, dayKm){
 }
 
 export async function exportFullExcelReport(env, period){
-  const [allDeliveries,vehicles,drivers,collaborators,neighborhoods,categories,cyclesAll,kmAll,costsAll,closuresAll]=await Promise.all([
-    Deliveries.active(env),Vehicles.all(),Drivers.all(),Collaborators.all(),Neighborhoods.all(),CostCategories.all(),Cycles.all(),OdometerLogs.active(),Costs.all(),DayClosures.all(),
+  const [allDeliveries,vehicles,drivers,payouts,collaborators,neighborhoods,categories,cyclesAll,kmAll,costsAll,closuresAll]=await Promise.all([
+    Deliveries.active(env),Vehicles.all(),Drivers.all(),DriverPayouts.all(),Collaborators.all(),Neighborhoods.all(),CostCategories.all(),Cycles.all(),OdometerLogs.active(),Costs.all(),DayClosures.all(),
   ]);
   const rows=allDeliveries.filter((r)=>inPeriod(r.entryTime,period));
   const cycles=cyclesAll.filter((c)=>c.environment===env&&!c.deletedAt&&inPeriod(c.startedAt,period));
@@ -249,6 +249,13 @@ export async function exportFullExcelReport(env, period){
   add('ODOMETRO_DIARIO',['Data','Veículo','KM Inicial','KM Final','KM Rodado','Ciclos','Entregas','Entregas por Ciclo','KM por Ciclo','KM por Entrega','Status'],km.map((l)=>{const lc=cycles.filter((c)=>c.odometerLogId===l.id||(dayKey(c.startedAt)===l.shiftDate&&c.vehicleId===l.vehicleId)),ids=unique(lc.flatMap((c)=>c.deliveryIds||[])),rod=l.kmEnd!=null?Math.max(0,num(l.kmEnd)-num(l.kmStart)):0;return[l.shiftDate,vName(l.vehicleId),num(l.kmStart),l.kmEnd==null?'':num(l.kmEnd),l.kmEnd==null?'':rod,lc.length,ids.length,lc.length?ids.length/lc.length:0,lc.length?rod/lc.length:0,ids.length?rod/ids.length:0,l.kmEnd==null?'ABERTO':'FECHADO'];}));
 
   add('VEICULOS',['Veículo','Registros','Finalizadas','Sucesso %','Faturamento','Custos','Saldo','KM','Custo por Entrega','Custo por KM','Ciclos','Entregas por Ciclo','Rota média min','Atrasadas','Taxa atraso %','Problemas','Nota qualidade'],vehicles.map((v)=>{const gr=rows.filter((r)=>r.vehicleId===v.id),vc=costs.filter((c)=>c.vehicleId===v.id).reduce((s,c)=>s+num(c.amount),0),vk=km.filter((l)=>l.vehicleId===v.id&&l.kmEnd!=null).reduce((s,l)=>s+Math.max(0,num(l.kmEnd)-num(l.kmStart)),0),vcy=cycles.filter((c)=>c.vehicleId===v.id),late=gr.filter((r)=>startLate(r)||arrivalLate(r)).length;return[v.label,gr.length,gr.filter(isFinal).length,percent(gr.filter(isFinal).length,gr.length),netRevenue(gr),vc,netRevenue(gr)-vc,vk,gr.filter(isFinal).length?vc/gr.filter(isFinal).length:0,vk?vc/vk:0,vcy.length,vcy.length?gr.length/vcy.length:0,mean(gr.map(routeMinutes)),late,percent(late,gr.length),gr.filter(hasProblem).length,qualityScore(gr)];}));
+
+  const thirdPartyDrivers=drivers.filter((d)=>d.kind==='terceirizado');
+  add('REPASSES_TERCEIRIZADOS',['Entregador','Tipo','Periodicidade','PIX','Entregas elegíveis','Valor devido','Situação','Pago em'],thirdPartyDrivers.map((d)=>{
+    const eligible=allDeliveries.filter((r)=>r.driverId===d.id&&isFinal(r)&&!r.refunded&&num(r.deliveryFee)>0&&inPeriod(r.deliveredAt||r.entryTime,period));
+    const paid=payouts.find((p)=>p.environment===env&&p.driverId===d.id&&p.periodStart===reportStart&&p.periodEnd===reportEnd&&p.status==='pago');
+    return [d.name,'Terceirizado',d.paymentPeriod==='mensal'?'Mensal':'Quinzenal',d.pixKey||'',eligible.length,eligible.reduce((s,r)=>s+num(r.deliveryFee),0),paid?'Pago':'Pendente',paid?dateTimeText(paid.paidAt):''];
+  }).filter((row)=>row[4]||row[6]==='Pago'));
 
   const people=[...collaborators.map((c)=>({id:c.id,name:c.name,role:c.role||'Colaborador'})),...drivers.filter((d)=>!collaborators.some((c)=>c.name===d.name)).map((d)=>({id:d.id,name:d.name,role:'Entregador',driver:true}))];
   add('COLABORADORES',['Colaborador','Função','Registros','Finalizadas','Sucesso %','Faturamento','Espera média min','Até cliente média min','Rota média min','Devoluções','Reagendamentos','Atrasadas','Taxa atraso %','Problemas','Nota qualidade'],people.map((p)=>{const did=drivers.find((d)=>d.id===p.id||d.name===p.name)?.id,gr=did?rows.filter((r)=>r.driverId===did):[],late=gr.filter((r)=>startLate(r)||arrivalLate(r)).length;return[p.name,p.role,gr.length,gr.filter(isFinal).length,percent(gr.filter(isFinal).length,gr.length),netRevenue(gr),mean(gr.map(waitMinutes)),mean(gr.map(clientMinutes)),mean(gr.map(routeMinutes)),gr.filter((r)=>['retorno','reentrega'].includes(r.status)||(r.returnAttempts||[]).length).length,gr.reduce((s,r)=>s+(r.reschedules||[]).length,0),late,percent(late,gr.length),gr.filter(hasProblem).length,qualityScore(gr)];}));
