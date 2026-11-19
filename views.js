@@ -1,7 +1,7 @@
-import { Deliveries, Vehicles, Drivers, DriverPayouts, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters, MAX_DELIVERY_TRIPS, normalizeTripCount, buildDeliveryTrips } from './db.js?v=13.36';
-import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, seasonalContext, SEASONAL_PREVIEW_CATALOG, SEASONAL_ANIMATION_CONFIG, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=13.36';
-import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=13.36';
-import { exportFullExcelReport } from './excel-report.js?v=13.36';
+import { Deliveries, Vehicles, Drivers, DriverPayouts, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters, MAX_DELIVERY_TRIPS, normalizeTripCount, buildDeliveryTrips } from './db.js?v=13.37';
+import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, seasonalContext, SEASONAL_PREVIEW_CATALOG, SEASONAL_ANIMATION_CONFIG, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=13.37';
+import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=13.37';
+import { exportFullExcelReport } from './excel-report.js?v=13.37';
 
 const DEFAULT_OPERATIONAL_TARGETS = { startMinutes:120, arrivalMinutes:210, warningMinutes:30, successTarget:90 };
 
@@ -3299,7 +3299,7 @@ export function wireSearchEvents() {
    ========================================================= */
 async function renderThirdPartyPayouts(env, period) {
   const [drivers, deliveries, payouts] = await Promise.all([Drivers.all(), Deliveries.active(env), DriverPayouts.all()]);
-  const thirdParty = drivers.filter((d) => d.active !== false && d.kind === 'terceirizado');
+  const thirdParty = drivers.filter((d) => d.kind === 'terceirizado');
   const eligible = deliveries.filter((d) => d.status === 'finalizada' && !d.refunded && inReportPeriod(d.deliveredAt || d.entryTime, period) && Number(d.deliveryFee || 0) > 0 && thirdParty.some((driver) => driver.id === d.driverId));
   const periodStart = period.start || '';
   const periodEnd = period.end || '';
@@ -3728,8 +3728,10 @@ async function registryList(store, field, storeName, showOrder = false) {
 }
 
 async function driverList() {
-  const rows = await Drivers.all();
-  if (!rows.length) return `<div class="empty-state"><strong>Nenhum entregador cadastrado</strong><span>Cadastre internos e terceirizados para vincular às entregas.</span></div>`;
+  const allRows = await Drivers.all();
+  const rows = allRows.filter((d) => !d.removedAt);
+  const removedCount = allRows.filter((d) => !!d.removedAt).length;
+  if (!rows.length) return `<div class="empty-state"><strong>Nenhum entregador ativo no cadastro</strong><span>${removedCount ? 'Os cadastros removidos continuam preservados no histórico e na auditoria.' : 'Cadastre internos e terceirizados para vincular às entregas.'}</span></div>`;
   const trs = rows.map((d) => `
     <tr data-id="${d.id}" data-store="drivers">
       <td><strong>${escapeHtml(d.name)}</strong><br><small>${escapeHtml(d.phone || 'Sem telefone')} ${d.document ? `· ${escapeHtml(d.document)}` : ''}</small></td>
@@ -3737,9 +3739,9 @@ async function driverList() {
       <td>${d.kind === 'terceirizado' ? (d.paymentPeriod === 'mensal' ? 'Mensal' : 'Quinzenal') : '—'}</td>
       <td>${escapeHtml(d.pixKey || '—')}</td>
       <td>${d.active === false ? '<span class="badge problema">Inativo</span>' : '<span class="badge entregue">Ativo</span>'}</td>
-      <td><div class="registry-actions"><button class="btn-ghost btn-small registry-edit">Editar</button><button class="btn-ghost btn-small registry-toggle">${d.active === false ? 'Reativar' : 'Desativar'}</button></div></td>
+      <td><div class="registry-actions"><button class="btn-ghost btn-small registry-edit">Editar</button><button class="btn-ghost btn-small registry-toggle">${d.active === false ? 'Reativar' : 'Desativar'}</button><button class="btn-ghost btn-small registry-remove">Remover</button></div></td>
     </tr>`).join('');
-  return `<div class="table-wrap"><table><thead><tr><th>Entregador</th><th>Tipo</th><th>Pagamento</th><th>PIX</th><th>Status</th><th></th></tr></thead><tbody>${trs}</tbody></table></div>`;
+  return `${removedCount ? `<div class="registry-retired-note">${removedCount} entregador(es) removido(s) do cadastro ativo. As atividades históricas continuam preservadas com o nome original.</div>` : ''}<div class="table-wrap"><table><thead><tr><th>Entregador</th><th>Tipo</th><th>Pagamento</th><th>PIX</th><th>Status</th><th></th></tr></thead><tbody>${trs}</tbody></table></div>`;
 }
 
 async function collaboratorList() {
@@ -3790,6 +3792,17 @@ export function wireRegistryEvents(currentTab, onTabChange) {
     // desativar preserva histórico — nunca apaga (seção 15)
     await store.update(rec.id, rec.active === false ? { active: true } : { active: false, deactivatedAt: new Date().toISOString() });
     toast('Atualizado.', 'success');
+    onTabChange(currentTab);
+  }));
+  $$('.registry-remove').forEach((btn) => btn.addEventListener('click', async (e) => {
+    const tr = e.target.closest('tr');
+    const rec = await Drivers.get(tr.dataset.id);
+    if (!rec) return;
+    const openCycle = (await Cycles.all()).find((cycle) => cycle.driverId === rec.id && cycle.status === 'aberto' && !cycle.deletedAt);
+    if (openCycle) return toast('Não é possível remover um entregador com ciclo aberto.', 'error');
+    if (!window.confirm(`Remover ${rec.name} do cadastro ativo? O histórico continuará preservado com o nome dele.`)) return;
+    await Drivers.update(rec.id, { active: false, removedAt: new Date().toISOString(), removedBy: getOperatorName() || 'Operador não identificado' });
+    toast('Entregador removido do cadastro. Histórico preservado.', 'success');
     onTabChange(currentTab);
   }));
 }
@@ -3932,7 +3945,7 @@ function openVehicleAddModal(record = null) {
    ========================================================= */
 export async function renderSettings() {
   const cfg = JSON.parse(localStorage.getItem('orbita_settings') || '{}');
-  const { listAutoBackups } = await import('./db.js?v=13.36');
+  const { listAutoBackups } = await import('./db.js?v=13.37');
   const autoBackups = await listAutoBackups();
   const backupReasonLabel = (reason = '') => reason === 'abertura' ? 'Abertura do sistema' : reason === 'periodico-1min' ? 'Segurança · 1 minuto' : reason ? 'Alteração salva' : 'Automático';
   const autoList = autoBackups.length
@@ -3971,13 +3984,13 @@ export async function renderSettings() {
 export function wireSettingsEvents() {
   $$('.auto-restore-btn').forEach((btn) => btn.addEventListener('click', async () => {
     if (!confirm('Restaurar esse backup automático vai substituir os dados atuais. Continuar?')) return;
-    const { restoreAutoBackup } = await import('./db.js?v=13.36');
+    const { restoreAutoBackup } = await import('./db.js?v=13.37');
     await restoreAutoBackup(btn.dataset.id);
     toast('Backup automático restaurado.', 'success');
     refreshApp();
   }));
   $('#settingsBackupBtn')?.addEventListener('click', async () => {
-    const data = await (await import('./db.js?v=13.36')).exportAll();
+    const data = await (await import('./db.js?v=13.37')).exportAll();
     downloadJSON(`orbita-backup-completo-${new Date().toISOString().slice(0,10)}.json`, data);
     toast('Backup completo gerado.', 'success');
   });
@@ -3985,12 +3998,12 @@ export function wireSettingsEvents() {
     const file = e.target.files[0];
     if (!file) return;
     if (!confirm('Isso vai substituir os dados atuais pelo conteúdo do backup. Um backup de segurança dos dados atuais será baixado antes. Continuar?')) { e.target.value = ''; return; }
-    const currentBackup = await (await import('./db.js?v=13.36')).exportAll();
+    const currentBackup = await (await import('./db.js?v=13.37')).exportAll();
     downloadJSON(`orbita-backup-seguranca-antes-restauracao-${Date.now()}.json`, currentBackup);
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      await (await import('./db.js?v=13.36')).importAll(data);
+      await (await import('./db.js?v=13.37')).importAll(data);
       toast('Backup restaurado.', 'success');
       refreshApp();
     } catch { toast('Arquivo de backup inválido.', 'error'); }
