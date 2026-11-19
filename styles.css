@@ -6000,3 +6000,18 @@ input:focus, select:focus, textarea:focus { border-color: var(--blue) !important
 @keyframes seasonal-reference-snowman-bob { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-3px)} }
 @media(max-width:520px){.app-v8 .seasonal-reference-tree{right:2%;width:84px;height:95px}.app-v8 .seasonal-reference-tree img{width:84px;max-height:95px}.app-v8 .seasonal-reference-snowman{left:18%;width:58px;height:78px}.app-v8 .seasonal-reference-snowman img{width:58px;max-height:78px}}
 @media(prefers-reduced-motion:reduce){.app-v8 .seasonal-reference-tree,.app-v8 .seasonal-reference-snowman{animation:none!important}}
+
+/* v13.44 — cena natalícia distribuída e interativa */
+.app-v8 .seasonal-reference-tree,.app-v8 .seasonal-reference-snowman,.app-v8 .seasonal-christmas-gifts { appearance:none; font:inherit; color:inherit; border:0; margin:0; cursor:pointer; pointer-events:auto; transition:filter .2s ease, transform .2s ease; }
+.app-v8 .seasonal-reference-tree { right:4%; width:136px; height:142px; }
+.app-v8 .seasonal-reference-tree img { width:136px; max-height:142px; }
+.app-v8 .seasonal-reference-snowman { left:7%; width:86px; height:112px; }
+.app-v8 .seasonal-reference-snowman img { width:86px; max-height:112px; }
+.app-v8 .seasonal-christmas-gifts { left:43%; bottom:1px; }
+.app-v8 .seasonal-reference-tree:hover,.app-v8 .seasonal-reference-tree:focus-visible { filter:drop-shadow(0 0 12px #ffee00) drop-shadow(0 4px 0 rgba(17,17,17,.55)); transform:translateY(-7px) rotate(2deg) scale(1.04); }
+.app-v8 .seasonal-reference-snowman:hover,.app-v8 .seasonal-reference-snowman:focus-visible { filter:drop-shadow(0 0 12px #fff) drop-shadow(0 4px 0 rgba(17,17,17,.5)); transform:translateY(-6px) rotate(-3deg); }
+.app-v8 .seasonal-christmas-gifts:hover,.app-v8 .seasonal-christmas-gifts:focus-visible { filter:drop-shadow(0 0 12px #ffee00) drop-shadow(0 3px 0 rgba(17,17,17,.45)); transform:translateY(-6px); }
+.app-v8 .seasonal-interactive-burst::after { content:"✦  ✧  ✦"; position:absolute; left:50%; top:42%; z-index:25; color:#ffee00; font-size:24px; letter-spacing:14px; pointer-events:none; transform:translate(-50%,-50%); animation:seasonal-interaction-burst 1.2s ease-out both; text-shadow:2px 2px 0 #111; }
+@keyframes seasonal-interaction-burst { 0%{opacity:0;transform:translate(-50%,-20%) scale(.45)} 25%{opacity:1} 100%{opacity:0;transform:translate(-50%,-100%) scale(1.5)} }
+@media(max-width:520px){.app-v8 .seasonal-reference-tree{right:0;width:92px;height:102px}.app-v8 .seasonal-reference-tree img{width:92px;max-height:102px}.app-v8 .seasonal-reference-snowman{left:3%;width:62px;height:82px}.app-v8 .seasonal-reference-snowman img{width:62px;max-height:82px}.app-v8 .seasonal-christmas-gifts{left:39%}}
+@media(prefers-reduced-motion:reduce){.app-v8 .seasonal-interactive-burst::after{animation:none!important}}
