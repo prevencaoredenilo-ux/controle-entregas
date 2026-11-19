@@ -23,6 +23,21 @@ const STORES = {
   dayClosures: 'id',
 };
 
+export const MAX_DELIVERY_TRIPS = 20;
+
+export function normalizeTripCount(value, size = 'grande') {
+  if (size !== 'grande') return 0;
+  const count = Number(value);
+  if (!Number.isInteger(count) || count < 1) throw new Error('A Entrega Grande precisa ter pelo menos uma viagem.');
+  if (count > MAX_DELIVERY_TRIPS) throw new Error(`O limite seguro é de ${MAX_DELIVERY_TRIPS} viagens por entrega.`);
+  return count;
+}
+
+export function buildDeliveryTrips(existing = [], count = 1) {
+  const prior = Array.isArray(existing) ? existing : [];
+  return Array.from({ length: count }, (_, index) => prior[index] || ({ tripIndex: index + 1, status: 'pendente', leftStoreAt: null, arrivedAt: null }));
+}
+
 let dbPromise = null;
 
 // v3.6 — backup automático por alteração + backup periódico.

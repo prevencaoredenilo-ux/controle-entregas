@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { validateBackupData } from '../db.js';
+import { validateBackupData, MAX_DELIVERY_TRIPS, normalizeTripCount, buildDeliveryTrips } from '../db.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
@@ -68,4 +68,16 @@ test('validador de backup rejeita coleções ausentes, registros sem ID e duplic
   assert.deepEqual(validateBackupData({ ...base, ...valid }), collections);
   assert.throws(() => validateBackupData({ ...base, ...valid, deliveries: [{},] }), /ID ausente/);
   assert.throws(() => validateBackupData({ ...base, ...valid, deliveries: [{ id: 'same' }, { id: 'same' }] }), /repetido/);
+});
+
+test('Entrega Grande limita viagens e preserva viagens já existentes', () => {
+  assert.equal(normalizeTripCount('3', 'grande'), 3);
+  assert.equal(normalizeTripCount('3', 'normal'), 0);
+  assert.throws(() => normalizeTripCount('0', 'grande'), /pelo menos uma/);
+  assert.throws(() => normalizeTripCount(String(MAX_DELIVERY_TRIPS + 1), 'grande'), /limite seguro/);
+  const prior = [{ tripIndex: 1, status: 'concluida' }, { tripIndex: 2, status: 'pendente' }];
+  const next = buildDeliveryTrips(prior, 3);
+  assert.equal(next[0].status, 'concluida');
+  assert.equal(next[1].status, 'pendente');
+  assert.equal(next[2].tripIndex, 3);
 });

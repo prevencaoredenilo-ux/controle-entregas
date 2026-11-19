@@ -1,7 +1,7 @@
-import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters } from './db.js?v=13.32';
-import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, seasonalContext, SEASONAL_PREVIEW_CATALOG, SEASONAL_ANIMATION_CONFIG, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=13.32';
-import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=13.32';
-import { exportFullExcelReport } from './excel-report.js?v=13.32';
+import { Deliveries, Vehicles, Drivers, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters, MAX_DELIVERY_TRIPS, normalizeTripCount, buildDeliveryTrips } from './db.js?v=13.34';
+import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, seasonalContext, SEASONAL_PREVIEW_CATALOG, SEASONAL_ANIMATION_CONFIG, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=13.34';
+import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=13.34';
+import { exportFullExcelReport } from './excel-report.js?v=13.34';
 
 const DEFAULT_OPERATIONAL_TARGETS = { startMinutes:120, arrivalMinutes:210, warningMinutes:30, successTarget:90 };
 
@@ -997,7 +997,7 @@ export async function openDeliveryModal(record = null) {
             <option value="grande" ${record?.size === 'grande' ? 'selected' : ''}>Grande</option>
           </select>
         </label>
-        <label>Viagens (se Grande)<input name="tripCount" type="number" min="1" value="${record?.tripCount || 1}" ${record?.size !== 'grande' ? 'disabled' : ''} /></label>
+        <label>Viagens (se Grande)<input name="tripCount" type="number" min="1" max="${MAX_DELIVERY_TRIPS}" value="${record?.tripCount || 1}" ${record?.size !== 'grande' ? 'disabled' : ''} /><small class="field-help">Até ${MAX_DELIVERY_TRIPS} viagens. Viagens já registradas não são descartadas silenciosamente.</small></label>
       </div>
       <div class="field-row">
         <label>Prioridade
@@ -1087,13 +1087,13 @@ function deliveryStatusActionsHtml(record) {
   if (record.status === 'em_rota') {
     buttons.push('<button type="button" class="btn-primary btn-small" data-action="finalizada">Entregue ao cliente</button>');
     buttons.push('<button type="button" class="btn-ghost btn-small" data-action="retorno">Registrar retorno à loja</button>');
-    buttons.push('<button type="button" class="btn-ghost btn-small" data-action="retirada">Retirada na loja</button>');
+    buttons.push('<button type="button" class="btn-ghost btn-small" data-action="retirada">Cliente buscou na loja</button>');
   }
   if (record.status === 'no_cliente') {
     buttons.push('<button type="button" class="btn-primary btn-small" data-action="finalizada">Confirmar entrega ao cliente</button>');
     buttons.push('<button type="button" class="btn-ghost btn-small" data-action="retorno">Registrar retorno à loja</button>');
   }
-  if (record.status === 'na_loja') buttons.push('<button type="button" class="btn-ghost btn-small" data-action="retirada">Retirada na loja</button>');
+  if (record.status === 'na_loja') buttons.push('<button type="button" class="btn-primary btn-small" data-action="retirada">Cliente buscou na loja</button>');
   if (record.status === 'finalizada') {
     buttons.push('<button type="button" class="btn-ghost btn-small" data-action="editar_horarios">Editar horário</button>');
     buttons.push('<button type="button" class="btn-ghost btn-small" data-action="retorno">Registrar retorno</button>');
@@ -1218,6 +1218,16 @@ async function saveDeliveryForm(record) {
     if (dup) return toast('Já existe uma entrega ativa com esse número de cupom.', 'error');
   }
 
+  let normalizedTripCount = 0;
+  try { normalizedTripCount = normalizeTripCount(fd.tripCount, fd.size); }
+  catch (error) { return toast(error.message, 'error'); }
+  const previousTrips = Array.isArray(record?.trips) ? record.trips : [];
+  if (record && fd.size !== 'grande' && previousTrips.some((trip) => trip && (trip.status && trip.status !== 'pendente' || trip.leftStoreAt || trip.arrivedAt || trip.completedAt || trip.returnedAt))) {
+    return toast('Não é possível transformar esta Entrega Grande em Normal enquanto houver viagens com operação registrada.', 'error');
+  }
+  if (record && fd.size === 'grande' && normalizedTripCount < previousTrips.length && previousTrips.slice(normalizedTripCount).some((trip) => trip && (trip.status && trip.status !== 'pendente' || trip.leftStoreAt || trip.arrivedAt || trip.completedAt || trip.returnedAt))) {
+    return toast('Não reduza a quantidade: existem viagens além desse número com dados operacionais. Preserve-as ou conclua a operação.', 'error');
+  }
   const payload = {
     environment: env,
     entryTime: entryTime.toISOString(),
@@ -1233,8 +1243,8 @@ async function saveDeliveryForm(record) {
     neighborhoodId: fd.neighborhoodId,
     deliveryFee: fee,
     size: fd.size,
-    tripCount: fd.size === 'grande' ? Number(fd.tripCount || 1) : 1,
-    trips: fd.size === 'grande' ? Array.from({ length: Number(fd.tripCount || 1) }, (_, i) => record?.trips?.[i] || ({ tripIndex: i + 1, leftStoreAt: null, arrivedAt: null })) : [],
+    tripCount: fd.size === 'grande' ? normalizedTripCount : 1,
+    trips: fd.size === 'grande' ? buildDeliveryTrips(previousTrips, normalizedTripCount) : [],
     priority: fd.priority,
     type: fd.type,
     scheduledAt: fd.type === 'agendada' ? new Date(fd.scheduledAt).toISOString() : null,
@@ -1320,23 +1330,34 @@ async function saveDeliveryForm(record) {
 function openRetiradaFlow(record) {
   if (!canPerform('delivery_edit')) return toast('Perfil Consulta / Monitor não pode registrar retirada.', 'error');
   openModal({
-    title: 'Retirada na loja',
-    subtitle: `Entrega #${record.purchaseNumber} — reembolsar a taxa de ${money(record.deliveryFee)}?`,
-    body: `<p style="font-size:13px;color:var(--text-muted)">Escolha uma opção abaixo. Isso fica registrado no histórico e no relatório financeiro.</p>`,
+    title: 'Cliente buscou na loja',
+    subtitle: `Entrega #${record.purchaseNumber} · taxa registrada: ${money(record.deliveryFee)}`,
+    body: `<form id="storePickupForm" class="store-pickup-form">
+      <div class="arrival-confirmed-card"><span>✓</span><div><strong>Retirada pelo cliente</strong><p>A entrega será encerrada como “Retirada na loja”, sem passar pelo ciclo de entrega.</p></div></div>
+      <fieldset class="refund-choice"><legend>O que aconteceu com a taxa de entrega?</legend>
+        <label><input type="radio" name="refundDecision" value="nao_reembolsada" checked /> <span><strong>Não reembolsar</strong><small>A taxa permanece no resultado financeiro.</small></span></label>
+        <label><input type="radio" name="refundDecision" value="reembolsada" /> <span><strong>Reembolsar ${money(record.deliveryFee)}</strong><small>A taxa será abatida do resultado financeiro.</small></span></label>
+      </fieldset>
+    </form>`,
     actions: [
       { label: 'Cancelar', kind: 'ghost', onClick: closeModal },
-      { label: 'Não reembolsar', kind: 'ghost', onClick: async () => { await finishRetirada(record, false); } },
-      { label: 'Sim, reembolsar', kind: 'primary', onClick: async () => { await finishRetirada(record, true); } },
+      { label: 'Confirmar retirada', kind: 'primary', onClick: async () => {
+        const decision = new FormData($('#storePickupForm')).get('refundDecision');
+        await finishRetirada(record, decision === 'reembolsada');
+      } },
     ],
   });
 }
 async function finishRetirada(record, refunded) {
   await Deliveries.changeStatus(record.id, 'retirada_loja', {
-    pickedUpAtStore: true,
+    pickedUpAtStore: new Date().toISOString(),
+    pickupRecordedBy: getOperatorName(),
     refunded,
-    note: refunded ? 'Retirada com reembolso' : 'Retirada sem reembolso',
+    refundDecision: refunded ? 'reembolsada' : 'nao_reembolsada',
+    refundAmount: refunded ? Number(record.deliveryFee || 0) : 0,
+    note: refunded ? 'Cliente buscou na loja · taxa reembolsada' : 'Cliente buscou na loja · taxa não reembolsada',
   });
-  toast('Retirada registrada.', 'success');
+  toast(refunded ? 'Retirada registrada com reembolso da taxa.' : 'Retirada registrada sem reembolso da taxa.', 'success');
   closeModal();
   refreshApp();
 }
@@ -3339,8 +3360,8 @@ async function buildExport(kind, env, period = null) {
 
   if (kind === 'deliveries') {
     const rows = (await Deliveries.active(env)).filter((r) => inReportPeriod(r.entryTime, period));
-    const header = ['Compra','Chegada','Data entrada','PDV','DOC','Cupom','Cliente','Telefone','Endereço','Nº','Complemento','Referência','Bairro','Taxa','Tamanho','Viagens','Prioridade','Tipo','Agendado para','Status','Saída da loja','Limite da saída','SLA da saída','Chegada na casa do cliente','Limite da chegada','SLA da chegada','Finalizada na casa do cliente','Retornou à loja em','Motivo do retorno','Situação da mercadoria','Itens/volumes retornados','Nova tentativa','Próxima tentativa','Quantidade de retornos','Veículo','Entregador','Reembolsado','Observações'];
-    const lines = rows.map((r) => {const sla=deliverySla(r);return [r.purchaseNumber, r.arrivalNumber, dateTimeBR(r.entryTime), r.pdv, r.doc, r.coupon, r.clientName, r.phone, r.street, r.houseNumber, r.complement, r.reference, nName(r.neighborhoodId), r.deliveryFee, r.size, r.tripCount, r.priority, r.type, r.scheduledAt ? dateTimeBR(r.scheduledAt) : '', STATUS_META[r.status]?.label, r.leftStoreAt ? dateTimeBR(r.leftStoreAt) : '', dateTimeBR(sla.startDeadline),sla.startLate?'Atrasada':'No prazo',r.clientArrivalAt ? dateTimeBR(r.clientArrivalAt) : '',dateTimeBR(sla.arrivalDeadline),sla.arrivalLate?'Atrasada':'No prazo',r.deliveredAt ? dateTimeBR(r.deliveredAt) : '',r.returnedAt ? dateTimeBR(r.returnedAt) : '',r.returnReasonLabel || '',r.merchandiseSituation || '',r.returnedItems || '',r.retryPlanned ? 'Sim' : r.returnedAt ? 'Não' : '',r.nextAttemptAt ? dateTimeBR(r.nextAttemptAt) : '',(r.returnAttempts || []).length, vName(r.vehicleId), dName(r.driverId), r.refunded ? 'Sim' : 'Não', r.notes];});
+    const header = ['Compra','Chegada','Data entrada','PDV','DOC','Cupom','Cliente','Telefone','Endereço','Nº','Complemento','Referência','Bairro','Taxa','Tamanho','Viagens','Prioridade','Tipo','Agendado para','Status','Saída da loja','Limite da saída','SLA da saída','Chegada na casa do cliente','Limite da chegada','SLA da chegada','Finalizada na casa do cliente','Retornou à loja em','Motivo do retorno','Situação da mercadoria','Itens/volumes retornados','Nova tentativa','Próxima tentativa','Quantidade de retornos','Veículo','Entregador','Cliente buscou na loja em','Decisão da taxa','Valor reembolsado','Observações'];
+    const lines = rows.map((r) => {const sla=deliverySla(r);return [r.purchaseNumber, r.arrivalNumber, dateTimeBR(r.entryTime), r.pdv, r.doc, r.coupon, r.clientName, r.phone, r.street, r.houseNumber, r.complement, r.reference, nName(r.neighborhoodId), r.deliveryFee, r.size, r.tripCount, r.priority, r.type, r.scheduledAt ? dateTimeBR(r.scheduledAt) : '', STATUS_META[r.status]?.label, r.leftStoreAt ? dateTimeBR(r.leftStoreAt) : '', dateTimeBR(sla.startDeadline),sla.startLate?'Atrasada':'No prazo',r.clientArrivalAt ? dateTimeBR(r.clientArrivalAt) : '',dateTimeBR(sla.arrivalDeadline),sla.arrivalLate?'Atrasada':'No prazo',r.deliveredAt ? dateTimeBR(r.deliveredAt) : '',r.returnedAt ? dateTimeBR(r.returnedAt) : '',r.returnReasonLabel || '',r.merchandiseSituation || '',r.returnedItems || '',r.retryPlanned ? 'Sim' : r.returnedAt ? 'Não' : '',r.nextAttemptAt ? dateTimeBR(r.nextAttemptAt) : '',(r.returnAttempts || []).length, vName(r.vehicleId), dName(r.driverId), r.pickedUpAtStore ? dateTimeBR(typeof r.pickedUpAtStore === 'string' ? r.pickedUpAtStore : r.updatedAt) : '', r.refundDecision === 'reembolsada' ? 'Reembolsada' : r.refundDecision === 'nao_reembolsada' ? 'Não reembolsada' : (r.refunded ? 'Reembolsada' : ''), r.refundAmount ?? (r.refunded ? r.deliveryFee : 0), r.notes];});
     return { name: 'entregas', header, lines };
   }
   if (kind === 'cycles') {
@@ -3573,6 +3594,8 @@ export async function renderAudit() {
   const log = await AuditLog.all();
   if (!log.length) return `${pageIntro('ADMINISTRAÇÃO · RASTREIO', 'Auditoria', 'Acompanhe quem fez cada alteração e preserve a linha do tempo da operação.')}<div class="empty-state"><strong>Sem eventos ainda</strong></div>`;
   const rows = log.slice(0, 200).map((e) => {
+    const snapshot = (value) => value == null ? '—' : JSON.stringify(value, null, 2).slice(0, 8000);
+    const detail = `<details class="audit-detail"><summary>Ver antes/depois</summary><div class="audit-snapshot-grid"><div><strong>Antes</strong><pre>${escapeHtml(snapshot(e.before))}</pre></div><div><strong>Depois</strong><pre>${escapeHtml(snapshot(e.after))}</pre></div></div></details>`;
     let actionLabel = e.action;
     if (e.entityTable === 'costs' && e.action === 'update') {
       if (e.after?.deletedAt && !e.before?.deletedAt) actionLabel = 'Anular despesa';
@@ -3585,7 +3608,7 @@ export async function renderAudit() {
       else if (e.action === 'update') actionLabel = 'Editar expediente de KM';
     }
     return `
-      <tr><td>${dateTimeBR(e.at)}</td><td>${escapeHtml(e.operator || 'Não identificado')}<br><small class="delivery-times">${escapeHtml(e.operatorRole || '')}</small></td><td>${escapeHtml(e.entityTable)}</td><td>${escapeHtml(actionLabel)}</td><td style="font-family:monospace;font-size:11px">${escapeHtml(e.entityId).slice(0,14)}</td></tr>
+      <tr><td>${dateTimeBR(e.at)}</td><td>${escapeHtml(e.operator || 'Não identificado')}<br><small class="delivery-times">${escapeHtml(e.operatorRole || '')}</small></td><td>${escapeHtml(e.entityTable)}</td><td>${escapeHtml(actionLabel)}</td><td style="font-family:monospace;font-size:11px">${escapeHtml(e.entityId).slice(0,14)}${detail}</td></tr>
     `;
   }).join('');
   return `${pageIntro('ADMINISTRAÇÃO · RASTREIO', 'Auditoria', 'Acompanhe quem fez cada alteração e preserve a linha do tempo da operação.')}<section class="page-table-card"><div class="table-card-heading"><div><span>TRILHA DE EVENTOS</span><strong>${log.length} registros recentes</strong></div><small>somente leitura</small></div><div class="table-wrap"><table><thead><tr><th>Quando</th><th>Operador</th><th>Entidade</th><th>Ação</th><th>ID</th></tr></thead><tbody>${rows}</tbody></table></div></section>`;
@@ -3814,7 +3837,7 @@ function openVehicleAddModal(record = null) {
    ========================================================= */
 export async function renderSettings() {
   const cfg = JSON.parse(localStorage.getItem('orbita_settings') || '{}');
-  const { listAutoBackups } = await import('./db.js?v=13.32');
+  const { listAutoBackups } = await import('./db.js?v=13.34');
   const autoBackups = await listAutoBackups();
   const backupReasonLabel = (reason = '') => reason === 'abertura' ? 'Abertura do sistema' : reason === 'periodico-1min' ? 'Segurança · 1 minuto' : reason ? 'Alteração salva' : 'Automático';
   const autoList = autoBackups.length
@@ -3853,13 +3876,13 @@ export async function renderSettings() {
 export function wireSettingsEvents() {
   $$('.auto-restore-btn').forEach((btn) => btn.addEventListener('click', async () => {
     if (!confirm('Restaurar esse backup automático vai substituir os dados atuais. Continuar?')) return;
-    const { restoreAutoBackup } = await import('./db.js?v=13.32');
+    const { restoreAutoBackup } = await import('./db.js?v=13.34');
     await restoreAutoBackup(btn.dataset.id);
     toast('Backup automático restaurado.', 'success');
     refreshApp();
   }));
   $('#settingsBackupBtn')?.addEventListener('click', async () => {
-    const data = await (await import('./db.js?v=13.32')).exportAll();
+    const data = await (await import('./db.js?v=13.34')).exportAll();
     downloadJSON(`orbita-backup-completo-${new Date().toISOString().slice(0,10)}.json`, data);
     toast('Backup completo gerado.', 'success');
   });
@@ -3867,12 +3890,12 @@ export function wireSettingsEvents() {
     const file = e.target.files[0];
     if (!file) return;
     if (!confirm('Isso vai substituir os dados atuais pelo conteúdo do backup. Um backup de segurança dos dados atuais será baixado antes. Continuar?')) { e.target.value = ''; return; }
-    const currentBackup = await (await import('./db.js?v=13.32')).exportAll();
+    const currentBackup = await (await import('./db.js?v=13.34')).exportAll();
     downloadJSON(`orbita-backup-seguranca-antes-restauracao-${Date.now()}.json`, currentBackup);
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      await (await import('./db.js?v=13.32')).importAll(data);
+      await (await import('./db.js?v=13.34')).importAll(data);
       toast('Backup restaurado.', 'success');
       refreshApp();
     } catch { toast('Arquivo de backup inválido.', 'error'); }

@@ -1,14 +1,20 @@
-import { ensureSeed, saveAutoBackup, enableWriteThroughAutoBackup } from './db.js?v=13.32';
-import { $, $$, toast, initTooltips, animateStatCards, performanceProfile } from './helpers.js?v=13.32';
-import * as V from './views.js?v=13.32';
+import { ensureSeed, saveAutoBackup, enableWriteThroughAutoBackup } from './db.js?v=13.34';
+import { $, $$, toast, initTooltips, animateStatCards, performanceProfile } from './helpers.js?v=13.34';
+import * as V from './views.js?v=13.34';
 
 let currentView = 'central';
 let currentRegistryTab = 'vehicles';
 let environment = localStorage.getItem('orbita_env') || 'real';
+const monitorQuery = new URLSearchParams(window.location.search).get('monitor');
+if (monitorQuery === '1') localStorage.setItem('orbita_local_mode', 'consulta');
+if (monitorQuery === '0') localStorage.removeItem('orbita_local_mode');
+const localMonitorMode = localStorage.getItem('orbita_local_mode') === 'consulta';
 // Estação local única: não existe mais seletor de perfil na interface.
 // Mantemos um operador interno administrativo para preservar auditoria e permissões existentes.
-let operatorName = 'Operação local';
-let operatorRole = 'Administrador';
+let operatorName = localMonitorMode ? 'Monitor local' : 'Operação local';
+let operatorRole = localMonitorMode ? 'Consulta' : 'Administrador';
+localStorage.setItem('orbita_operator', operatorName);
+localStorage.setItem('orbita_operator_role', operatorRole);
 const INTELLIGENCE_CREDENTIAL_KEY = 'orbita_intelligence_credential_v1';
 const INTELLIGENCE_SESSION_KEY = 'orbita_intelligence_session_v1';
 const INTELLIGENCE_SESSION_MS = 15 * 60 * 1000;
@@ -192,16 +198,18 @@ function startAutoBackup() {
 }
 
 function renderEnvPill() {
+  if (localMonitorMode) environment = 'real';
   $('#envPill').textContent = environment === 'treino' ? '🎓 Treinamento' : '● Operação Real';
   $('#envPill').classList.toggle('treino', environment === 'treino');
   document.body.dataset.operatorRole=roleKey();
   $$('[data-view]').forEach((btn)=>btn.classList.toggle('role-hidden',!canAccessView(btn.dataset.view)));
   $('#newDeliveryBtn')?.classList.toggle('role-hidden',!canPerform('delivery_edit'));
+  $('#monitorModeBadge')?.classList.toggle('hidden', !localMonitorMode);
   const envBtn = $('#envToggleBtn');
   if (envBtn) {
-    envBtn.disabled = false;
-    envBtn.title = 'Alternar entre Operação Real e Treinamento';
-    envBtn.classList.remove('monitor-locked');
+    envBtn.disabled = localMonitorMode;
+    envBtn.title = localMonitorMode ? 'Monitor local: Operação Real fixada' : 'Alternar entre Operação Real e Treinamento';
+    envBtn.classList.toggle('monitor-locked', localMonitorMode);
   }
 }
 
@@ -516,7 +524,7 @@ async function render() {
 }
 
 async function updateBadges() {
-  const { Deliveries, Cycles } = await import('./db.js?v=13.32');
+  const { Deliveries, Cycles } = await import('./db.js?v=13.34');
   const rows = await Deliveries.active(environment);
   $('#pendingBadge').textContent = rows.filter((r) => r.status === 'na_loja').length;
   const trashed = await Deliveries.trashed(environment);
