@@ -5891,3 +5891,34 @@ input:focus, select:focus, textarea:focus { border-color: var(--blue) !important
   font-size: 12px;
   font-weight: 700;
 }
+
+/* v13.38 — assinaturas sazonais específicas: Halloween e Natal */
+.app-v8 .seasonal-decor { position:absolute; inset:0; z-index:12; pointer-events:none; }
+.app-v8 .seasonal-halloween-decor .seasonal-web { position:absolute; top:7px; right:18px; color:#d1d5db; font-size:54px; opacity:.62; transform:rotate(16deg); animation:seasonal-web-pulse 3.4s ease-in-out infinite; }
+.app-v8 .seasonal-pumpkins { position:absolute; left:5%; right:5%; bottom:4px; display:flex; align-items:flex-end; justify-content:space-around; gap:10px; }
+.app-v8 .seasonal-pumpkins span { position:relative!important; inset:auto!important; display:block; min-width:0!important; min-height:0!important; font-size:30px!important; line-height:1!important; color:initial!important; text-shadow:2px 2px 0 #111!important; animation:seasonal-pumpkin-bob 2.8s ease-in-out infinite!important; }
+.app-v8 .seasonal-pumpkins span:nth-child(2) { font-size:42px!important; animation-delay:-1.2s!important; }
+.app-v8 .seasonal-pumpkins span:nth-child(3) { animation-delay:-2s!important; }
+.app-v8 .seasonal-christmas-decor .seasonal-string-lights { position:absolute; top:7px; left:4%; right:4%; height:31px; border-top:3px solid #111; border-radius:50%; transform:rotate(2deg); }
+.app-v8 .seasonal-string-lights i { position:absolute; top:8px; width:10px; height:14px; border:2px solid #111; border-radius:50%; background:#dc2626; box-shadow:0 0 9px currentColor; animation:seasonal-bulb-blink 1.25s ease-in-out infinite; }
+.app-v8 .seasonal-string-lights i:nth-child(1){left:4%;color:#dc2626}.app-v8 .seasonal-string-lights i:nth-child(2){left:19%;color:#ffee00;background:#ffee00;animation-delay:-.4s}.app-v8 .seasonal-string-lights i:nth-child(3){left:34%;color:#16a34a;background:#16a34a;animation-delay:-.8s}.app-v8 .seasonal-string-lights i:nth-child(4){left:49%;color:#dc2626;animation-delay:-1s}.app-v8 .seasonal-string-lights i:nth-child(5){left:64%;color:#ffee00;background:#ffee00;animation-delay:-.2s}.app-v8 .seasonal-string-lights i:nth-child(6){left:79%;color:#16a34a;background:#16a34a;animation-delay:-.7s}.app-v8 .seasonal-string-lights i:nth-child(7){left:94%;color:#dc2626;animation-delay:-.5s}
+.app-v8 .seasonal-snow-floor { position:absolute; left:-2%; right:-2%; bottom:-8px; height:34px; filter:drop-shadow(0 -2px 0 #111); transition:transform .5s ease, opacity .5s ease; }
+.app-v8 .seasonal-snow-floor::before { content:""; position:absolute; inset:8px 0 0; background:#fff; border-radius:50% 50% 0 0; }
+.app-v8 .seasonal-snow-floor span { position:absolute!important; inset:auto!important; display:block; min-width:0!important; min-height:0!important; background:#fff; border:2px solid #111; border-radius:50%; animation:seasonal-snow-build 8s ease-in-out infinite!important; }
+.app-v8 .seasonal-snow-floor span:nth-child(1){left:8%;bottom:8px;width:86px;height:18px}.app-v8 .seasonal-snow-floor span:nth-child(2){left:43%;bottom:2px;width:128px;height:25px;animation-delay:-3s!important}.app-v8 .seasonal-snow-floor span:nth-child(3){right:7%;bottom:10px;width:74px;height:16px;animation-delay:-5s!important}
+.app-v8 .seasonal-snowmen { position:absolute; left:15%; right:15%; bottom:13px; display:flex; justify-content:space-between; align-items:flex-end; }
+.app-v8 .seasonal-snowmen b { color:#fff; font-size:42px; line-height:1; text-shadow:2px 2px 0 #111, 0 0 4px #fff; animation:seasonal-snowman-wave 3.2s ease-in-out infinite; }
+.app-v8 .seasonal-snowmen b:nth-child(2){font-size:31px;animation-delay:-1.4s}
+.app-v8 .seasonal-snow-clear { position:absolute; right:12px; bottom:44px; z-index:20; pointer-events:auto; padding:6px 9px; border:2px solid #111; border-radius:9px; background:#fff; color:#111; font-size:10px; font-weight:900; box-shadow:3px 3px 0 #111; cursor:pointer; }
+.app-v8 .seasonal-snow-clear:hover { transform:translateY(-2px); background:#ffee00; }
+.app-v8 .seasonal-christmas-decor.snow-cleared .seasonal-snow-floor { transform:translateY(42px); opacity:.15; }
+.app-v8 .seasonal-christmas-decor.snow-cleared .seasonal-snowmen { opacity:.25; transform:translateY(20px); transition:.5s ease; }
+.app-v8 .seasonal-christmas-decor.snow-cleared .seasonal-snow-clear { background:#ffee00; }
+.app-v8 .seasonal-preview-stage .seasonal-string-lights i { transform:scale(.7); }
+@keyframes seasonal-pumpkin-bob { 0%,100%{transform:translateY(0) rotate(-3deg)} 50%{transform:translateY(-5px) rotate(3deg)} }
+@keyframes seasonal-web-pulse { 0%,100%{opacity:.35;transform:rotate(16deg) scale(.92)} 50%{opacity:.85;transform:rotate(4deg) scale(1.06)} }
+@keyframes seasonal-bulb-blink { 0%,100%{opacity:.35;filter:brightness(.8)} 45%{opacity:1;filter:brightness(1.8)} 60%{opacity:.55} }
+@keyframes seasonal-snow-build { 0%,35%{transform:translateY(13px);opacity:.55} 70%,100%{transform:translateY(0);opacity:1} }
+@keyframes seasonal-snowman-wave { 0%,100%{transform:translateY(0) rotate(-3deg)} 50%{transform:translateY(-3px) rotate(3deg)} }
+@media(max-width:520px){ .app-v8 .seasonal-pumpkins span{font-size:22px!important}.app-v8 .seasonal-pumpkins span:nth-child(2){font-size:31px!important}.app-v8 .seasonal-snowmen b{font-size:31px}.app-v8 .seasonal-snow-clear{font-size:9px;bottom:40px} }
+@media(prefers-reduced-motion:reduce){ .app-v8 .seasonal-pumpkins span,.app-v8 .seasonal-string-lights i,.app-v8 .seasonal-snow-floor span,.app-v8 .seasonal-snowmen b{animation:none!important} }
