@@ -6042,3 +6042,19 @@ input:focus, select:focus, textarea:focus { border-color: var(--blue) !important
 .app-v8 .seasonal-original-tree .tree-ornaments { position:absolute!important; left:26px!important; top:56px!important; }
 .app-v8 .seasonal-original-snowman .snowman-arm { position:absolute!important; inset:auto!important; }
 .app-v8 .seasonal-christmas-garland { border-top:3px solid #111!important; background:transparent!important; }
+
+/* v13.48 — faixa sazonal inferior sem sobrepor texto, ações ou pulso */
+.app-v8 .ops-v8-command-head.seasonal-live-active { min-height:224px; padding-bottom:86px!important; }
+.app-v8 .ops-v8-command-head .seasonal-atmosphere { z-index:1!important; opacity:.72!important; }
+.app-v8 .ops-v8-command-head .seasonal-force-motion { z-index:1!important; }
+.app-v8 .ops-v8-command-copy,.app-v8 .ops-v8-score,.app-v8 .ops-v8-command-actions { position:relative!important; z-index:30!important; }
+.app-v8 .ops-v8-command-copy h2,.app-v8 .ops-v8-command-copy p { position:relative; z-index:31; }
+.app-v8 .seasonal-original-tree { z-index:4!important; transform:scale(.78); transform-origin:bottom right; }
+.app-v8 .seasonal-original-snowman { z-index:4!important; transform:scale(.72); transform-origin:bottom left; }
+.app-v8 .seasonal-christmas-gifts { z-index:5!important; transform:scale(.78); transform-origin:bottom center; }
+.app-v8 .seasonal-original-tree:hover,.app-v8 .seasonal-original-tree:focus-visible { transform:scale(.84) translateY(-5px)!important; }
+.app-v8 .seasonal-original-snowman:hover,.app-v8 .seasonal-original-snowman:focus-visible { transform:scale(.78) translateY(-5px) rotate(-3deg)!important; }
+.app-v8 .seasonal-christmas-gifts:hover,.app-v8 .seasonal-christmas-gifts:focus-visible { transform:scale(.84) translateY(-5px)!important; }
+.app-v8 .seasonal-christmas-garland { z-index:2!important; border-top:3px solid #111!important; opacity:.8; }
+@media(max-width:850px){.app-v8 .ops-v8-command-head.seasonal-live-active{min-height:260px;padding-bottom:112px!important}.app-v8 .ops-v8-command-head.seasonal-live-active .ops-v8-score{margin-top:8px}}
+@media(max-width:520px){.app-v8 .ops-v8-command-head.seasonal-live-active{min-height:330px;padding-bottom:125px!important}.app-v8 .ops-v8-command-head.seasonal-live-active .ops-v8-command-actions{position:relative;z-index:32}.app-v8 .seasonal-original-tree{right:1%}.app-v8 .seasonal-original-snowman{left:1%}.app-v8 .seasonal-christmas-gifts{left:40%}}
