@@ -1,6 +1,6 @@
-import { ensureSeed, saveAutoBackup, enableWriteThroughAutoBackup } from './db.js?v=13.36';
-import { $, $$, toast, initTooltips, animateStatCards, performanceProfile } from './helpers.js?v=13.36';
-import * as V from './views.js?v=13.36';
+import { ensureSeed, saveAutoBackup, enableWriteThroughAutoBackup } from './db.js?v=13.37';
+import { $, $$, toast, initTooltips, animateStatCards, performanceProfile } from './helpers.js?v=13.37';
+import * as V from './views.js?v=13.37';
 
 let currentView = 'central';
 let currentRegistryTab = 'vehicles';
@@ -524,7 +524,7 @@ async function render() {
 }
 
 async function updateBadges() {
-  const { Deliveries, Cycles } = await import('./db.js?v=13.36');
+  const { Deliveries, Cycles } = await import('./db.js?v=13.37');
   const rows = await Deliveries.active(environment);
   $('#pendingBadge').textContent = rows.filter((r) => r.status === 'na_loja').length;
   const trashed = await Deliveries.trashed(environment);
