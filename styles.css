@@ -5988,3 +5988,15 @@ input:focus, select:focus, textarea:focus { border-color: var(--blue) !important
 @keyframes seasonal-bell-ring { 0%,100%{transform:rotate(0)} 20%{transform:rotate(-12deg)} 40%{transform:rotate(12deg)} 60%{transform:rotate(-5deg)} }
 @media(max-width:520px){.app-v8 .seasonal-christmas-gifts{left:6%}.app-v8 .seasonal-christmas-gifts b{font-size:24px}.app-v8 .seasonal-christmas-gifts span{font-size:19px}}
 @media(prefers-reduced-motion:reduce){.app-v8 .seasonal-christmas-gifts b,.app-v8 .seasonal-christmas-gifts span{animation:none!important}}
+
+/* v13.43 — Natal baseado nas referências enviadas pelo usuário */
+.app-v8 .seasonal-reference-tree { position:absolute; right:8%; bottom:0; z-index:17; width:118px; height:126px; display:flex; align-items:flex-end; justify-content:center; filter:drop-shadow(0 4px 0 rgba(17,17,17,.55)); animation:seasonal-reference-tree-sway 4.5s ease-in-out infinite; }
+.app-v8 .seasonal-reference-tree::after { content:""; position:absolute; bottom:0; left:8px; right:8px; height:8px; border-radius:50%; background:#111; opacity:.5; z-index:-1; }
+.app-v8 .seasonal-reference-tree img { display:block; width:118px; height:auto; max-height:126px; object-fit:contain; object-position:bottom; }
+.app-v8 .seasonal-reference-snowman { position:absolute; left:23%; bottom:0; z-index:18; width:78px; height:106px; display:flex; align-items:flex-end; justify-content:center; filter:drop-shadow(0 4px 0 rgba(17,17,17,.5)); animation:seasonal-reference-snowman-bob 3.8s ease-in-out infinite; }
+.app-v8 .seasonal-reference-snowman::after { content:""; position:absolute; bottom:0; left:3px; right:3px; height:7px; border-radius:50%; background:#111; opacity:.45; z-index:-1; }
+.app-v8 .seasonal-reference-snowman img { display:block; width:78px; height:auto; max-height:106px; object-fit:contain; object-position:bottom; }
+@keyframes seasonal-reference-tree-sway { 0%,100%{transform:rotate(-1deg) translateY(0)} 50%{transform:rotate(1deg) translateY(-2px)} }
+@keyframes seasonal-reference-snowman-bob { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-3px)} }
+@media(max-width:520px){.app-v8 .seasonal-reference-tree{right:2%;width:84px;height:95px}.app-v8 .seasonal-reference-tree img{width:84px;max-height:95px}.app-v8 .seasonal-reference-snowman{left:18%;width:58px;height:78px}.app-v8 .seasonal-reference-snowman img{width:58px;max-height:78px}}
+@media(prefers-reduced-motion:reduce){.app-v8 .seasonal-reference-tree,.app-v8 .seasonal-reference-snowman{animation:none!important}}
