@@ -211,7 +211,7 @@ function seasonalEvents(year) {
     fixed(11, 2, 'Finados', 'civic', '◆'),
     fixed(11, 15, 'Proclamação da República', 'civic', '◆'),
     fixed(11, 20, 'Consciência Negra', 'civic', '◆'),
-    fixed(12, 25, 'Natal', 'christmas', '❄', 24, 12),
+    fixed(12, 25, 'Natal', 'christmas', '❄', 24, 6),
   ];
 }
 
