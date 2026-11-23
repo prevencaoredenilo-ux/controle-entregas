@@ -22,6 +22,10 @@ test('lê o número da NFC-e como cupom preservando zeros à esquerda', () => {
   assert.deepEqual(parseCouponText('NFC-e n. 000015693 Serie 302'), { coupon: '000015693' });
 });
 
+test('lê COO como DOC junto com o número NFC-e quando os dois estão no cupom', () => {
+  assert.deepEqual(parseCouponText('NFC-e n. 000015693 Série 302 COO: 35174'), { coupon: '000015693', doc: '35174' });
+});
+
 test('usa createWorker quando o bundle Tesseract publica a API em default', () => {
   const createWorker = () => {};
   assert.equal(getTesseractApi({ default: { createWorker } }).createWorker, createWorker);

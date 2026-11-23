@@ -69,12 +69,18 @@ function parseReceiptTimestamp(text) {
   return { date: `${values.year}-${values.month}-${values.day}`, time: `${values.hour}:${values.minute}` };
 }
 
+function parseCooNumber(text) {
+  const match = String(text || '').match(/\bCOO\s*[:.]?\s*(\d{1,10})/i)
+    || String(text || '').match(/\bC\s*[O0Q]\s*[O0Q]\s*[:.]?\s*(\d{1,10})/i);
+  return match?.[1] || '';
+}
+
 export function parseDeliveryReceiptText(text) {
   const result = {};
   const pdv = String(text || '').match(/\bPDV\s*[:.]?\s*(\d{1,6})/i);
   if (pdv) result.pdv = pdv[1];
-  const doc = String(text || '').match(/\bC\s*[O0Q]\s*[O0Q]\s*[:.]?\s*(\d{1,10})/i);
-  if (doc) result.doc = doc[1];
+  const coo = parseCooNumber(text);
+  if (coo) result.doc = coo;
   const client = lineAfterLabel(text, ['cliente']);
   if (client) result.clientName = client.replace(/^cliente\s*[:.]?\s*/i, '').trim();
   const phone = lineAfterLabel(text, ['fone(?:s|\\(s\\))?', 'telefone']);
@@ -101,7 +107,11 @@ export function parseDeliveryReceiptText(text) {
 export function parseCouponText(text) {
   const match = String(text || '').match(/NFC\s*[-–]?\s*e\s*(?:n[º°.]?\s*)?(\d{5,})/i)
     || String(text || '').match(/\bNFC\s*[-–]?\s*e\b[^\d]{0,24}(\d{5,})/i);
-  return match ? { coupon: match[1] } : {};
+  if (!match) return {};
+  const fields = { coupon: match[1] };
+  const coo = parseCooNumber(text);
+  if (coo) fields.doc = coo;
+  return fields;
 }
 
 async function getOcr() {
@@ -134,10 +144,10 @@ async function prepareImageForOcr(image) {
 export function assessFrameQuality(imageData) {
   const { data, width, height } = imageData || {};
   if (!data || !width || !height) return { readable: false, message: 'Aguardando imagem da webcam…' };
-  const left = Math.floor(width * 0.28);
-  const right = Math.ceil(width * 0.72);
-  const top = Math.floor(height * 0.07);
-  const bottom = Math.ceil(height * 0.87);
+  const left = Math.floor(width * 0.30);
+  const right = Math.ceil(width * 0.70);
+  const top = Math.floor(height * 0.06);
+  const bottom = Math.ceil(height * 0.94);
   const luminance = (x, y) => {
     const offset = (y * width + x) * 4;
     return data[offset] * 0.2126 + data[offset + 1] * 0.7152 + data[offset + 2] * 0.0722;
@@ -177,7 +187,6 @@ export function initDeliveryReceiptCapture(form) {
   const preview = panel?.querySelector('#receiptCapturePreview');
   const status = panel?.querySelector('#receiptCaptureStatus');
   const frameStatus = panel?.querySelector('[data-frame-status]');
-  const autoReadWrap = panel?.querySelector('[data-camera-auto-wrap]');
   const autoReadToggle = panel?.querySelector('[data-camera-auto]');
   const startButton = panel?.querySelector('[data-camera-start]');
   const captureButton = panel?.querySelector('[data-camera-capture]');
@@ -251,7 +260,7 @@ export function initDeliveryReceiptCapture(form) {
   const captureFrame = async (kind = activeReceipt, { automatic = false } = {}) => {
     if (!video.videoWidth || captureBusy) return;
     captureBusy = true;
-    if (kind === 'coupon') autoReadDone = true;
+    autoReadDone = true;
     if (captureButton) captureButton.disabled = true;
     try {
       const canvas = document.createElement('canvas');
@@ -265,7 +274,7 @@ export function initDeliveryReceiptCapture(form) {
       if (automatic) {
         waitingForReframe = !recognized;
         cameraStage.dataset.quality = recognized ? 'good' : 'bad';
-        if (frameStatus) frameStatus.textContent = recognized ? 'Cupom reconhecido — confira os campos.' : 'Não consegui ler o cupom. Reposicione-o na moldura.';
+        if (frameStatus) frameStatus.textContent = recognized ? 'Leitura concluída — confira os campos.' : 'Não encontrei os dados esperados. Retire e reposicione o documento para tentar novamente.';
       }
       return recognized;
     } catch (error) {
@@ -274,7 +283,7 @@ export function initDeliveryReceiptCapture(form) {
       if (automatic) {
         waitingForReframe = true;
         cameraStage.dataset.quality = 'bad';
-        if (frameStatus) frameStatus.textContent = 'Captura falhou. Reposicione o cupom na moldura.';
+        if (frameStatus) frameStatus.textContent = 'Captura falhou. Retire e reposicione o documento para tentar novamente.';
       }
       return false;
     } finally {
@@ -288,7 +297,7 @@ export function initDeliveryReceiptCapture(form) {
       qualityContext.drawImage(video, 0, 0, qualityCanvas.width, qualityCanvas.height);
       const quality = assessFrameQuality(qualityContext.getImageData(0, 0, qualityCanvas.width, qualityCanvas.height));
       if (!quality.readable) {
-        if (waitingForReframe || (autoReadDone && activeReceipt === 'coupon')) {
+        if (waitingForReframe || autoReadDone) {
           waitingForReframe = false;
           autoReadDone = false;
         }
@@ -299,19 +308,19 @@ export function initDeliveryReceiptCapture(form) {
       }
       if (waitingForReframe) {
         cameraStage.dataset.quality = 'bad';
-        if (frameStatus) frameStatus.textContent = 'Reposicione o cupom para tentar outra vez.';
+        if (frameStatus) frameStatus.textContent = 'Retire e reposicione o documento para tentar outra vez.';
         readableSince = 0;
         return;
       }
       cameraStage.dataset.quality = quality.readable ? 'good' : 'bad';
       if (frameStatus) frameStatus.textContent = quality.message;
-      if (quality.readable && activeReceipt === 'coupon' && autoReadToggle?.checked && !autoReadDone) {
+      if (quality.readable && autoReadToggle?.checked && !autoReadDone) {
         if (!readableSince) readableSince = performance.now();
         if (performance.now() - readableSince >= 1000) {
           autoReadDone = true;
-          setStatus('Cupom enquadrado. Lendo e preenchendo os campos…');
-          void captureFrame('coupon', { automatic: true });
-        }
+          setStatus(activeReceipt === 'coupon' ? 'Cupom enquadrado. Lendo o número da NFC-e…' : 'Comprovante enquadrado. Lendo e preenchendo os campos…');
+          void captureFrame(activeReceipt, { automatic: true });
+        } else if (frameStatus) frameStatus.textContent = 'Enquadramento adequado — mantenha imóvel para leitura automática.';
       } else readableSince = 0;
     } catch (error) {
       cameraStage.dataset.quality = 'bad';
@@ -321,12 +330,11 @@ export function initDeliveryReceiptCapture(form) {
   };
   panel.querySelectorAll('button[data-receipt-kind]').forEach((button) => button.addEventListener('click', () => {
     activeReceipt = button.dataset.receiptKind;
-    if (autoReadWrap) autoReadWrap.hidden = activeReceipt !== 'coupon';
     readableSince = 0;
     autoReadDone = false;
     waitingForReframe = false;
     panel.querySelectorAll('[data-receipt-kind]').forEach((item) => item.setAttribute('aria-pressed', String(item === button)));
-    setStatus(activeReceipt === 'delivery' ? 'Comprovante selecionado: relatório de entrega.' : 'Cupom selecionado: coloque apenas o cupom na moldura da webcam.');
+    setStatus(activeReceipt === 'delivery' ? 'Relatório selecionado: o COO será preenchido no campo DOC.' : 'Cupom NFC-e selecionado: o número do cupom será preenchido no campo Cupom.');
   }));
   autoReadToggle?.addEventListener('change', () => { readableSince = 0; autoReadDone = false; waitingForReframe = false; });
   startButton?.addEventListener('click', async () => {
@@ -355,9 +363,9 @@ export function initDeliveryReceiptCapture(form) {
       if (qualityTimer) clearInterval(qualityTimer);
       inspectFrame();
       qualityTimer = setInterval(inspectFrame, 250);
-      setStatus(activeReceipt === 'coupon' ? 'Coloque somente o cupom na moldura; a leitura será automática quando ficar verde.' : 'Enquadre o comprovante inteiro na moldura e use “Tirar foto e ler”.');
+      setStatus(autoReadToggle?.checked ? (activeReceipt === 'coupon' ? 'Coloque somente o cupom NFC-e inteiro na moldura; mantenha-o imóvel quando ela ficar verde.' : 'Coloque o comprovante inteiro na moldura; mantenha-o imóvel quando ela ficar verde para preencher os campos.') : 'Enquadre o documento inteiro na moldura e use “Tirar foto e ler”.');
       warmup.then((worker) => {
-        if (worker && stream && !captureBusy && activeReceipt !== 'coupon') setStatus('Leitor pronto. Enquadre o comprovante e tire a foto.');
+      if (worker && stream && !captureBusy) setStatus(autoReadToggle?.checked ? 'Leitor pronto. Centralize o documento; a leitura começa automaticamente quando a moldura ficar verde.' : 'Leitor pronto. Enquadre o documento e use “Tirar foto e ler”.');
       });
     } catch (error) {
       console.warn('Webcam não pôde ser aberta:', error);
@@ -372,7 +380,6 @@ export function initDeliveryReceiptCapture(form) {
     const image = input.files?.[0];
     if (!image) return;
     activeReceipt = input.dataset.receiptKind;
-    if (autoReadWrap) autoReadWrap.hidden = activeReceipt !== 'coupon';
     readableSince = 0;
     autoReadDone = false;
     waitingForReframe = false;
