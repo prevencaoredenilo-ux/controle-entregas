@@ -131,19 +131,71 @@ async function prepareImageForOcr(image) {
   return new Promise((resolve) => canvas.toBlob((blob) => resolve(blob || image), 'image/jpeg', 0.96));
 }
 
+export function assessFrameQuality(imageData) {
+  const { data, width, height } = imageData || {};
+  if (!data || !width || !height) return { readable: false, message: 'Aguardando imagem da webcam…' };
+  const left = Math.floor(width * 0.28);
+  const right = Math.ceil(width * 0.72);
+  const top = Math.floor(height * 0.07);
+  const bottom = Math.ceil(height * 0.87);
+  const luminance = (x, y) => {
+    const offset = (y * width + x) * 4;
+    return data[offset] * 0.2126 + data[offset + 1] * 0.7152 + data[offset + 2] * 0.0722;
+  };
+  let sum = 0;
+  let sumSquares = 0;
+  let bright = 0;
+  let edges = 0;
+  let count = 0;
+  for (let y = top; y < bottom - 1; y += 1) {
+    for (let x = left; x < right - 1; x += 1) {
+      const value = luminance(x, y);
+      const horizontal = Math.abs(value - luminance(x + 1, y));
+      const vertical = Math.abs(value - luminance(x, y + 1));
+      sum += value;
+      sumSquares += value * value;
+      if (value > 180) bright += 1;
+      if (horizontal + vertical > 55) edges += 1;
+      count += 1;
+    }
+  }
+  const mean = sum / count;
+  const contrast = Math.sqrt(Math.max(0, sumSquares / count - mean * mean));
+  const brightRatio = bright / count;
+  const edgeRatio = edges / count;
+  if (mean < 60) return { readable: false, message: 'Está escuro: aumente a iluminação.' };
+  if (mean > 246) return { readable: false, message: 'Há claridade/reflexo demais: mude o ângulo.' };
+  if (brightRatio < 0.2) return { readable: false, message: 'Centralize o papel dentro da moldura.' };
+  if (contrast < 13 || edgeRatio < 0.008) return { readable: false, message: 'Ajuste a distância até as letras ficarem nítidas.' };
+  return { readable: true, message: 'Enquadramento bom — mantenha imóvel.' };
+}
+
 export function initDeliveryReceiptCapture(form) {
   const panel = form.querySelector('#receiptCapturePanel');
   const video = panel?.querySelector('video');
+  const cameraStage = panel?.querySelector('.receipt-camera-stage');
   const preview = panel?.querySelector('#receiptCapturePreview');
   const status = panel?.querySelector('#receiptCaptureStatus');
+  const frameStatus = panel?.querySelector('[data-frame-status]');
+  const autoReadWrap = panel?.querySelector('[data-camera-auto-wrap]');
+  const autoReadToggle = panel?.querySelector('[data-camera-auto]');
   const startButton = panel?.querySelector('[data-camera-start]');
   const captureButton = panel?.querySelector('[data-camera-capture]');
   const stopButton = panel?.querySelector('[data-camera-stop]');
-  if (!panel || !video || !status) return;
+  if (!panel || !video || !cameraStage || !status) return;
 
   let stream = null;
   let activeReceipt = 'delivery';
   let previewUrl = null;
+  let qualityTimer = null;
+  let readableSince = 0;
+  let autoReadDone = false;
+  let waitingForReframe = false;
+  let captureBusy = false;
+  const qualityCanvas = document.createElement('canvas');
+  qualityCanvas.width = 160;
+  qualityCanvas.height = 90;
+  const qualityContext = qualityCanvas.getContext('2d', { willReadFrequently: true });
   const setStatus = (message) => { status.textContent = message; };
   const setPreview = (image) => {
     if (!preview) return;
@@ -153,16 +205,21 @@ export function initDeliveryReceiptCapture(form) {
     preview.hidden = false;
   };
   const stopCamera = () => {
+    if (qualityTimer) clearInterval(qualityTimer);
+    qualityTimer = null;
+    readableSince = 0;
+    waitingForReframe = false;
     stream?.getTracks().forEach((track) => track.stop());
     stream = null;
     video.srcObject = null;
-    video.hidden = true;
+    cameraStage.hidden = true;
     captureButton.hidden = true;
     stopButton.hidden = true;
     startButton.hidden = false;
   };
   const applyRecognized = (kind, text) => {
     const fields = kind === 'coupon' ? parseCouponText(text) : parseDeliveryReceiptText(text);
+    const found = Object.keys(fields).length;
     let applied = 0;
     Object.entries(fields).forEach(([name, value]) => {
       if (name === 'neighborhood') {
@@ -175,7 +232,8 @@ export function initDeliveryReceiptCapture(form) {
         if (setField(form, name, value, { onlyIfBlank: !replaceDefault })) applied += 1;
       }
     });
-    setStatus(applied ? `Leitura concluída: ${applied} campo(s) preenchido(s). Confira e corrija antes de registrar.` : 'Não encontrei campos com segurança. Tente outra foto ou preencha manualmente.');
+    setStatus(applied ? `Leitura concluída: ${applied} campo(s) preenchido(s). Confira e corrija antes de registrar.` : found ? 'Leitura concluída, mas os campos já tinham valor. Confira e corrija antes de registrar.' : 'Não encontrei campos com segurança. Tente outra foto ou preencha manualmente.');
+    return found > 0;
   };
   const recognize = async (image, kind) => {
     setStatus('Preparando o leitor de texto em português…');
@@ -183,17 +241,94 @@ export function initDeliveryReceiptCapture(form) {
       const [worker, preparedImage] = await Promise.all([getOcr(), prepareImageForOcr(image)]);
       setStatus('Lendo a imagem no navegador… aguarde.');
       const { data } = await worker.recognize(preparedImage);
-      applyRecognized(kind, data.text || '');
+      return applyRecognized(kind, data.text || '');
     } catch (error) {
       console.error('OCR local falhou:', error);
       setStatus('Não foi possível iniciar a leitura. Verifique a internet para carregar o leitor OCR ou use o preenchimento manual. A imagem não foi enviada.');
+      return false;
+    }
+  };
+  const captureFrame = async (kind = activeReceipt, { automatic = false } = {}) => {
+    if (!video.videoWidth || captureBusy) return;
+    captureBusy = true;
+    if (kind === 'coupon') autoReadDone = true;
+    if (captureButton) captureButton.disabled = true;
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      canvas.getContext('2d').drawImage(video, 0, 0);
+      const image = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.92));
+      if (!image) throw new Error('Não consegui capturar a imagem da webcam.');
+      setPreview(image);
+      const recognized = await recognize(image, kind);
+      if (automatic) {
+        waitingForReframe = !recognized;
+        cameraStage.dataset.quality = recognized ? 'good' : 'bad';
+        if (frameStatus) frameStatus.textContent = recognized ? 'Cupom reconhecido — confira os campos.' : 'Não consegui ler o cupom. Reposicione-o na moldura.';
+      }
+      return recognized;
+    } catch (error) {
+      console.error('Captura da webcam falhou:', error);
+      setStatus('Não consegui capturar a imagem. Tente novamente ou selecione uma foto.');
+      if (automatic) {
+        waitingForReframe = true;
+        cameraStage.dataset.quality = 'bad';
+        if (frameStatus) frameStatus.textContent = 'Captura falhou. Reposicione o cupom na moldura.';
+      }
+      return false;
+    } finally {
+      captureBusy = false;
+      if (captureButton) captureButton.disabled = false;
+    }
+  };
+  const inspectFrame = () => {
+    if (!stream || video.readyState < 2 || !qualityContext) return;
+    try {
+      qualityContext.drawImage(video, 0, 0, qualityCanvas.width, qualityCanvas.height);
+      const quality = assessFrameQuality(qualityContext.getImageData(0, 0, qualityCanvas.width, qualityCanvas.height));
+      if (!quality.readable) {
+        if (waitingForReframe || (autoReadDone && activeReceipt === 'coupon')) {
+          waitingForReframe = false;
+          autoReadDone = false;
+        }
+        cameraStage.dataset.quality = 'bad';
+        if (frameStatus) frameStatus.textContent = quality.message;
+        readableSince = 0;
+        return;
+      }
+      if (waitingForReframe) {
+        cameraStage.dataset.quality = 'bad';
+        if (frameStatus) frameStatus.textContent = 'Reposicione o cupom para tentar outra vez.';
+        readableSince = 0;
+        return;
+      }
+      cameraStage.dataset.quality = quality.readable ? 'good' : 'bad';
+      if (frameStatus) frameStatus.textContent = quality.message;
+      if (quality.readable && activeReceipt === 'coupon' && autoReadToggle?.checked && !autoReadDone) {
+        if (!readableSince) readableSince = performance.now();
+        if (performance.now() - readableSince >= 1000) {
+          autoReadDone = true;
+          setStatus('Cupom enquadrado. Lendo e preenchendo os campos…');
+          void captureFrame('coupon', { automatic: true });
+        }
+      } else readableSince = 0;
+    } catch (error) {
+      cameraStage.dataset.quality = 'bad';
+      if (frameStatus) frameStatus.textContent = 'Aguardando imagem da webcam…';
+      readableSince = 0;
     }
   };
   panel.querySelectorAll('button[data-receipt-kind]').forEach((button) => button.addEventListener('click', () => {
     activeReceipt = button.dataset.receiptKind;
+    if (autoReadWrap) autoReadWrap.hidden = activeReceipt !== 'coupon';
+    readableSince = 0;
+    autoReadDone = false;
+    waitingForReframe = false;
     panel.querySelectorAll('[data-receipt-kind]').forEach((item) => item.setAttribute('aria-pressed', String(item === button)));
-    setStatus(activeReceipt === 'delivery' ? 'Comprovante selecionado: relatório de entrega.' : 'Comprovante selecionado: cupom fiscal (NFC-e).');
+    setStatus(activeReceipt === 'delivery' ? 'Comprovante selecionado: relatório de entrega.' : 'Cupom selecionado: coloque apenas o cupom na moldura da webcam.');
   }));
+  autoReadToggle?.addEventListener('change', () => { readableSince = 0; autoReadDone = false; waitingForReframe = false; });
   startButton?.addEventListener('click', async () => {
     if (!navigator.mediaDevices?.getUserMedia) {
       setStatus('Webcam indisponível neste navegador. Abra o site por HTTPS ou selecione uma foto abaixo.');
@@ -209,35 +344,38 @@ export function initDeliveryReceiptCapture(form) {
         audio: false,
       });
       video.srcObject = stream;
-      video.hidden = false;
       await video.play();
+      cameraStage.hidden = false;
+      cameraStage.dataset.quality = 'bad';
       startButton.hidden = true;
       captureButton.hidden = false;
       stopButton.hidden = false;
-      setStatus('Posicione o comprovante inteiro, bem iluminado e sem inclinação.');
+      autoReadDone = false;
+      readableSince = 0;
+      if (qualityTimer) clearInterval(qualityTimer);
+      inspectFrame();
+      qualityTimer = setInterval(inspectFrame, 250);
+      setStatus(activeReceipt === 'coupon' ? 'Coloque somente o cupom na moldura; a leitura será automática quando ficar verde.' : 'Enquadre o comprovante inteiro na moldura e use “Tirar foto e ler”.');
       warmup.then((worker) => {
-        if (worker && stream) setStatus('Leitor pronto. Enquadre o comprovante inteiro e tire a foto.');
+        if (worker && stream && !captureBusy && activeReceipt !== 'coupon') setStatus('Leitor pronto. Enquadre o comprovante e tire a foto.');
       });
     } catch (error) {
       console.warn('Webcam não pôde ser aberta:', error);
+      stream?.getTracks().forEach((track) => track.stop());
+      stream = null;
       setStatus('Não consegui acessar a webcam. Autorize o acesso no navegador ou escolha uma foto.');
     }
   });
   stopButton?.addEventListener('click', stopCamera);
-  captureButton?.addEventListener('click', async () => {
-    if (!video.videoWidth) return setStatus('Aguarde a imagem da câmera aparecer.');
-    const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    canvas.getContext('2d').drawImage(video, 0, 0);
-    const image = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.92));
-    setPreview(image);
-    await recognize(image, activeReceipt);
-  });
+  captureButton?.addEventListener('click', () => captureFrame(activeReceipt));
   panel.querySelectorAll('input[type="file"][data-receipt-kind]').forEach((input) => input.addEventListener('change', async () => {
     const image = input.files?.[0];
     if (!image) return;
     activeReceipt = input.dataset.receiptKind;
+    if (autoReadWrap) autoReadWrap.hidden = activeReceipt !== 'coupon';
+    readableSince = 0;
+    autoReadDone = false;
+    waitingForReframe = false;
     setPreview(image);
     await recognize(image, activeReceipt);
     input.value = '';

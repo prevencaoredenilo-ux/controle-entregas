@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { getTesseractApi, normalizeNeighborhood, parseDeliveryReceiptText, parseCouponText } from '../receipt-capture.js';
+import { assessFrameQuality, getTesseractApi, normalizeNeighborhood, parseDeliveryReceiptText, parseCouponText } from '../receipt-capture.js';
 
 test('lê os campos do relatório e converte o horário de Cuiabá para Brasília', () => {
   const result = parseDeliveryReceiptText([
@@ -36,6 +36,27 @@ test('prioriza o COO do comprovante e normaliza “Bairro Vermelho” como “Ve
   const result = parseDeliveryReceiptText(['23/11/26 07:13:47 PDV 002 DOC 35180', 'Bairro: bairro vermelho', 'COO: 35174 PDV: 002'].join('\n'));
   assert.equal(result.doc, '35174');
   assert.equal(normalizeNeighborhood(result.neighborhood), normalizeNeighborhood('Vermelho'));
+});
+
+test('moldura fica vermelha para imagem escura e verde para texto claro, contrastado e nítido', () => {
+  const width = 160; const height = 90;
+  const dark = new Uint8ClampedArray(width * height * 4);
+  for (let i = 0; i < dark.length; i += 4) { dark[i] = 20; dark[i + 1] = 20; dark[i + 2] = 20; dark[i + 3] = 255; }
+  assert.equal(assessFrameQuality({ data: dark, width, height }).readable, false);
+
+  const blank = new Uint8ClampedArray(width * height * 4);
+  for (let i = 0; i < blank.length; i += 4) { blank[i] = 225; blank[i + 1] = 225; blank[i + 2] = 225; blank[i + 3] = 255; }
+  assert.equal(assessFrameQuality({ data: blank, width, height }).readable, false);
+
+  const sharpText = new Uint8ClampedArray(width * height * 4);
+  for (let i = 0; i < sharpText.length; i += 4) { sharpText[i] = 225; sharpText[i + 1] = 225; sharpText[i + 2] = 225; sharpText[i + 3] = 255; }
+  for (let y = 14; y < 75; y += 6) {
+    for (let x = 48; x < 112; x += 1) {
+      const offset = (y * width + x) * 4;
+      sharpText[offset] = 25; sharpText[offset + 1] = 25; sharpText[offset + 2] = 25;
+    }
+  }
+  assert.equal(assessFrameQuality({ data: sharpText, width, height }).readable, true);
 });
 
 test('não confunde o próximo rótulo com telefone quando Fone(s) está vazio', () => {

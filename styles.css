@@ -6067,4 +6067,13 @@ input:focus, select:focus, textarea:focus { border-color: var(--blue) !important
 .receipt-file-inputs label{flex:1 1 180px;display:grid;gap:5px;padding:9px;border:1px dashed var(--line);border-radius:10px;font-size:12px}
 .receipt-file-inputs input{max-width:100%;font-size:12px}
 .receipt-capture-panel [hidden]{display:none!important}
+.receipt-auto-read{display:flex!important;grid-template-columns:auto 1fr;align-items:flex-start;gap:8px;padding:9px 10px;border:1px solid var(--line);border-radius:9px;background:#fff;color:var(--text)!important;font-size:11px!important;line-height:1.4}
+.receipt-auto-read input{width:16px;height:16px;margin:0;accent-color:#178747;flex:0 0 auto}
+.receipt-camera-stage{position:relative;width:100%;aspect-ratio:16/9;margin-top:8px;overflow:hidden;border-radius:12px;background:#111}
+.receipt-camera-stage video{display:block;width:100%;height:100%;object-fit:contain;background:#111}
+.receipt-guide{position:absolute;left:28%;right:28%;top:7%;bottom:13%;border:3px solid #e23a4a;border-radius:12px;box-shadow:0 0 0 999px rgba(0,0,0,.22),inset 0 0 0 1px rgba(255,255,255,.55);pointer-events:none;transition:border-color .15s ease,box-shadow .15s ease}
+.receipt-camera-stage[data-quality="good"] .receipt-guide{border-color:#19c96b;box-shadow:0 0 0 999px rgba(0,0,0,.12),0 0 16px rgba(25,201,107,.55),inset 0 0 0 1px rgba(255,255,255,.75)}
+.receipt-frame-status{position:absolute;left:50%;bottom:7px;transform:translateX(-50%);max-width:94%;padding:5px 9px;border:1px solid rgba(255,255,255,.22);border-radius:999px;background:rgba(20,28,36,.88);color:#fff;text-align:center;font-size:10px;font-weight:800;line-height:1.2;white-space:nowrap;pointer-events:none}
+.receipt-frame-status::before{content:"";display:inline-block;width:7px;height:7px;margin-right:6px;border-radius:50%;background:#f04452;vertical-align:1px}
+.receipt-camera-stage[data-quality="good"] .receipt-frame-status::before{background:#35e982;box-shadow:0 0 7px #35e982}
 @media(max-width:600px){.receipt-kind-buttons button,.receipt-camera-actions button{flex:1 1 100%}.receipt-capture-panel{padding:11px}}

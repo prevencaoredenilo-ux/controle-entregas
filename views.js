@@ -1,8 +1,8 @@
 import { Deliveries, Vehicles, Drivers, DriverPayouts, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters, MAX_DELIVERY_TRIPS, normalizeTripCount, buildDeliveryTrips } from './db.js?v=13.48';
 import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, seasonalContext, SEASONAL_PREVIEW_CATALOG, SEASONAL_ANIMATION_CONFIG, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=13.48';
-import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=13.51';
+import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=13.52';
 import { exportFullExcelReport } from './excel-report.js?v=13.48';
-import { initDeliveryReceiptCapture } from './receipt-capture.js?v=13.51';
+import { initDeliveryReceiptCapture } from './receipt-capture.js?v=13.52';
 
 const DEFAULT_OPERATIONAL_TARGETS = { startMinutes:120, arrivalMinutes:210, warningMinutes:30, successTarget:90 };
 
@@ -963,12 +963,13 @@ export async function openDeliveryModal(record = null) {
   const body = `
     <form id="deliveryForm">
       ${!record ? `<section id="receiptCapturePanel" class="receipt-capture-panel" aria-label="Lançamento por foto">
-        <strong>Ou preencha pela foto dos comprovantes</strong>
+        <strong>Preencha pela webcam ou por foto dos comprovantes</strong>
         <p>As imagens são lidas neste navegador e não são salvas nem enviadas. A internet é necessária para carregar o leitor OCR na primeira utilização.</p>
-        <small>Enquadre o comprovante inteiro, ocupando quase toda a imagem; mantenha-o reto e bem iluminado, sem sombras ou reflexos. Como a webcam tem foco fixo, ajuste a distância até as letras ficarem nítidas. A imagem recebe ajuste de contraste antes do OCR.</small>
+        <small>Enquadre o comprovante inteiro na moldura vermelha, mantenha-o reto e bem iluminado, sem sombras ou reflexos. Como a webcam tem foco fixo, ajuste a distância até as letras ficarem nítidas. No modo NFC-e, a moldura verde inicia a leitura automática do cupom; confira os campos reconhecidos antes de registrar.</small>
         <div class="receipt-kind-buttons"><button type="button" class="btn-ghost btn-small" data-receipt-kind="delivery" aria-pressed="true">Relatório de entrega</button><button type="button" class="btn-ghost btn-small" data-receipt-kind="coupon" aria-pressed="false">Cupom fiscal (NFC-e)</button></div>
+        <label class="receipt-auto-read" data-camera-auto-wrap hidden><input type="checkbox" data-camera-auto checked /> Ler e preencher o cupom automaticamente quando a moldura ficar verde</label>
         <div class="receipt-camera-actions"><button type="button" class="btn-ghost btn-small" data-camera-start>Abrir webcam</button><button type="button" class="btn-primary btn-small" data-camera-capture hidden>Tirar foto e ler</button><button type="button" class="btn-ghost btn-small" data-camera-stop hidden>Fechar webcam</button></div>
-        <video playsinline muted hidden aria-label="Prévia da webcam" style="width:100%;max-height:420px;object-fit:contain;background:#171717;border-radius:12px;margin-top:8px"></video>
+        <div class="receipt-camera-stage" data-quality="bad" hidden><video playsinline muted aria-label="Prévia ao vivo da webcam"></video><div class="receipt-guide" aria-hidden="true"></div><div class="receipt-frame-status" data-frame-status role="status" aria-live="polite">Centralize o comprovante na moldura</div></div>
         <img id="receiptCapturePreview" alt="Prévia da foto selecionada" hidden style="width:100%;max-height:420px;object-fit:contain;border-radius:12px;margin-top:8px" />
         <div class="receipt-file-inputs"><label>Selecionar foto do relatório<input type="file" accept="image/*" capture="environment" data-receipt-kind="delivery" /></label><label>Selecionar foto do cupom<input type="file" accept="image/*" capture="environment" data-receipt-kind="coupon" /></label></div>
         <small id="receiptCaptureStatus" role="status" aria-live="polite">Escolha um comprovante, abra a webcam ou selecione uma foto.</small>
