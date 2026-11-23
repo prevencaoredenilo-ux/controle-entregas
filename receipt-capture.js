@@ -82,7 +82,7 @@ function parseReceiptTimestamp(text) {
 
 function parseCooNumber(text) {
   const match = String(text || '').match(/\bCOO\s*[:.]?\s*(\d{1,10})/i)
-    || String(text || '').match(/\bC\s*[O0Q]\s*[O0Q]\s*[:.]?\s*(\d{1,10})/i);
+    || String(text || '').match(/\bC\s*[O0Q]\s*[O0QD]\s*[:.]?\s*(\d{1,10})/i);
   return match?.[1] || '';
 }
 
@@ -130,7 +130,7 @@ export function parseCouponText(text) {
 const TRACE_SPECS = {
   delivery: [
     ['pdv', 'PDV', /\bPDV\b/i, '#2563eb'],
-    ['doc', 'COO → DOC', /\bC\s*[O0Q]\s*[O0Q]\b/i, '#9333ea'],
+    ['doc', 'COO → DOC', /\bC\s*[O0Q]\s*[O0QD]\b/i, '#9333ea'],
     ['clientName', 'Cliente', /\bCLIENTE\b/i, '#0891b2'],
     ['phone', 'Telefone', /\b(?:FONE|TELEFONE)\b/i, '#ea580c'],
     ['street', 'Endereço', /\b(?:LOGRADOURO|RUA|AVENIDA|AV\.)\b/i, '#16a34a'],
@@ -141,7 +141,7 @@ const TRACE_SPECS = {
   ],
   coupon: [
     ['coupon', 'NFC-e → Cupom', /\bNFC\s*[-–]?\s*E\b/i, '#2563eb'],
-    ['doc', 'COO → DOC', /\bC\s*[O0Q]\s*[O0Q]\b/i, '#9333ea'],
+    ['doc', 'COO → DOC', /\bC\s*[O0Q]\s*[O0QD]\b/i, '#9333ea'],
   ],
 };
 
@@ -166,6 +166,15 @@ function getOcrLines(data) {
   const nestedLines = (data?.blocks || []).flatMap((block) => (block.paragraphs || []).flatMap((paragraph) => paragraph.lines || []));
   if (nestedLines.length) return nestedLines;
   return data?.words || [];
+}
+
+export function mergeOcrLinesWithVerticalOffset(primary, secondary, offsetY) {
+  const primaryLines = getOcrLines(primary);
+  const secondaryLines = getOcrLines(secondary).map((line) => ({
+    ...line,
+    bbox: line?.bbox ? { ...line.bbox, y0: line.bbox.y0 + offsetY, y1: line.bbox.y1 + offsetY } : line?.bbox,
+  }));
+  return { ...primary, lines: [...primaryLines, ...secondaryLines] };
 }
 
 async function getOcr() {
@@ -208,6 +217,22 @@ async function prepareImageForOcr(image) {
   return blob
     ? { image: blob, width: canvas.width, height: canvas.height }
     : { image, width: originalWidth, height: originalHeight };
+}
+
+async function prepareLowerReceiptCrop(image, width, height) {
+  if (typeof createImageBitmap !== 'function' || !width || !height) return null;
+  const bitmap = await createImageBitmap(image);
+  const top = Math.floor(height * 0.48);
+  const cropHeight = height - top;
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = cropHeight;
+  const context = canvas.getContext('2d');
+  if (!context) { bitmap.close?.(); return null; }
+  context.drawImage(bitmap, 0, top, width, cropHeight, 0, 0, width, cropHeight);
+  bitmap.close?.();
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.98));
+  return blob ? { image: blob, top } : null;
 }
 
 export function assessFrameQuality(imageData) {
@@ -407,7 +432,16 @@ export function initDeliveryReceiptCapture(form) {
     try {
       const [worker, prepared] = await Promise.all([getOcr(), prepareImageForOcr(image)]);
       setStatus('Lendo a imagem no navegador… aguarde.');
-      const { data } = await worker.recognize(prepared.image);
+      let { data } = await worker.recognize(prepared.image);
+      if (kind === 'delivery' && !parseDeliveryReceiptText(data.text || '').doc) {
+        const lowerCrop = await prepareLowerReceiptCrop(prepared.image, prepared.width, prepared.height);
+        if (lowerCrop) {
+          const { data: lowerData } = await worker.recognize(lowerCrop.image);
+          const combined = mergeOcrLinesWithVerticalOffset(data, lowerData, lowerCrop.top);
+          combined.text = [data.text, lowerData.text].filter(Boolean).join('\n');
+          data = combined;
+        }
+      }
       const result = applyRecognized(kind, data.text || '');
       const traceCount = drawTraceOverlay(kind, data, result.fields, prepared.width, prepared.height);
       updateTracker(kind, result.fields, { traceCount });

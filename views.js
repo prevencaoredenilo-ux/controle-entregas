@@ -1,8 +1,8 @@
 import { Deliveries, Vehicles, Drivers, DriverPayouts, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters, MAX_DELIVERY_TRIPS, normalizeTripCount, buildDeliveryTrips } from './db.js?v=13.48';
 import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, seasonalContext, SEASONAL_PREVIEW_CATALOG, SEASONAL_ANIMATION_CONFIG, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=13.48';
-import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=13.56';
+import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=13.57';
 import { exportFullExcelReport } from './excel-report.js?v=13.48';
-import { initDeliveryReceiptCapture } from './receipt-capture.js?v=13.56';
+import { initDeliveryReceiptCapture } from './receipt-capture.js?v=13.57';
 
 const DEFAULT_OPERATIONAL_TARGETS = { startMinutes:120, arrivalMinutes:210, warningMinutes:30, successTarget:90 };
 

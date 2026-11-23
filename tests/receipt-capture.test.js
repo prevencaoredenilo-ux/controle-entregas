@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { assessFrameQuality, configureReceiptWorker, findReceiptTraceBoxes, getTesseractApi, normalizeNeighborhood, parseDeliveryReceiptText, parseCouponText } from '../receipt-capture.js';
+import { assessFrameQuality, configureReceiptWorker, findReceiptTraceBoxes, getTesseractApi, mergeOcrLinesWithVerticalOffset, normalizeNeighborhood, parseDeliveryReceiptText, parseCouponText } from '../receipt-capture.js';
 
 test('lê os campos do relatório e converte o horário de Cuiabá para Brasília', () => {
   const result = parseDeliveryReceiptText([
@@ -43,6 +43,16 @@ test('localiza PDV, COO e cliente no relatório de entrega', () => {
   assert.deepEqual(boxes.map(({ key }) => key), ['pdv', 'doc', 'clientName']);
 });
 
+test('combina o COO encontrado no recorte inferior preservando a posição na imagem inteira', () => {
+  const merged = mergeOcrLinesWithVerticalOffset(
+    { text: 'PDV 002 DOC 35180', lines: [{ text: 'DOC 35180', bbox: { x0: 5, y0: 10, x1: 100, y1: 30 } }] },
+    { text: 'CO0: 35174', lines: [{ text: 'CO0: 35174', bbox: { x0: 8, y0: 20, x1: 120, y1: 45 } }] },
+    600,
+  );
+  assert.deepEqual(merged.lines[1].bbox, { x0: 8, y0: 620, x1: 120, y1: 645 });
+  assert.equal(parseDeliveryReceiptText(`${merged.text}\nCO0: 35174`).doc, '35174');
+});
+
 test('usa createWorker quando o bundle Tesseract publica a API em default', () => {
   const createWorker = () => {};
   assert.equal(getTesseractApi({ default: { createWorker } }).createWorker, createWorker);
@@ -51,6 +61,7 @@ test('usa createWorker quando o bundle Tesseract publica a API em default', () =
 
 test('lê DOC quando o OCR confunde COO com C0O', () => {
   assert.equal(parseDeliveryReceiptText('C0O: 35174').doc, '35174');
+  assert.equal(parseDeliveryReceiptText('COD: 35174 POU: 002').doc, '35174');
 });
 
 test('configura o Tesseract para ler o comprovante como um bloco de texto', async () => {
