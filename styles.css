@@ -5851,3 +5851,15 @@ input:focus, select:focus, textarea:focus { border-color: var(--blue) !important
 @keyframes seasonal-balloon-float { 0%{transform:translateY(25px) rotate(-10deg);opacity:0} 35%{opacity:1} 100%{transform:translate(12px,-125px) rotate(12deg);opacity:0} }
 @keyframes seasonal-candle-glow { 0%,100%{transform:translateY(12px) scale(.7);opacity:.2} 50%{transform:translateY(-20px) scale(1.2);opacity:1} }
 @keyframes seasonal-unity-wave { 0%{transform:translateX(-20px) rotate(-18deg);opacity:0} 50%{transform:translateX(20px) rotate(18deg);opacity:1} 100%{transform:translateX(-12px) translateY(120px) rotate(-12deg);opacity:0} }
+
+
+/* Captura local dos comprovantes de entrega */
+.receipt-capture-panel{display:grid;gap:10px;padding:14px;margin:0 0 14px;border:1px solid var(--line);border-radius:14px;background:var(--surface-2,#f8f8f5)}
+.receipt-capture-panel>strong{font-size:14px;color:var(--text)}
+.receipt-capture-panel>p,.receipt-capture-panel>small{margin:0;color:var(--text-muted);font-size:12px;line-height:1.45}
+.receipt-kind-buttons,.receipt-camera-actions,.receipt-file-inputs{display:flex;flex-wrap:wrap;gap:8px}
+.receipt-kind-buttons button[aria-pressed="true"]{outline:2px solid var(--accent,#d3b900);outline-offset:1px}
+.receipt-file-inputs label{flex:1 1 180px;display:grid;gap:5px;padding:9px;border:1px dashed var(--line);border-radius:10px;font-size:12px}
+.receipt-file-inputs input{max-width:100%;font-size:12px}
+.receipt-capture-panel [hidden]{display:none!important}
+@media(max-width:600px){.receipt-kind-buttons button,.receipt-camera-actions button{flex:1 1 100%}.receipt-capture-panel{padding:11px}}

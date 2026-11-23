@@ -1,6 +1,6 @@
 import { ensureSeed, saveAutoBackup, enableWriteThroughAutoBackup } from './db.js?v=13.32';
 import { $, $$, toast, initTooltips, animateStatCards, performanceProfile } from './helpers.js?v=13.32';
-import * as V from './views.js?v=13.32';
+import * as V from './views.js?v=13.33';
 
 let currentView = 'central';
 let currentRegistryTab = 'vehicles';
