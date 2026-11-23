@@ -6103,3 +6103,82 @@ input:focus, select:focus, textarea:focus { border-color: var(--blue) !important
 .receipt-field-tracker li[data-track-state="missing"]{border-color:#fecaca;background:#fff7f7}
 .receipt-field-tracker li[data-track-state="missing"] b{color:#b91c1c}
 @media(max-width:600px){.receipt-kind-buttons button,.receipt-camera-actions button{flex:1 1 100%}.receipt-capture-panel{padding:11px}.receipt-field-tracker ul{grid-template-columns:1fr}}
+
+
+/* v13.56 — organização do formulário de entrega em etapas visuais */
+.app-v8 #modalWrap:has(#deliveryForm) #deliveryForm>.delivery-form-section {
+  grid-column: 1 / -1 !important;
+  min-width: 0 !important;
+  padding: 18px !important;
+  background: var(--theme-white) !important;
+  border: 2px solid var(--theme-black) !important;
+  border-radius: 14px !important;
+  box-shadow: 3px 3px 0 var(--theme-black) !important;
+}
+.app-v8 #modalWrap:has(#deliveryForm) .delivery-form-section>header {
+  display: flex !important;
+  align-items: flex-start !important;
+  gap: 12px !important;
+  margin: 0 0 16px !important;
+}
+.app-v8 #modalWrap:has(#deliveryForm) .delivery-form-section>header>span {
+  display: grid !important;
+  flex: 0 0 34px !important;
+  width: 34px !important;
+  height: 34px !important;
+  place-items: center !important;
+  border-radius: 10px !important;
+  background: var(--theme-action) !important;
+  color: var(--theme-black) !important;
+  font-size: 12px !important;
+  font-weight: 900 !important;
+}
+.app-v8 #modalWrap:has(#deliveryForm) .delivery-form-section>header h3 {
+  margin: 0 !important;
+  color: var(--theme-black) !important;
+  font-family: var(--font-display) !important;
+  font-size: 16px !important;
+}
+.app-v8 #modalWrap:has(#deliveryForm) .delivery-form-section>header p {
+  margin: 4px 0 0 !important;
+  color: var(--theme-gray) !important;
+  font-size: 11px !important;
+  line-height: 1.4 !important;
+}
+.app-v8 #modalWrap:has(#deliveryForm) .delivery-section-grid {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 14px !important;
+  align-items: start !important;
+}
+.app-v8 #modalWrap:has(#deliveryForm) .delivery-section-grid-receipt {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+}
+.app-v8 #modalWrap:has(#deliveryForm) .delivery-section-grid>label {
+  display: grid !important;
+  min-width: 0 !important;
+  gap: 7px !important;
+  align-content: start !important;
+  color: var(--theme-black) !important;
+  font-size: 11px !important;
+  font-weight: 800 !important;
+}
+.app-v8 #modalWrap:has(#deliveryForm) .delivery-section-grid>label>span {
+  display: inline !important;
+  color: var(--theme-gray) !important;
+  font-size: 10px !important;
+  font-weight: 600 !important;
+}
+.app-v8 #modalWrap:has(#deliveryForm) .delivery-section-grid>label>small {
+  color: var(--theme-gray) !important;
+  font-size: 10px !important;
+  font-weight: 500 !important;
+  line-height: 1.4 !important;
+}
+.app-v8 #modalWrap:has(#deliveryForm) .delivery-field-wide { grid-column: 1 / -1 !important; }
+@media(max-width:640px) {
+  .app-v8 #modalWrap:has(#deliveryForm) #deliveryForm>.delivery-form-section { padding: 14px !important; }
+  .app-v8 #modalWrap:has(#deliveryForm) .delivery-section-grid,
+  .app-v8 #modalWrap:has(#deliveryForm) .delivery-section-grid-receipt { grid-template-columns: minmax(0, 1fr) !important; }
+  .app-v8 #modalWrap:has(#deliveryForm) .delivery-field-wide { grid-column: auto !important; }
+}

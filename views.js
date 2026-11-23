@@ -1,8 +1,8 @@
 import { Deliveries, Vehicles, Drivers, DriverPayouts, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters, MAX_DELIVERY_TRIPS, normalizeTripCount, buildDeliveryTrips } from './db.js?v=13.48';
 import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, seasonalContext, SEASONAL_PREVIEW_CATALOG, SEASONAL_ANIMATION_CONFIG, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=13.48';
-import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=13.55';
+import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=13.56';
 import { exportFullExcelReport } from './excel-report.js?v=13.48';
-import { initDeliveryReceiptCapture } from './receipt-capture.js?v=13.55';
+import { initDeliveryReceiptCapture } from './receipt-capture.js?v=13.56';
 
 const DEFAULT_OPERATIONAL_TARGETS = { startMinutes:120, arrivalMinutes:210, warningMinutes:30, successTarget:90 };
 
@@ -1000,87 +1000,83 @@ export async function openDeliveryModal(record = null) {
         </div>
         <p>${record ? 'Você pode corrigir manualmente se necessário.' : 'Número calculado automaticamente pela data da compra e pela sequência de cadastro.'}</p>
       </div>
-      <div class="field-row field-row-date-time">
-        <label>Data da entrega *
-          <input type="date" name="operationDate" required value="${record ? localDateKey(record.entryTime) : localDateKey()}" />
-        </label>
-        <label>Hora de entrada *
-          <input type="time" name="entryTimeOnly" required value="${record ? new Date(record.entryTime).toTimeString().slice(0,5) : new Date().toTimeString().slice(0,5)}" />
-        </label>
-        <small class="field-row-help">Informe a data real da compra. É essa data — e não a data agendada — que define a sequência do Nº da entrega.</small>
-      </div>
-      <label>PDV/Caixa *<input name="pdv" required value="${escapeHtml(record?.pdv || '')}" /></label>
-      <div class="field-row">
-        <label>DOC * (COO do comprovante)<input name="doc" required value="${escapeHtml(record?.doc || '')}" placeholder="Número COO" /></label>
-        <label>Cupom<input name="coupon" value="${escapeHtml(record?.coupon || '')}" /></label>
-      </div>
-      <label>Cliente<input name="clientName" value="${escapeHtml(record?.clientName || '')}" placeholder="Opcional" /></label>
-      <label>Telefone<input name="phone" value="${escapeHtml(record?.phone || '')}" placeholder="(99) 99999-9999" data-mask="phone" /></label>
-      <label>Endereço *<input name="street" required value="${escapeHtml(record?.street || '')}" /></label>
-      <div class="field-row">
-        <label>Número<input name="houseNumber" value="${escapeHtml(record?.houseNumber || '')}" /></label>
-        <label>Complemento<input name="complement" value="${escapeHtml(record?.complement || '')}" /></label>
-      </div>
-      <label>Referência<input name="reference" value="${escapeHtml(record?.reference || '')}" /></label>
-      <label>Bairro *
-        <select name="neighborhoodId" required>
-          <option value="">Selecione…</option>
-          ${neighborhoods.map((n) => `<option value="${n.id}" ${record?.neighborhoodId === n.id ? 'selected' : ''}>${escapeHtml(n.name)}</option>`).join('')}
-        </select>
-        ${!neighborhoods.length ? '<small style="color:var(--status-problema)">Nenhum bairro cadastrado — cadastre em Cadastros → Bairros.</small>' : ''}
-      </label>
-      <div class="field-row">
-        <label>Taxa de entrega
-          <select name="feeOption">
-            <option value="6.99" ${record?.deliveryFee === 6.99 ? 'selected' : ''}>R$ 6,99</option>
-            <option value="9.99" ${record?.deliveryFee === 9.99 ? 'selected' : ''}>R$ 9,99</option>
-            <option value="0" ${record?.deliveryFee === 0 ? 'selected' : ''}>Sem taxa</option>
-            <option value="livre" ${record && ![6.99,9.99,0].includes(record.deliveryFee) ? 'selected' : ''}>Valor livre</option>
-          </select>
-        </label>
-        <label>Valor livre (se aplicável)<input name="feeCustom" type="number" step="0.01" min="0" value="${record && ![6.99,9.99,0].includes(record?.deliveryFee) ? record.deliveryFee : ''}" /></label>
-      </div>
-      <div class="field-row">
-        <label>Tamanho
-          <select name="size" id="sizeSelect">
-            <option value="normal" ${record?.size !== 'grande' ? 'selected' : ''}>Normal</option>
-            <option value="grande" ${record?.size === 'grande' ? 'selected' : ''}>Grande</option>
-          </select>
-        </label>
-        <label>Viagens (se Grande)<input name="tripCount" type="number" min="1" max="${MAX_DELIVERY_TRIPS}" value="${record?.tripCount || 1}" ${record?.size !== 'grande' ? 'disabled' : ''} /><small class="field-help">Até ${MAX_DELIVERY_TRIPS} viagens. Viagens já registradas não são descartadas silenciosamente.</small></label>
-      </div>
-      <div class="field-row">
-        <label>Prioridade
-          <select name="priority">
-            <option value="normal" ${record?.priority !== 'alta' ? 'selected' : ''}>Normal</option>
-            <option value="alta" ${record?.priority === 'alta' ? 'selected' : ''}>Alta</option>
-          </select>
-        </label>
-        <label>Tipo
-          <select name="type" id="typeSelect">
-            <option value="hoje" ${record?.type !== 'agendada' ? 'selected' : ''}>Hoje</option>
-            <option value="agendada" ${record?.type === 'agendada' ? 'selected' : ''}>Agendada</option>
-          </select>
-        </label>
-      </div>
-      <label id="scheduledWrap" class="${record?.type === 'agendada' ? '' : 'hidden'}">Data/hora agendada *
-        <input name="scheduledAt" type="datetime-local" value="${record?.scheduledAt ? record.scheduledAt.slice(0,16) : ''}" />
-      </label>
-      <div class="field-row">
-        <label>Veículo
-          <select name="vehicleId">
-            <option value="">—</option>
-            ${vehicles.map((v) => `<option value="${v.id}" ${record?.vehicleId === v.id ? 'selected' : ''}>${escapeHtml(v.label)}</option>`).join('')}
-          </select>
-        </label>
-        <label>Entregador
-          <select name="driverId">
-            <option value="">—</option>
-            ${drivers.map((d) => `<option value="${d.id}" ${record?.driverId === d.id ? 'selected' : ''}>${escapeHtml(d.name)}${d.kind === 'terceirizado' ? ' · Terceirizado' : ''}</option>`).join('')}
-          </select>
-        </label>
-      </div>
-      <label>Observações<textarea name="notes" rows="2">${escapeHtml(record?.notes || '')}</textarea></label>
+      <section class="delivery-form-section">
+        <header><span>01</span><div><h3>Dados do comprovante</h3><p>Identificação da compra e horário registrado no caixa.</p></div></header>
+        <div class="delivery-section-grid delivery-section-grid-receipt">
+          <label>Data da entrega *<input type="date" name="operationDate" required value="${record ? localDateKey(record.entryTime) : localDateKey()}" /><small>Data real da compra; ela define a sequência do Nº da entrega.</small></label>
+          <label>Hora de entrada *<input type="time" name="entryTimeOnly" required value="${record ? new Date(record.entryTime).toTimeString().slice(0,5) : new Date().toTimeString().slice(0,5)}" /></label>
+          <label>PDV/Caixa *<input name="pdv" required value="${escapeHtml(record?.pdv || '')}" /></label>
+          <label>DOC * <span>(COO do relatório)</span><input name="doc" required value="${escapeHtml(record?.doc || '')}" placeholder="Número COO" /></label>
+          <label>Cupom NFC-e<input name="coupon" value="${escapeHtml(record?.coupon || '')}" /></label>
+        </div>
+      </section>
+      <section class="delivery-form-section">
+        <header><span>02</span><div><h3>Cliente e endereço</h3><p>Informe quem recebe e onde será feita a entrega.</p></div></header>
+        <div class="delivery-section-grid delivery-section-grid-address">
+          <label>Cliente<input name="clientName" value="${escapeHtml(record?.clientName || '')}" placeholder="Nome do cliente" /></label>
+          <label>Telefone<input name="phone" value="${escapeHtml(record?.phone || '')}" placeholder="(99) 99999-9999" data-mask="phone" /></label>
+          <label class="delivery-field-wide">Endereço *<input name="street" required value="${escapeHtml(record?.street || '')}" placeholder="Rua ou avenida" /></label>
+          <label>Número<input name="houseNumber" value="${escapeHtml(record?.houseNumber || '')}" /></label>
+          <label>Complemento<input name="complement" value="${escapeHtml(record?.complement || '')}" /></label>
+          <label>Referência<input name="reference" value="${escapeHtml(record?.reference || '')}" /></label>
+          <label>Bairro *
+            <select name="neighborhoodId" required>
+              <option value="">Selecione…</option>
+              ${neighborhoods.map((n) => `<option value="${n.id}" ${record?.neighborhoodId === n.id ? 'selected' : ''}>${escapeHtml(n.name)}</option>`).join('')}
+            </select>
+            ${!neighborhoods.length ? '<small style="color:var(--status-problema)">Nenhum bairro cadastrado — cadastre em Cadastros → Bairros.</small>' : ''}
+          </label>
+        </div>
+      </section>
+      <section class="delivery-form-section">
+        <header><span>03</span><div><h3>Detalhes da entrega</h3><p>Taxa, modalidade, prioridade e equipe responsável.</p></div></header>
+        <div class="delivery-section-grid delivery-section-grid-operations">
+          <label>Taxa de entrega
+            <select name="feeOption">
+              <option value="6.99" ${record?.deliveryFee === 6.99 ? 'selected' : ''}>R$ 6,99</option>
+              <option value="9.99" ${record?.deliveryFee === 9.99 ? 'selected' : ''}>R$ 9,99</option>
+              <option value="0" ${record?.deliveryFee === 0 ? 'selected' : ''}>Sem taxa</option>
+              <option value="livre" ${record && ![6.99,9.99,0].includes(record.deliveryFee) ? 'selected' : ''}>Valor livre</option>
+            </select>
+          </label>
+          <label>Valor livre (se aplicável)<input name="feeCustom" type="number" step="0.01" min="0" value="${record && ![6.99,9.99,0].includes(record?.deliveryFee) ? record.deliveryFee : ''}" /></label>
+          <label>Tamanho
+            <select name="size" id="sizeSelect">
+              <option value="normal" ${record?.size !== 'grande' ? 'selected' : ''}>Normal</option>
+              <option value="grande" ${record?.size === 'grande' ? 'selected' : ''}>Grande</option>
+            </select>
+          </label>
+          <label>Viagens (se Grande)<input name="tripCount" type="number" min="1" max="${MAX_DELIVERY_TRIPS}" value="${record?.tripCount || 1}" ${record?.size !== 'grande' ? 'disabled' : ''} /><small class="field-help">Até ${MAX_DELIVERY_TRIPS} viagens. Viagens já registradas não são descartadas silenciosamente.</small></label>
+          <label>Prioridade
+            <select name="priority">
+              <option value="normal" ${record?.priority !== 'alta' ? 'selected' : ''}>Normal</option>
+              <option value="alta" ${record?.priority === 'alta' ? 'selected' : ''}>Alta</option>
+            </select>
+          </label>
+          <label>Tipo
+            <select name="type" id="typeSelect">
+              <option value="hoje" ${record?.type !== 'agendada' ? 'selected' : ''}>Hoje</option>
+              <option value="agendada" ${record?.type === 'agendada' ? 'selected' : ''}>Agendada</option>
+            </select>
+          </label>
+          <label id="scheduledWrap" class="delivery-field-wide ${record?.type === 'agendada' ? '' : 'hidden'}">Data/hora agendada *
+            <input name="scheduledAt" type="datetime-local" value="${record?.scheduledAt ? record.scheduledAt.slice(0,16) : ''}" />
+          </label>
+          <label>Veículo
+            <select name="vehicleId">
+              <option value="">—</option>
+              ${vehicles.map((v) => `<option value="${v.id}" ${record?.vehicleId === v.id ? 'selected' : ''}>${escapeHtml(v.label)}</option>`).join('')}
+            </select>
+          </label>
+          <label>Entregador
+            <select name="driverId">
+              <option value="">—</option>
+              ${drivers.map((d) => `<option value="${d.id}" ${record?.driverId === d.id ? 'selected' : ''}>${escapeHtml(d.name)}${d.kind === 'terceirizado' ? ' · Terceirizado' : ''}</option>`).join('')}
+            </select>
+          </label>
+          <label class="delivery-field-wide">Observações<textarea name="notes" rows="2">${escapeHtml(record?.notes || '')}</textarea></label>
+        </div>
+      </section>
     </form>
   `;
 
