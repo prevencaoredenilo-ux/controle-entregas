@@ -6058,3 +6058,13 @@ input:focus, select:focus, textarea:focus { border-color: var(--blue) !important
 .app-v8 .seasonal-christmas-garland { z-index:2!important; border-top:3px solid #111!important; opacity:.8; }
 @media(max-width:850px){.app-v8 .ops-v8-command-head.seasonal-live-active{min-height:260px;padding-bottom:112px!important}.app-v8 .ops-v8-command-head.seasonal-live-active .ops-v8-score{margin-top:8px}}
 @media(max-width:520px){.app-v8 .ops-v8-command-head.seasonal-live-active{min-height:330px;padding-bottom:125px!important}.app-v8 .ops-v8-command-head.seasonal-live-active .ops-v8-command-actions{position:relative;z-index:32}.app-v8 .seasonal-original-tree{right:1%}.app-v8 .seasonal-original-snowman{left:1%}.app-v8 .seasonal-christmas-gifts{left:40%}}
+/* Captura local dos comprovantes de entrega */
+.receipt-capture-panel{display:grid;gap:10px;padding:14px;margin:0 0 14px;border:1px solid var(--line);border-radius:14px;background:var(--surface-2,#f8f8f5)}
+.receipt-capture-panel>strong{font-size:14px;color:var(--text)}
+.receipt-capture-panel>p,.receipt-capture-panel>small{margin:0;color:var(--text-muted);font-size:12px;line-height:1.45}
+.receipt-kind-buttons,.receipt-camera-actions,.receipt-file-inputs{display:flex;flex-wrap:wrap;gap:8px}
+.receipt-kind-buttons button[aria-pressed="true"]{outline:2px solid var(--accent,#d3b900);outline-offset:1px}
+.receipt-file-inputs label{flex:1 1 180px;display:grid;gap:5px;padding:9px;border:1px dashed var(--line);border-radius:10px;font-size:12px}
+.receipt-file-inputs input{max-width:100%;font-size:12px}
+.receipt-capture-panel [hidden]{display:none!important}
+@media(max-width:600px){.receipt-kind-buttons button,.receipt-camera-actions button{flex:1 1 100%}.receipt-capture-panel{padding:11px}}
