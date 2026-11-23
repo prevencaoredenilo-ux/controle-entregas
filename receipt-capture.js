@@ -1,8 +1,12 @@
 const TESSERACT_URL = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.esm.min.js';
-let tesseractModulePromise;
+let tesseractWorkerPromise;
 
 function normalize(value = '') {
   return String(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+
+export function normalizeNeighborhood(value = '') {
+  return normalize(value).replace(/[^a-z0-9]/g, '').replace(/^bairro/, '');
 }
 
 export function getTesseractApi(module) {
@@ -101,9 +105,15 @@ export function parseCouponText(text) {
 }
 
 async function getOcr() {
-  if (!tesseractModulePromise) tesseractModulePromise = import(TESSERACT_URL);
-  const module = await tesseractModulePromise;
-  return getTesseractApi(module).createWorker('por', 1);
+  if (!tesseractWorkerPromise) {
+    tesseractWorkerPromise = import(TESSERACT_URL)
+      .then((module) => getTesseractApi(module).createWorker('por', 1))
+      .catch((error) => {
+        tesseractWorkerPromise = null;
+        throw error;
+      });
+  }
+  return tesseractWorkerPromise;
 }
 
 async function prepareImageForOcr(image) {
@@ -133,7 +143,6 @@ export function initDeliveryReceiptCapture(form) {
 
   let stream = null;
   let activeReceipt = 'delivery';
-  let workerPromise = null;
   let previewUrl = null;
   const setStatus = (message) => { status.textContent = message; };
   const setPreview = (image) => {
@@ -158,8 +167,8 @@ export function initDeliveryReceiptCapture(form) {
     Object.entries(fields).forEach(([name, value]) => {
       if (name === 'neighborhood') {
         const select = form.elements.namedItem('neighborhoodId');
-        const expected = normalize(value).replace(/[^a-z0-9]/g, '');
-        const option = [...(select?.options || [])].find((item) => normalize(item.textContent).replace(/[^a-z0-9]/g, '') === expected);
+        const expected = normalizeNeighborhood(value);
+        const option = [...(select?.options || [])].find((item) => normalizeNeighborhood(item.textContent) === expected);
         if (option && setField(form, 'neighborhoodId', option.value)) applied += 1;
       } else {
         const replaceDefault = ['operationDate', 'entryTimeOnly'].includes(name);
@@ -171,14 +180,11 @@ export function initDeliveryReceiptCapture(form) {
   const recognize = async (image, kind) => {
     setStatus('Preparando o leitor de texto em português…');
     try {
-      workerPromise ||= getOcr();
-      const worker = await workerPromise;
+      const [worker, preparedImage] = await Promise.all([getOcr(), prepareImageForOcr(image)]);
       setStatus('Lendo a imagem no navegador… aguarde.');
-      const preparedImage = await prepareImageForOcr(image);
       const { data } = await worker.recognize(preparedImage);
       applyRecognized(kind, data.text || '');
     } catch (error) {
-      workerPromise = null;
       console.error('OCR local falhou:', error);
       setStatus('Não foi possível iniciar a leitura. Verifique a internet para carregar o leitor OCR ou use o preenchimento manual. A imagem não foi enviada.');
     }
@@ -193,9 +199,13 @@ export function initDeliveryReceiptCapture(form) {
       setStatus('Webcam indisponível neste navegador. Abra o site por HTTPS ou selecione uma foto abaixo.');
       return;
     }
+    const warmup = getOcr().catch((error) => {
+      console.warn('Leitor OCR não pôde ser pré-carregado:', error);
+      return null;
+    });
     try {
       stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
         audio: false,
       });
       video.srcObject = stream;
@@ -205,6 +215,9 @@ export function initDeliveryReceiptCapture(form) {
       captureButton.hidden = false;
       stopButton.hidden = false;
       setStatus('Posicione o comprovante inteiro, bem iluminado e sem inclinação.');
+      warmup.then((worker) => {
+        if (worker && stream) setStatus('Leitor pronto. Enquadre o comprovante inteiro e tire a foto.');
+      });
     } catch (error) {
       console.warn('Webcam não pôde ser aberta:', error);
       setStatus('Não consegui acessar a webcam. Autorize o acesso no navegador ou escolha uma foto.');
@@ -234,7 +247,6 @@ export function initDeliveryReceiptCapture(form) {
     if (!form.isConnected) {
       stopCamera();
       if (previewUrl) URL.revokeObjectURL(previewUrl);
-      if (workerPromise) Promise.resolve(workerPromise).then((worker) => worker.terminate()).catch(() => {});
       observer.disconnect();
     }
   });
