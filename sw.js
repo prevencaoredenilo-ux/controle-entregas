@@ -1,4 +1,4 @@
-const CACHE_PREFIX = 'orbita-v13-55-safe-';
+const CACHE_PREFIX = 'orbita-v13-57-safe-';
 const CACHE = `${CACHE_PREFIX}1`;
 const ASSETS = [
   './', './index.html', './styles.css?v=13.57', './app.js?v=13.57', './db.js?v=13.48', './helpers.js?v=13.48', './views.js?v=13.57', './receipt-capture.js?v=13.57', './excel-report.js?v=13.48', './manifest.webmanifest?v=13.57',
