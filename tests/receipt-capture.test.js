@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseDeliveryReceiptText, parseCouponText } from '../receipt-capture.js';
+import { getTesseractApi, parseDeliveryReceiptText, parseCouponText } from '../receipt-capture.js';
 
 test('lê os campos do relatório e converte o horário de Cuiabá para Brasília', () => {
   const result = parseDeliveryReceiptText([
@@ -20,6 +20,16 @@ test('lê os campos do relatório e converte o horário de Cuiabá para Brasíli
 
 test('lê o número da NFC-e como cupom preservando zeros à esquerda', () => {
   assert.deepEqual(parseCouponText('NFC-e n. 000015693 Serie 302'), { coupon: '000015693' });
+});
+
+test('usa createWorker quando o bundle Tesseract publica a API em default', () => {
+  const createWorker = () => {};
+  assert.equal(getTesseractApi({ default: { createWorker } }).createWorker, createWorker);
+  assert.equal(getTesseractApi({ createWorker }).createWorker, createWorker);
+});
+
+test('lê DOC quando o OCR confunde COO com C0O', () => {
+  assert.equal(parseDeliveryReceiptText('C0O: 35174').doc, '35174');
 });
 
 test('não confunde o próximo rótulo com telefone quando Fone(s) está vazio', () => {

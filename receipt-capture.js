@@ -5,6 +5,12 @@ function normalize(value = '') {
   return String(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 }
 
+export function getTesseractApi(module) {
+  const api = typeof module?.createWorker === 'function' ? module : module?.default;
+  if (typeof api?.createWorker !== 'function') throw new Error('A biblioteca OCR não disponibilizou createWorker.');
+  return api;
+}
+
 function lineAfterLabel(text, labels) {
   const lines = String(text || '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   for (const line of lines) {
@@ -63,7 +69,7 @@ export function parseDeliveryReceiptText(text) {
   const result = {};
   const pdv = String(text || '').match(/\bPDV\s*[:.]?\s*(\d{1,6})/i);
   if (pdv) result.pdv = pdv[1];
-  const doc = String(text || '').match(/\bCOO\s*[:.]?\s*(\d{1,10})/i);
+  const doc = String(text || '').match(/\bC\s*[O0Q]\s*[O0Q]\s*[:.]?\s*(\d{1,10})/i);
   if (doc) result.doc = doc[1];
   const client = lineAfterLabel(text, ['cliente']);
   if (client) result.clientName = client.replace(/^cliente\s*[:.]?\s*/i, '').trim();
@@ -97,7 +103,22 @@ export function parseCouponText(text) {
 async function getOcr() {
   if (!tesseractModulePromise) tesseractModulePromise = import(TESSERACT_URL);
   const module = await tesseractModulePromise;
-  return module.createWorker('por', 1);
+  return getTesseractApi(module).createWorker('por', 1);
+}
+
+async function prepareImageForOcr(image) {
+  if (typeof createImageBitmap !== 'function') return image;
+  const bitmap = await createImageBitmap(image);
+  const scale = Math.min(1, 2800 / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+  const context = canvas.getContext('2d');
+  if (!context) { bitmap.close?.(); return image; }
+  context.filter = 'grayscale(1) contrast(1.35)';
+  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close?.();
+  return new Promise((resolve) => canvas.toBlob((blob) => resolve(blob || image), 'image/jpeg', 0.96));
 }
 
 export function initDeliveryReceiptCapture(form) {
@@ -133,16 +154,19 @@ export function initDeliveryReceiptCapture(form) {
   };
   const applyRecognized = (kind, text) => {
     const fields = kind === 'coupon' ? parseCouponText(text) : parseDeliveryReceiptText(text);
+    let applied = 0;
     Object.entries(fields).forEach(([name, value]) => {
       if (name === 'neighborhood') {
         const select = form.elements.namedItem('neighborhoodId');
         const expected = normalize(value).replace(/[^a-z0-9]/g, '');
         const option = [...(select?.options || [])].find((item) => normalize(item.textContent).replace(/[^a-z0-9]/g, '') === expected);
-        if (option) setField(form, 'neighborhoodId', option.value);
-      } else setField(form, name, value);
+        if (option && setField(form, 'neighborhoodId', option.value)) applied += 1;
+      } else {
+        const replaceDefault = ['operationDate', 'entryTimeOnly'].includes(name);
+        if (setField(form, name, value, { onlyIfBlank: !replaceDefault })) applied += 1;
+      }
     });
-    const found = Object.keys(fields).length;
-    setStatus(found ? `Leitura concluída: ${found} campo(s) sugerido(s). Confira e corrija antes de registrar.` : 'Não encontrei campos com segurança. Tente outra foto ou preencha manualmente.');
+    setStatus(applied ? `Leitura concluída: ${applied} campo(s) preenchido(s). Confira e corrija antes de registrar.` : 'Não encontrei campos com segurança. Tente outra foto ou preencha manualmente.');
   };
   const recognize = async (image, kind) => {
     setStatus('Preparando o leitor de texto em português…');
@@ -150,7 +174,8 @@ export function initDeliveryReceiptCapture(form) {
       workerPromise ||= getOcr();
       const worker = await workerPromise;
       setStatus('Lendo a imagem no navegador… aguarde.');
-      const { data } = await worker.recognize(image);
+      const preparedImage = await prepareImageForOcr(image);
+      const { data } = await worker.recognize(preparedImage);
       applyRecognized(kind, data.text || '');
     } catch (error) {
       workerPromise = null;
@@ -158,7 +183,7 @@ export function initDeliveryReceiptCapture(form) {
       setStatus('Não foi possível iniciar a leitura. Verifique a internet para carregar o leitor OCR ou use o preenchimento manual. A imagem não foi enviada.');
     }
   };
-  panel.querySelectorAll('[data-receipt-kind]').forEach((button) => button.addEventListener('click', () => {
+  panel.querySelectorAll('button[data-receipt-kind]').forEach((button) => button.addEventListener('click', () => {
     activeReceipt = button.dataset.receiptKind;
     panel.querySelectorAll('[data-receipt-kind]').forEach((item) => item.setAttribute('aria-pressed', String(item === button)));
     setStatus(activeReceipt === 'delivery' ? 'Comprovante selecionado: relatório de entrega.' : 'Comprovante selecionado: cupom fiscal (NFC-e).');
@@ -169,7 +194,10 @@ export function initDeliveryReceiptCapture(form) {
       return;
     }
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+        audio: false,
+      });
       video.srcObject = stream;
       video.hidden = false;
       await video.play();
