@@ -6,13 +6,24 @@ function normalize(value = '') {
 }
 
 export function normalizeNeighborhood(value = '') {
-  return normalize(value).replace(/[^a-z0-9]/g, '').replace(/^bairro/, '');
+  return normalize(value).replace(/[^a-z0-9]/g, '').replace(/^(?:bairro|barro)/, '');
 }
 
 export function getTesseractApi(module) {
   const api = typeof module?.createWorker === 'function' ? module : module?.default;
   if (typeof api?.createWorker !== 'function') throw new Error('A biblioteca OCR não disponibilizou createWorker.');
   return api;
+}
+
+export async function configureReceiptWorker(worker) {
+  if (typeof worker?.setParameters === 'function') {
+    await worker.setParameters({ tessedit_pageseg_mode: '6' });
+  }
+  return worker;
+}
+
+function trimOcrArtifacts(value) {
+  return String(value || '').replace(/[\s|_~—–-]+$/u, '').trim();
 }
 
 function lineAfterLabel(text, labels) {
@@ -22,13 +33,13 @@ function lineAfterLabel(text, labels) {
     for (const label of labels) {
       const match = cleaned.match(new RegExp(`\\b${label}\\s*[:.]?\\s*(.+)$`, 'i'));
       if (match?.[1]?.trim() && !/^[:.]+$/.test(match[1].trim())) {
-        return line.slice(Math.max(0, line.toLowerCase().indexOf(match[1].toLowerCase()))).trim();
+        return trimOcrArtifacts(line.slice(Math.max(0, line.toLowerCase().indexOf(match[1].toLowerCase()))));
       }
       const labelMatch = cleaned.match(new RegExp(`\\b${label}\\s*[:.]?\\s*$`, 'i'));
       if (labelMatch) {
         const index = lines.indexOf(line);
         const nextLine = lines[index + 1];
-        if (nextLine && !/^\p{L}[\p{L}\p{N}\s()./-]*\s*:/u.test(nextLine)) return nextLine.trim();
+        if (nextLine && !/^\p{L}[\p{L}\p{N}\s()./-]*\s*:/u.test(nextLine)) return trimOcrArtifacts(nextLine);
       }
     }
   }
@@ -83,11 +94,13 @@ export function parseDeliveryReceiptText(text) {
   if (coo) result.doc = coo;
   const client = lineAfterLabel(text, ['cliente']);
   if (client) result.clientName = client.replace(/^cliente\s*[:.]?\s*/i, '').trim();
-  const phone = lineAfterLabel(text, ['fone(?:s|\\(s\\))?', 'telefone']);
-  if (phone) result.phone = phone.replace(/^(?:fone(?:s|\(s\))?|telefone)\s*[:.]?\s*/i, '').trim();
+  const phone = lineAfterLabel(text, ['fone(?:s|\\(s\\))', 'telefone']);
+  if (phone && phone.replace(/\D/g, '').length >= 8) {
+    result.phone = phone.replace(/^(?:fone(?:s|\(s\))?|telefone)\s*[:.]?\s*/i, '').trim();
+  }
   const address = lineAfterLabel(text, ['logradouro']);
   if (address) {
-    const cleaned = address.replace(/^logradouro\s*[:.]?\s*/i, '').trim();
+    const cleaned = address.replace(/^logradouro\s*[:.]?\s*/i, '').replace(/\s+[|_~—–-]+\s*[\p{L}]?\s*$/u, '').trim();
     const number = cleaned.match(/\s+(\d+[A-Za-z]?)\s*$/);
     if (number) {
       result.street = cleaned.slice(0, number.index).trim();
@@ -159,6 +172,7 @@ async function getOcr() {
   if (!tesseractWorkerPromise) {
     tesseractWorkerPromise = import(TESSERACT_URL)
       .then((module) => getTesseractApi(module).createWorker('por', 1))
+      .then((worker) => configureReceiptWorker(worker))
       .catch((error) => {
         tesseractWorkerPromise = null;
         throw error;

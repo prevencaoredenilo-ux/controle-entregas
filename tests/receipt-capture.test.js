@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { assessFrameQuality, findReceiptTraceBoxes, getTesseractApi, normalizeNeighborhood, parseDeliveryReceiptText, parseCouponText } from '../receipt-capture.js';
+import { assessFrameQuality, configureReceiptWorker, findReceiptTraceBoxes, getTesseractApi, normalizeNeighborhood, parseDeliveryReceiptText, parseCouponText } from '../receipt-capture.js';
 
 test('lê os campos do relatório e converte o horário de Cuiabá para Brasília', () => {
   const result = parseDeliveryReceiptText([
@@ -51,6 +51,33 @@ test('usa createWorker quando o bundle Tesseract publica a API em default', () =
 
 test('lê DOC quando o OCR confunde COO com C0O', () => {
   assert.equal(parseDeliveryReceiptText('C0O: 35174').doc, '35174');
+});
+
+test('configura o Tesseract para ler o comprovante como um bloco de texto', async () => {
+  const calls = [];
+  const worker = { async setParameters(parameters) { calls.push(parameters); } };
+  assert.equal(await configureReceiptWorker(worker), worker);
+  assert.deepEqual(calls, [{ tessedit_pageseg_mode: '6' }]);
+});
+
+test('corrige artefatos vistos no OCR da foto sem inventar telefone', () => {
+  const result = parseDeliveryReceiptText([
+    'NOVA XAVANTINA-MT, FONE (66)34015516',
+    '23/11/26 07:13:47 PDV 002 DOC 35180',
+    'Cliente: alzira —',
+    'Fone(s) e!',
+    'Logradouro: av getulio vargas sn — k',
+    'Bairro: barro vermelho —',
+    'CO0: 35174 PDV: 002',
+  ].join('\n'));
+  assert.equal(result.doc, '35174');
+  assert.equal(result.clientName, 'alzira');
+  assert.equal(result.phone, undefined);
+  assert.equal(result.street, 'av getulio vargas');
+  assert.equal(result.houseNumber, 's/n');
+  assert.equal(normalizeNeighborhood(result.neighborhood), normalizeNeighborhood('Vermelho'));
+  assert.equal(result.operationDate, '2026-11-23');
+  assert.equal(result.entryTimeOnly, '08:13');
 });
 
 test('prioriza o COO do comprovante e normaliza “Bairro Vermelho” como “Vermelho”', () => {
