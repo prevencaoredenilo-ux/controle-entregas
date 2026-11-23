@@ -1,8 +1,8 @@
 import { Deliveries, Vehicles, Drivers, DriverPayouts, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters, MAX_DELIVERY_TRIPS, normalizeTripCount, buildDeliveryTrips } from './db.js?v=13.48';
 import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, seasonalContext, SEASONAL_PREVIEW_CATALOG, SEASONAL_ANIMATION_CONFIG, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=13.48';
-import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=13.53';
+import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=13.54';
 import { exportFullExcelReport } from './excel-report.js?v=13.48';
-import { initDeliveryReceiptCapture } from './receipt-capture.js?v=13.53';
+import { initDeliveryReceiptCapture } from './receipt-capture.js?v=13.54';
 
 const DEFAULT_OPERATIONAL_TARGETS = { startMinutes:120, arrivalMinutes:210, warningMinutes:30, successTarget:90 };
 
@@ -970,7 +970,24 @@ export async function openDeliveryModal(record = null) {
         <label class="receipt-auto-read"><input type="checkbox" data-camera-auto checked /> Ler e preencher automaticamente quando a moldura ficar verde (COO → DOC; número da NFC-e → Cupom)</label>
         <div class="receipt-camera-actions"><button type="button" class="btn-ghost btn-small" data-camera-start>Abrir webcam</button><button type="button" class="btn-primary btn-small" data-camera-capture hidden>Tirar foto e ler</button><button type="button" class="btn-ghost btn-small" data-camera-stop hidden>Fechar webcam</button></div>
         <div class="receipt-camera-stage" data-quality="bad" hidden><video playsinline muted aria-label="Prévia ao vivo da webcam"></video><div class="receipt-guide" aria-hidden="true"></div><div class="receipt-frame-status" data-frame-status role="status" aria-live="polite">Enquadre o papel inteiro em pé</div></div>
-        <img id="receiptCapturePreview" alt="Prévia da foto selecionada" hidden style="width:100%;max-height:420px;object-fit:contain;border-radius:12px;margin-top:8px" />
+        <div class="receipt-preview-wrap" data-receipt-preview-wrap hidden><img id="receiptCapturePreview" alt="Prévia do documento lido" /><svg class="receipt-ocr-overlay" data-receipt-overlay aria-hidden="true" preserveAspectRatio="none"></svg></div>
+        <section class="receipt-field-tracker" data-receipt-tracker hidden aria-live="polite">
+          <header><strong>Rastreamento visual da leitura</strong><small data-tracking-summary>Aguardando leitura do documento.</small></header>
+          <p>As caixas coloridas indicam as linhas encontradas na imagem; a lista mostra o valor que foi lido em cada campo.</p>
+          <ul>
+            <li data-track-mode="delivery" data-track-key="pdv" data-track-required="true"><span>PDV/Caixa</span><b data-track-value>Aguardando leitura</b></li>
+            <li data-track-mode="delivery" data-track-key="doc" data-track-required="true"><span>DOC (COO)</span><b data-track-value>Aguardando leitura</b></li>
+            <li data-track-mode="delivery" data-track-key="clientName"><span>Cliente</span><b data-track-value>Aguardando leitura</b></li>
+            <li data-track-mode="delivery" data-track-key="phone"><span>Telefone</span><b data-track-value>Aguardando leitura</b></li>
+            <li data-track-mode="delivery" data-track-key="street" data-track-required="true"><span>Endereço</span><b data-track-value>Aguardando leitura</b></li>
+            <li data-track-mode="delivery" data-track-key="houseNumber"><span>Número</span><b data-track-value>Aguardando leitura</b></li>
+            <li data-track-mode="delivery" data-track-key="neighborhood" data-track-required="true"><span>Bairro</span><b data-track-value>Aguardando leitura</b></li>
+            <li data-track-mode="delivery" data-track-key="operationDate" data-track-required="true"><span>Data</span><b data-track-value>Aguardando leitura</b></li>
+            <li data-track-mode="delivery" data-track-key="entryTimeOnly" data-track-required="true"><span>Hora</span><b data-track-value>Aguardando leitura</b></li>
+            <li data-track-mode="coupon" data-track-key="coupon" data-track-required="true"><span>NFC-e/Cupom</span><b data-track-value>Aguardando leitura</b></li>
+            <li data-track-mode="coupon" data-track-key="doc"><span>DOC (COO)</span><b data-track-value>Aguardando leitura</b></li>
+          </ul>
+        </section>
         <div class="receipt-file-inputs"><label>Selecionar foto do relatório<input type="file" accept="image/*" capture="environment" data-receipt-kind="delivery" /></label><label>Selecionar foto do cupom<input type="file" accept="image/*" capture="environment" data-receipt-kind="coupon" /></label></div>
         <small id="receiptCaptureStatus" role="status" aria-live="polite">Escolha um comprovante, abra a webcam ou selecione uma foto.</small>
       </section>` : ''}

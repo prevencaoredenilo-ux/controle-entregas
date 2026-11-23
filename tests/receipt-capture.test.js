@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { assessFrameQuality, getTesseractApi, normalizeNeighborhood, parseDeliveryReceiptText, parseCouponText } from '../receipt-capture.js';
+import { assessFrameQuality, findReceiptTraceBoxes, getTesseractApi, normalizeNeighborhood, parseDeliveryReceiptText, parseCouponText } from '../receipt-capture.js';
 
 test('lê os campos do relatório e converte o horário de Cuiabá para Brasília', () => {
   const result = parseDeliveryReceiptText([
@@ -24,6 +24,23 @@ test('lê o número da NFC-e como cupom preservando zeros à esquerda', () => {
 
 test('lê COO como DOC junto com o número NFC-e quando os dois estão no cupom', () => {
   assert.deepEqual(parseCouponText('NFC-e n. 000015693 Série 302 COO: 35174'), { coupon: '000015693', doc: '35174' });
+});
+
+test('localiza visualmente as linhas da NFC-e e do COO no cupom', () => {
+  const boxes = findReceiptTraceBoxes('coupon', [
+    { text: 'NFC-e n. 000015693', bbox: { x0: 10, y0: 20, x1: 230, y1: 48 } },
+    { text: 'COO: 35174', bbox: { x0: 15, y0: 70, x1: 180, y1: 96 } },
+  ], { coupon: '000015693', doc: '35174' });
+  assert.deepEqual(boxes.map(({ key }) => key), ['coupon', 'doc']);
+  assert.deepEqual(boxes[1], { key: 'doc', label: 'COO → DOC', color: '#9333ea', x0: 15, y0: 70, x1: 180, y1: 96 });
+});
+
+test('localiza PDV, COO e cliente no relatório de entrega', () => {
+  const boxes = findReceiptTraceBoxes('delivery', [
+    { text: 'PDV: 002 COO: 35174', bbox: { x0: 8, y0: 12, x1: 240, y1: 42 } },
+    { text: 'Cliente: Maria Silva', bbox: { x0: 8, y0: 50, x1: 210, y1: 80 } },
+  ], { pdv: '002', doc: '35174', clientName: 'Maria Silva' });
+  assert.deepEqual(boxes.map(({ key }) => key), ['pdv', 'doc', 'clientName']);
 });
 
 test('usa createWorker quando o bundle Tesseract publica a API em default', () => {

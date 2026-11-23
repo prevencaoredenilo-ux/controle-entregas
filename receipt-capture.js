@@ -114,6 +114,47 @@ export function parseCouponText(text) {
   return fields;
 }
 
+const TRACE_SPECS = {
+  delivery: [
+    ['pdv', 'PDV', /\bPDV\b/i, '#2563eb'],
+    ['doc', 'COO → DOC', /\bC\s*[O0Q]\s*[O0Q]\b/i, '#9333ea'],
+    ['clientName', 'Cliente', /\bCLIENTE\b/i, '#0891b2'],
+    ['phone', 'Telefone', /\b(?:FONE|TELEFONE)\b/i, '#ea580c'],
+    ['street', 'Endereço', /\b(?:LOGRADOURO|RUA|AVENIDA|AV\.)\b/i, '#16a34a'],
+    ['houseNumber', 'Número', /\b(?:LOGRADOURO|RUA|AVENIDA|AV\.)\b/i, '#65a30d'],
+    ['neighborhood', 'Bairro', /\bBAIRRO\b/i, '#db2777'],
+    ['operationDate', 'Data', /\b\d{2}\/\d{2}\/\d{2,4}\b/, '#ca8a04'],
+    ['entryTimeOnly', 'Hora', /\b\d{2}:\d{2}(?::\d{2})?\b/, '#dc2626'],
+  ],
+  coupon: [
+    ['coupon', 'NFC-e → Cupom', /\bNFC\s*[-–]?\s*E\b/i, '#2563eb'],
+    ['doc', 'COO → DOC', /\bC\s*[O0Q]\s*[O0Q]\b/i, '#9333ea'],
+  ],
+};
+
+export function findReceiptTraceBoxes(kind, lines, fields) {
+  const specs = TRACE_SPECS[kind] || [];
+  return specs.flatMap(([key, label, labelPattern, color]) => {
+    const value = normalize(fields?.[key] || '').replace(/[^a-z0-9]/g, '');
+    if (!value) return [];
+    const line = (lines || []).find((item) => {
+      const text = String(item?.text || '');
+      const normalizedText = normalize(text).replace(/[^a-z0-9]/g, '');
+      return labelPattern.test(text) || (value.length >= 3 && normalizedText.includes(value));
+    });
+    const bbox = line?.bbox;
+    if (!bbox || ![bbox.x0, bbox.y0, bbox.x1, bbox.y1].every(Number.isFinite) || bbox.x1 <= bbox.x0 || bbox.y1 <= bbox.y0) return [];
+    return [{ key, label, color, x0: bbox.x0, y0: bbox.y0, x1: bbox.x1, y1: bbox.y1 }];
+  });
+}
+
+function getOcrLines(data) {
+  if (Array.isArray(data?.lines) && data.lines.length) return data.lines;
+  const nestedLines = (data?.blocks || []).flatMap((block) => (block.paragraphs || []).flatMap((paragraph) => paragraph.lines || []));
+  if (nestedLines.length) return nestedLines;
+  return data?.words || [];
+}
+
 async function getOcr() {
   if (!tesseractWorkerPromise) {
     tesseractWorkerPromise = import(TESSERACT_URL)
@@ -127,18 +168,32 @@ async function getOcr() {
 }
 
 async function prepareImageForOcr(image) {
-  if (typeof createImageBitmap !== 'function') return image;
+  if (typeof createImageBitmap !== 'function') {
+    const dimensions = await new Promise((resolve) => {
+      const url = URL.createObjectURL(image);
+      const probe = new Image();
+      probe.onload = () => { URL.revokeObjectURL(url); resolve({ width: probe.naturalWidth, height: probe.naturalHeight }); };
+      probe.onerror = () => { URL.revokeObjectURL(url); resolve({ width: 0, height: 0 }); };
+      probe.src = url;
+    });
+    return { image, ...dimensions };
+  }
   const bitmap = await createImageBitmap(image);
+  const originalWidth = bitmap.width;
+  const originalHeight = bitmap.height;
   const scale = Math.min(1, 2800 / Math.max(bitmap.width, bitmap.height));
   const canvas = document.createElement('canvas');
   canvas.width = Math.max(1, Math.round(bitmap.width * scale));
   canvas.height = Math.max(1, Math.round(bitmap.height * scale));
   const context = canvas.getContext('2d');
-  if (!context) { bitmap.close?.(); return image; }
+  if (!context) { bitmap.close?.(); return { image, width: originalWidth, height: originalHeight }; }
   context.filter = 'grayscale(1) contrast(1.35)';
   context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
   bitmap.close?.();
-  return new Promise((resolve) => canvas.toBlob((blob) => resolve(blob || image), 'image/jpeg', 0.96));
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.96));
+  return blob
+    ? { image: blob, width: canvas.width, height: canvas.height }
+    : { image, width: originalWidth, height: originalHeight };
 }
 
 export function assessFrameQuality(imageData) {
@@ -185,6 +240,11 @@ export function initDeliveryReceiptCapture(form) {
   const video = panel?.querySelector('video');
   const cameraStage = panel?.querySelector('.receipt-camera-stage');
   const preview = panel?.querySelector('#receiptCapturePreview');
+  const previewWrap = panel?.querySelector('[data-receipt-preview-wrap]');
+  const traceOverlay = panel?.querySelector('[data-receipt-overlay]');
+  const tracker = panel?.querySelector('[data-receipt-tracker]');
+  const trackerSummary = panel?.querySelector('[data-tracking-summary]');
+  const trackerRows = [...(panel?.querySelectorAll('[data-track-key]') || [])];
   const status = panel?.querySelector('#receiptCaptureStatus');
   const frameStatus = panel?.querySelector('[data-frame-status]');
   const autoReadToggle = panel?.querySelector('[data-camera-auto]');
@@ -206,12 +266,96 @@ export function initDeliveryReceiptCapture(form) {
   qualityCanvas.height = 90;
   const qualityContext = qualityCanvas.getContext('2d', { willReadFrequently: true });
   const setStatus = (message) => { status.textContent = message; };
+  const clearTraceOverlay = () => traceOverlay?.replaceChildren();
+  const resetTracker = (kind = activeReceipt) => {
+    if (!tracker) return;
+    tracker.hidden = false;
+    if (trackerSummary) trackerSummary.textContent = kind === 'coupon' ? 'Aguardando leitura do cupom NFC-e.' : 'Aguardando leitura do relatório.';
+    trackerRows.forEach((row) => {
+      row.hidden = row.dataset.trackMode !== kind;
+      row.dataset.trackState = 'waiting';
+      const value = row.querySelector('[data-track-value]');
+      if (value) value.textContent = 'Aguardando leitura';
+    });
+    clearTraceOverlay();
+  };
+  const updateTracker = (kind, fields = {}, { error = false, traceCount = 0 } = {}) => {
+    if (!tracker) return;
+    tracker.hidden = false;
+    const visibleRows = trackerRows.filter((row) => row.dataset.trackMode === kind);
+    let found = 0;
+    visibleRows.forEach((row) => {
+      row.hidden = false;
+      const value = String(fields[row.dataset.trackKey] || '').trim();
+      const output = row.querySelector('[data-track-value]');
+      if (value) {
+        row.dataset.trackState = 'found';
+        if (output) output.textContent = `Lido: ${value}`;
+        found += 1;
+      } else if (error) {
+        row.dataset.trackState = 'waiting';
+        if (output) output.textContent = 'Falha ao ler';
+      } else if (row.dataset.trackRequired === 'true') {
+        row.dataset.trackState = 'missing';
+        if (output) output.textContent = 'Não localizado';
+      } else {
+        row.dataset.trackState = 'waiting';
+        if (output) output.textContent = 'Não consta na imagem';
+      }
+    });
+    if (trackerSummary) {
+      trackerSummary.textContent = error
+        ? 'OCR indisponível; tente novamente ou confira a foto.'
+        : traceCount
+          ? `${found} campo(s) lido(s) · ${traceCount} marcação(ões) colorida(s). Confira o formulário.`
+          : found
+            ? `${found} campo(s) lido(s); posição visual indisponível. Confira a lista e o formulário.`
+            : 'Nenhum campo foi localizado. Ajuste o documento e tente outra vez.';
+    }
+  };
+  const drawTraceOverlay = (kind, data, fields, width, height) => {
+    if (!traceOverlay || !width || !height) return 0;
+    const boxes = findReceiptTraceBoxes(kind, getOcrLines(data), fields);
+    traceOverlay.replaceChildren();
+    traceOverlay.setAttribute('viewBox', `0 0 ${width} ${height}`);
+    const namespace = 'http://www.w3.org/2000/svg';
+    const fontSize = Math.max(16, width * 0.022);
+    boxes.forEach((box) => {
+      const rect = document.createElementNS(namespace, 'rect');
+      rect.setAttribute('x', box.x0);
+      rect.setAttribute('y', box.y0);
+      rect.setAttribute('width', box.x1 - box.x0);
+      rect.setAttribute('height', box.y1 - box.y0);
+      rect.setAttribute('rx', Math.max(4, fontSize * 0.18));
+      rect.setAttribute('fill', box.color);
+      rect.setAttribute('fill-opacity', '0.12');
+      rect.setAttribute('stroke', box.color);
+      rect.setAttribute('stroke-width', Math.max(3, width * 0.003));
+      rect.dataset.traceKey = box.key;
+      traceOverlay.append(rect);
+      const label = document.createElementNS(namespace, 'text');
+      label.setAttribute('x', Math.max(2, box.x0 + fontSize * 0.15));
+      label.setAttribute('y', Math.max(fontSize, box.y0 - fontSize * 0.25));
+      label.setAttribute('font-size', fontSize);
+      label.setAttribute('font-weight', '800');
+      label.setAttribute('fill', box.color);
+      label.setAttribute('stroke', '#ffffff');
+      label.setAttribute('stroke-width', Math.max(3, fontSize * 0.18));
+      label.setAttribute('paint-order', 'stroke');
+      label.dataset.traceKey = box.key;
+      label.textContent = box.label;
+      traceOverlay.append(label);
+    });
+    return boxes.length;
+  };
   const setPreview = (image) => {
-    if (!preview) return;
+    if (!preview || !previewWrap) return;
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     previewUrl = URL.createObjectURL(image);
     preview.src = previewUrl;
     preview.hidden = false;
+    previewWrap.hidden = false;
+    resetTracker(activeReceipt);
   };
   const stopCamera = () => {
     if (qualityTimer) clearInterval(qualityTimer);
@@ -242,17 +386,22 @@ export function initDeliveryReceiptCapture(form) {
       }
     });
     setStatus(applied ? `Leitura concluída: ${applied} campo(s) preenchido(s). Confira e corrija antes de registrar.` : found ? 'Leitura concluída, mas os campos já tinham valor. Confira e corrija antes de registrar.' : 'Não encontrei campos com segurança. Tente outra foto ou preencha manualmente.');
-    return found > 0;
+    return { fields, found: found > 0 };
   };
   const recognize = async (image, kind) => {
     setStatus('Preparando o leitor de texto em português…');
     try {
-      const [worker, preparedImage] = await Promise.all([getOcr(), prepareImageForOcr(image)]);
+      const [worker, prepared] = await Promise.all([getOcr(), prepareImageForOcr(image)]);
       setStatus('Lendo a imagem no navegador… aguarde.');
-      const { data } = await worker.recognize(preparedImage);
-      return applyRecognized(kind, data.text || '');
+      const { data } = await worker.recognize(prepared.image);
+      const result = applyRecognized(kind, data.text || '');
+      const traceCount = drawTraceOverlay(kind, data, result.fields, prepared.width, prepared.height);
+      updateTracker(kind, result.fields, { traceCount });
+      return result.found;
     } catch (error) {
       console.error('OCR local falhou:', error);
+      clearTraceOverlay();
+      updateTracker(kind, {}, { error: true });
       setStatus('Não foi possível iniciar a leitura. Verifique a internet para carregar o leitor OCR ou use o preenchimento manual. A imagem não foi enviada.');
       return false;
     }
@@ -330,6 +479,9 @@ export function initDeliveryReceiptCapture(form) {
   };
   panel.querySelectorAll('button[data-receipt-kind]').forEach((button) => button.addEventListener('click', () => {
     activeReceipt = button.dataset.receiptKind;
+    if (previewWrap) previewWrap.hidden = true;
+    if (preview) preview.hidden = true;
+    resetTracker(activeReceipt);
     readableSince = 0;
     autoReadDone = false;
     waitingForReframe = false;
@@ -358,6 +510,8 @@ export function initDeliveryReceiptCapture(form) {
       startButton.hidden = true;
       captureButton.hidden = false;
       stopButton.hidden = false;
+      if (previewWrap) previewWrap.hidden = true;
+      resetTracker(activeReceipt);
       autoReadDone = false;
       readableSince = 0;
       if (qualityTimer) clearInterval(qualityTimer);
@@ -365,7 +519,7 @@ export function initDeliveryReceiptCapture(form) {
       qualityTimer = setInterval(inspectFrame, 250);
       setStatus(autoReadToggle?.checked ? (activeReceipt === 'coupon' ? 'Coloque somente o cupom NFC-e inteiro na moldura; mantenha-o imóvel quando ela ficar verde.' : 'Coloque o comprovante inteiro na moldura; mantenha-o imóvel quando ela ficar verde para preencher os campos.') : 'Enquadre o documento inteiro na moldura e use “Tirar foto e ler”.');
       warmup.then((worker) => {
-      if (worker && stream && !captureBusy) setStatus(autoReadToggle?.checked ? 'Leitor pronto. Centralize o documento; a leitura começa automaticamente quando a moldura ficar verde.' : 'Leitor pronto. Enquadre o documento e use “Tirar foto e ler”.');
+        if (worker && stream && !captureBusy) setStatus(autoReadToggle?.checked ? 'Leitor pronto. Centralize o documento; a leitura começa automaticamente quando a moldura ficar verde.' : 'Leitor pronto. Enquadre o documento e use “Tirar foto e ler”.');
       });
     } catch (error) {
       console.warn('Webcam não pôde ser aberta:', error);
