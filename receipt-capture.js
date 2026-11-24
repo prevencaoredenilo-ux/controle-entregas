@@ -290,6 +290,33 @@ function sharpenCanvas(context, canvas) {
   }
 }
 
+function estimatePaperRotation(rgba, width, bounds) {
+  if (!rgba || !bounds || !width) return 0;
+  const centerForBand = (from, to) => {
+    let sum = 0; let count = 0;
+    for (let y = from; y <= to; y += 1) {
+      let left = width; let right = -1;
+      for (let x = bounds.x; x < bounds.x + bounds.width; x += 1) {
+        const offset = (y * width + x) * 4;
+        const r = rgba[offset]; const g = rgba[offset + 1]; const b = rgba[offset + 2];
+        if ((r + g + b) / 3 > 145 && Math.max(r, g, b) - Math.min(r, g, b) <= 85) {
+          left = Math.min(left, x);
+          right = Math.max(right, x);
+        }
+      }
+      if (right >= left) { sum += (left + right) / 2; count += 1; }
+    }
+    return count ? sum / count : null;
+  };
+  const band = Math.max(1, Math.floor(bounds.height * 0.12));
+  const top = centerForBand(bounds.y + 2, Math.min(bounds.y + band, bounds.y + bounds.height - 1));
+  const bottom = centerForBand(Math.max(bounds.y, bounds.y + bounds.height - band), bounds.y + bounds.height - 2);
+  if (top == null || bottom == null) return 0;
+  const slope = (bottom - top) / Math.max(1, bounds.height - band);
+  const angle = Math.atan(slope);
+  return Math.abs(angle) <= 0.22 ? angle : 0;
+}
+
 async function prepareImageForOcr(image) {
   if (typeof createImageBitmap !== 'function') {
     const dimensions = await new Promise((resolve) => {
@@ -311,20 +338,26 @@ async function prepareImageForOcr(image) {
   probeCanvas.height = probeHeight;
   const probeContext = probeCanvas.getContext('2d', { willReadFrequently: true });
   probeContext?.drawImage(bitmap, 0, 0, probeWidth, probeHeight);
-  const paper = probeContext ? findReceiptPaperBounds(probeContext.getImageData(0, 0, probeWidth, probeHeight).data, probeWidth, probeHeight) : null;
+  const probePixels = probeContext?.getImageData(0, 0, probeWidth, probeHeight).data;
+  const paper = probePixels ? findReceiptPaperBounds(probePixels, probeWidth, probeHeight) : null;
   const sourceX = paper ? Math.floor(paper.x * bitmap.width / probeWidth) : 0;
   const sourceY = paper ? Math.floor(paper.y * bitmap.height / probeHeight) : 0;
   const sourceWidth = paper ? Math.min(bitmap.width - sourceX, Math.ceil(paper.width * bitmap.width / probeWidth)) : bitmap.width;
   const sourceHeight = paper ? Math.min(bitmap.height - sourceY, Math.ceil(paper.height * bitmap.height / probeHeight)) : bitmap.height;
-  const scale = Math.min(2, 2800 / Math.max(sourceWidth, sourceHeight));
+  const angle = paper && probePixels ? estimatePaperRotation(probePixels, probeWidth, paper) : 0;
+  const rotatedWidth = Math.ceil(Math.abs(sourceWidth * Math.cos(angle)) + Math.abs(sourceHeight * Math.sin(angle)));
+  const rotatedHeight = Math.ceil(Math.abs(sourceHeight * Math.cos(angle)) + Math.abs(sourceWidth * Math.sin(angle)));
+  const scale = Math.min(2, 4000 / Math.max(rotatedWidth, rotatedHeight));
   const canvas = document.createElement('canvas');
-  canvas.width = Math.max(1, Math.round(sourceWidth * scale));
-  canvas.height = Math.max(1, Math.round(sourceHeight * scale));
+  canvas.width = Math.max(1, Math.round(rotatedWidth * scale));
+  canvas.height = Math.max(1, Math.round(rotatedHeight * scale));
   const context = canvas.getContext('2d');
   if (!context) { bitmap.close?.(); return { image, width: originalWidth, height: originalHeight }; }
   context.imageSmoothingQuality = 'high';
-  context.filter = 'grayscale(1) contrast(1.5)';
-  context.drawImage(bitmap, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, canvas.width, canvas.height);
+  context.filter = 'grayscale(1) contrast(1.52) brightness(1.03) blur(0.25px)';
+  context.translate(canvas.width / 2, canvas.height / 2);
+  context.rotate(-angle);
+  context.drawImage(bitmap, sourceX, sourceY, sourceWidth, sourceHeight, -sourceWidth * scale / 2, -sourceHeight * scale / 2, sourceWidth * scale, sourceHeight * scale);
   sharpenCanvas(context, canvas);
   bitmap.close?.();
   const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
@@ -388,6 +421,93 @@ export function assessFrameQuality(imageData) {
   return { readable: true, message: 'Enquadramento bom — mantenha imóvel.' };
 }
 
+export function analyzeReceiptFrame(imageData) {
+  const { data, width, height } = imageData || {};
+  if (!data || !width || !height) return { state: 'bad', message: 'Aguardando imagem da webcam…', present: false, sharpness: 0 };
+  const mask = new Uint8Array(width * height);
+  const luminanceAt = (x, y) => {
+    const offset = (y * width + x) * 4;
+    return data[offset] * 0.2126 + data[offset + 1] * 0.7152 + data[offset + 2] * 0.0722;
+  };
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const offset = (y * width + x) * 4;
+      const high = Math.max(data[offset], data[offset + 1], data[offset + 2]);
+      const low = Math.min(data[offset], data[offset + 1], data[offset + 2]);
+      if (luminanceAt(x, y) > 158 && high - low < 92) mask[y * width + x] = 1;
+    }
+  }
+  const rowHits = Array.from({ length: height }, (_, y) => {
+    let count = 0;
+    for (let x = 0; x < width; x += 1) count += mask[y * width + x];
+    return count;
+  });
+  const maxRow = Math.max(...rowHits);
+  const rows = rowHits.map((hits) => hits >= Math.max(4, maxRow * 0.20));
+  const rowSpan = longestSpan(rows, 2);
+  if (!rowSpan || rowSpan.end - rowSpan.start < height * 0.28) {
+    return { state: 'bad', message: 'Coloque o cupom dentro do retângulo', present: false, sharpness: 0 };
+  }
+  const colHits = Array.from({ length: width }, (_, x) => {
+    let count = 0;
+    for (let y = rowSpan.start; y <= rowSpan.end; y += 1) count += mask[y * width + x];
+    return count;
+  });
+  const maxCol = Math.max(...colHits);
+  const columns = colHits.map((hits) => hits >= Math.max(3, maxCol * 0.22));
+  const colSpan = longestSpan(columns, 2);
+  if (!colSpan) return { state: 'bad', message: 'Coloque o cupom dentro do retângulo', present: false, sharpness: 0 };
+  const box = { x0: colSpan.start, x1: colSpan.end, y0: rowSpan.start, y1: rowSpan.end };
+  const boxWidth = box.x1 - box.x0 + 1;
+  const boxHeight = box.y1 - box.y0 + 1;
+  const ratio = boxWidth / boxHeight;
+  if (ratio > 0.9 || boxHeight < height * 0.28 || boxWidth < width * 0.035) {
+    return { state: 'bad', message: 'Coloque o cupom em pé dentro do retângulo', present: false, sharpness: 0 };
+  }
+  const centerX = (box.x0 + box.x1) / (2 * width);
+  const centerY = (box.y0 + box.y1) / (2 * height);
+  const heightRatio = boxHeight / height;
+  if (heightRatio < 0.60) return { state: 'near', message: 'Aproxime o cupom', present: true, box, sharpness: 0 };
+  if (heightRatio > 0.94) return { state: 'near', message: 'Afaste o cupom', present: true, box, sharpness: 0 };
+  if (centerX < 0.40) return { state: 'near', message: 'Mova para a direita', present: true, box, sharpness: 0 };
+  if (centerX > 0.60) return { state: 'near', message: 'Mova para a esquerda', present: true, box, sharpness: 0 };
+  if (centerY < 0.44) return { state: 'near', message: 'Mova para baixo', present: true, box, sharpness: 0 };
+  if (centerY > 0.56) return { state: 'near', message: 'Mova para cima', present: true, box, sharpness: 0 };
+  let topCenter = 0; let bottomCenter = 0;
+  for (let y = box.y0; y < box.y0 + boxHeight * 0.15; y += 1) {
+    let sum = 0; let n = 0;
+    for (let x = box.x0; x <= box.x1; x += 1) if (mask[y * width + x]) { sum += x; n += 1; }
+    if (n) topCenter += sum / n;
+  }
+  for (let y = box.y1 - Math.floor(boxHeight * 0.15); y <= box.y1; y += 1) {
+    let sum = 0; let n = 0;
+    for (let x = box.x0; x <= box.x1; x += 1) if (mask[y * width + x]) { sum += x; n += 1; }
+    if (n) bottomCenter += sum / n;
+  }
+  if (Math.abs(topCenter - bottomCenter) / Math.max(1, boxWidth) > 0.14) {
+    return { state: 'near', message: 'Endireite o cupom', present: true, box, sharpness: 0 };
+  }
+  let luminanceSum = 0; let glare = 0; let edgeSum = 0; let edgeCount = 0;
+  const xStart = Math.max(box.x0, Math.floor(width * 0.31));
+  const xEnd = Math.min(box.x1, Math.ceil(width * 0.69));
+  for (let y = box.y0 + 1; y < box.y1; y += 1) {
+    for (let x = xStart + 1; x < xEnd; x += 1) {
+      const value = luminanceAt(x, y);
+      luminanceSum += value;
+      if (value > 248) glare += 1;
+      edgeSum += Math.abs(4 * value - luminanceAt(x - 1, y) - luminanceAt(x + 1, y) - luminanceAt(x, y - 1) - luminanceAt(x, y + 1));
+      edgeCount += 1;
+    }
+  }
+  const average = luminanceSum / Math.max(1, edgeCount);
+  const glareRatio = glare / Math.max(1, edgeCount);
+  const sharpness = edgeSum / Math.max(1, edgeCount);
+  if (average < 70) return { state: 'near', message: 'Pouca luz', present: true, box, sharpness };
+  if (glareRatio > 0.12 || average > 249) return { state: 'near', message: 'Reflexo no papel', present: true, box, sharpness };
+  if (sharpness < 18) return { state: 'near', message: 'Fora de foco — afaste ou aproxime o cupom até ficar nítido', present: true, box, sharpness };
+  return { state: 'good', message: 'Nítido — segure parado…', present: true, box, sharpness };
+}
+
 export function initDeliveryReceiptCapture(form) {
   const panel = form.querySelector('#receiptCapturePanel');
   const video = panel?.querySelector('video');
@@ -400,6 +520,7 @@ export function initDeliveryReceiptCapture(form) {
   const trackerRows = [...(panel?.querySelectorAll('[data-track-key]') || [])];
   const status = panel?.querySelector('#receiptCaptureStatus');
   const frameStatus = panel?.querySelector('[data-frame-status]');
+  const focusHint = panel?.querySelector('[data-focus-hint]');
   const autoReadToggle = panel?.querySelector('[data-camera-auto]');
   const startButton = panel?.querySelector('[data-camera-start]');
   const captureButton = panel?.querySelector('[data-camera-capture]');
@@ -419,11 +540,14 @@ export function initDeliveryReceiptCapture(form) {
   let qualityTimer = null;
   let readableSince = 0;
   let autoReadDone = false;
-  let waitingForReframe = false;
+  let captureLocked = false;
+  let noPaperSince = 0;
+  let previousBox = null;
+  let audioContext = null;
   let captureBusy = false;
   const qualityCanvas = document.createElement('canvas');
-  qualityCanvas.width = 160;
-  qualityCanvas.height = 90;
+  qualityCanvas.width = 320;
+  qualityCanvas.height = 180;
   const qualityContext = qualityCanvas.getContext('2d', { willReadFrequently: true });
   const setStatus = (message) => { status.textContent = message; };
   const clearTraceOverlay = () => traceOverlay?.replaceChildren();
@@ -521,7 +645,9 @@ export function initDeliveryReceiptCapture(form) {
     if (qualityTimer) clearInterval(qualityTimer);
     qualityTimer = null;
     readableSince = 0;
-    waitingForReframe = false;
+    captureLocked = false;
+    noPaperSince = 0;
+    previousBox = null;
     stream?.getTracks().forEach((track) => track.stop());
     stream = null;
     video.srcObject = null;
@@ -575,33 +701,72 @@ export function initDeliveryReceiptCapture(form) {
       return false;
     }
   };
-  const captureFrame = async (kind = activeReceipt, { automatic = false } = {}) => {
-    if (!video.videoWidth || captureBusy) return;
-    captureBusy = true;
-    autoReadDone = true;
-    if (captureButton) captureButton.disabled = true;
-    try {
+  const captureSharpestBurst = async () => {
+    const frames = [];
+    for (let index = 0; index < 5; index += 1) {
+      if (!video.videoWidth || !video.videoHeight) break;
       const canvas = document.createElement('canvas');
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
-      canvas.getContext('2d').drawImage(video, 0, 0);
-      const image = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.92));
+      const context = canvas.getContext('2d');
+      if (!context) break;
+      context.drawImage(video, 0, 0);
+      const image = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.96));
+      if (image) {
+        qualityContext.drawImage(video, 0, 0, qualityCanvas.width, qualityCanvas.height);
+        const score = analyzeReceiptFrame(qualityContext.getImageData(0, 0, qualityCanvas.width, qualityCanvas.height)).sharpness;
+        frames.push({ image, score });
+      }
+      if (index < 4) await new Promise((resolve) => setTimeout(resolve, 90));
+    }
+    frames.sort((first, second) => second.score - first.score);
+    return frames[0]?.image || null;
+  };
+  const playCaptureFeedback = () => {
+    try {
+      if (audioContext?.state === 'running') {
+        const oscillator = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        oscillator.frequency.value = 880;
+        gain.gain.setValueAtTime(0.0001, audioContext.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.14, audioContext.currentTime + 0.012);
+        gain.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.16);
+        oscillator.connect(gain).connect(audioContext.destination);
+        oscillator.start();
+        oscillator.stop(audioContext.currentTime + 0.17);
+      }
+    } catch (error) { console.debug('Aviso sonoro indisponível:', error); }
+    cameraStage.dataset.captureFlash = 'true';
+    setTimeout(() => { delete cameraStage.dataset.captureFlash; }, 240);
+  };
+  const captureFrame = async (kind = activeReceipt, { automatic = false } = {}) => {
+    if (!video.videoWidth || captureBusy) return;
+    if (captureLocked) {
+      if (frameStatus) frameStatus.textContent = 'Já capturei este cupom. Retire-o da frente da câmera para liberar outra foto.';
+      return;
+    }
+    captureBusy = true;
+    autoReadDone = true;
+    captureLocked = true;
+    if (frameStatus) frameStatus.textContent = 'Capturando 5 quadros — escolhendo o mais nítido…';
+    if (captureButton) captureButton.disabled = true;
+    try {
+      playCaptureFeedback();
+      const image = await captureSharpestBurst();
       if (!image) throw new Error('Não consegui capturar a imagem da webcam.');
       setPreview(image);
       const recognized = await recognize(image, kind);
       if (automatic) {
-        waitingForReframe = !recognized;
-        cameraStage.dataset.quality = recognized ? 'good' : 'bad';
-        if (frameStatus) frameStatus.textContent = recognized ? 'Leitura concluída — confira os campos.' : 'Não encontrei os dados esperados. Retire e reposicione o documento para tentar novamente.';
+        cameraStage.dataset.quality = recognized ? 'good' : 'near';
+        if (frameStatus) frameStatus.textContent = recognized ? 'Leitura concluída — retire o cupom para liberar outra captura.' : 'Não encontrei os dados esperados — confira a foto ou retire o cupom para tentar novamente.';
       }
       return recognized;
     } catch (error) {
       console.error('Captura da webcam falhou:', error);
       setStatus('Não consegui capturar a imagem. Tente novamente ou selecione uma foto.');
       if (automatic) {
-        waitingForReframe = true;
-        cameraStage.dataset.quality = 'bad';
-        if (frameStatus) frameStatus.textContent = 'Captura falhou. Retire e reposicione o documento para tentar novamente.';
+        cameraStage.dataset.quality = 'near';
+        if (frameStatus) frameStatus.textContent = 'Captura falhou. Retire o cupom e posicione novamente para liberar outra tentativa.';
       }
       return false;
     } finally {
@@ -613,33 +778,47 @@ export function initDeliveryReceiptCapture(form) {
     if (!stream || video.readyState < 2 || !qualityContext) return;
     try {
       qualityContext.drawImage(video, 0, 0, qualityCanvas.width, qualityCanvas.height);
-      const quality = assessFrameQuality(qualityContext.getImageData(0, 0, qualityCanvas.width, qualityCanvas.height));
-      if (!quality.readable) {
-        if (waitingForReframe || autoReadDone) {
-          waitingForReframe = false;
-          autoReadDone = false;
+      const quality = analyzeReceiptFrame(qualityContext.getImageData(0, 0, qualityCanvas.width, qualityCanvas.height));
+      if (!quality.present) {
+        cameraStage.dataset.quality = 'bad';
+        if (frameStatus) frameStatus.textContent = captureLocked ? 'Retire o cupom da frente da câmera para liberar a próxima captura.' : quality.message;
+        if (captureLocked) {
+          if (!noPaperSince) noPaperSince = performance.now();
+          if (performance.now() - noPaperSince >= 650) {
+            captureLocked = false;
+            autoReadDone = false;
+            noPaperSince = 0;
+          }
         }
-        cameraStage.dataset.quality = 'bad';
-        if (frameStatus) frameStatus.textContent = quality.message;
+        previousBox = null;
         readableSince = 0;
         return;
       }
-      if (waitingForReframe) {
-        cameraStage.dataset.quality = 'bad';
-        if (frameStatus) frameStatus.textContent = 'Retire e reposicione o documento para tentar outra vez.';
+      noPaperSince = 0;
+      if (captureLocked) {
+        cameraStage.dataset.quality = 'good';
+        if (frameStatus) frameStatus.textContent = 'Captura feita. Retire o cupom para liberar outra captura.';
         readableSince = 0;
         return;
       }
-      cameraStage.dataset.quality = quality.readable ? 'good' : 'bad';
+      cameraStage.dataset.quality = quality.state;
       if (frameStatus) frameStatus.textContent = quality.message;
-      if (quality.readable && autoReadToggle?.checked && !autoReadDone) {
-        if (!readableSince) readableSince = performance.now();
+      if (quality.state === 'good' && autoReadToggle?.checked && !autoReadDone) {
+        const box = quality.box;
+        const stable = previousBox && Math.abs((box.x0 + box.x1) - (previousBox.x0 + previousBox.x1)) < qualityCanvas.width * 0.035
+          && Math.abs((box.y0 + box.y1) - (previousBox.y0 + previousBox.y1)) < qualityCanvas.height * 0.035
+          && Math.abs((box.y1 - box.y0) - (previousBox.y1 - previousBox.y0)) < qualityCanvas.height * 0.04;
+        if (!stable || !readableSince) readableSince = performance.now();
+        previousBox = box;
         if (performance.now() - readableSince >= 1000) {
           autoReadDone = true;
-          setStatus(activeReceipt === 'coupon' ? 'Cupom enquadrado. Lendo o número da NFC-e…' : 'Comprovante enquadrado. Lendo e preenchendo os campos…');
+          setStatus('Cupom estável. Capturando e lendo localmente…');
           void captureFrame(activeReceipt, { automatic: true });
-        } else if (frameStatus) frameStatus.textContent = 'Enquadramento adequado — mantenha imóvel para leitura automática.';
-      } else readableSince = 0;
+        } else if (frameStatus) frameStatus.textContent = 'Segure parado…';
+      } else {
+        readableSince = 0;
+        previousBox = quality.box || null;
+      }
     } catch (error) {
       cameraStage.dataset.quality = 'bad';
       if (frameStatus) frameStatus.textContent = 'Aguardando imagem da webcam…';
@@ -653,11 +832,11 @@ export function initDeliveryReceiptCapture(form) {
     resetTracker(activeReceipt);
     readableSince = 0;
     autoReadDone = false;
-    waitingForReframe = false;
+    previousBox = null;
     panel.querySelectorAll('[data-receipt-kind]').forEach((item) => item.setAttribute('aria-pressed', String(item === button)));
     setStatus(activeReceipt === 'delivery' ? 'Relatório selecionado: o COO será preenchido no campo DOC.' : 'Cupom NFC-e selecionado: o número do cupom será preenchido no campo Cupom.');
   }));
-  autoReadToggle?.addEventListener('change', () => { readableSince = 0; autoReadDone = false; waitingForReframe = false; });
+  autoReadToggle?.addEventListener('change', () => { readableSince = 0; autoReadDone = false; previousBox = null; });
   startButton?.addEventListener('click', async () => {
     if (!navigator.mediaDevices?.getUserMedia) {
       setStatus('Webcam indisponível neste navegador. Abra o site por HTTPS ou selecione uma foto abaixo.');
@@ -665,9 +844,23 @@ export function initDeliveryReceiptCapture(form) {
     }
     try {
       stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
         audio: false,
       });
+      try {
+        const track = stream.getVideoTracks()[0];
+        const modes = track?.getCapabilities?.().focusMode;
+        if (modes?.includes('continuous')) {
+          await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
+          if (focusHint) focusHint.hidden = true;
+        } else if (focusHint) focusHint.hidden = false;
+      } catch (error) {
+        console.debug('Foco contínuo indisponível; mantendo o foco automático padrão:', error);
+        if (focusHint) focusHint.hidden = false;
+      }
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!audioContext && AudioContextClass) audioContext = new AudioContextClass();
+      await audioContext?.resume?.().catch(() => {});
       stream.getVideoTracks().forEach((track) => track.addEventListener('ended', () => {
         if (stream?.getTracks().some((activeTrack) => activeTrack.readyState === 'live')) return;
         if (qualityTimer) clearInterval(qualityTimer);
@@ -690,13 +883,16 @@ export function initDeliveryReceiptCapture(form) {
       if (previewWrap) previewWrap.hidden = true;
       resetTracker(activeReceipt);
       autoReadDone = false;
+      captureLocked = false;
+      noPaperSince = 0;
       readableSince = 0;
+      previousBox = null;
       if (qualityTimer) clearInterval(qualityTimer);
       inspectFrame();
       qualityTimer = setInterval(inspectFrame, 250);
-      setStatus(autoReadToggle?.checked ? (activeReceipt === 'coupon' ? 'Coloque somente o cupom NFC-e inteiro na moldura; mantenha-o imóvel quando ela ficar verde.' : 'Coloque o comprovante inteiro na moldura; mantenha-o imóvel quando ela ficar verde para preencher os campos.') : 'Enquadre o documento inteiro na moldura e use “Tirar foto e ler”.');
+      setStatus(autoReadToggle?.checked ? 'Ligue a webcam e coloque o cupom inteiro dentro do retângulo; o sistema orienta e captura sozinho.' : 'Enquadre o documento inteiro e use “Tirar foto e ler”.');
       ocrWarmup.then((worker) => {
-        if (worker && stream && !captureBusy) setStatus(autoReadToggle?.checked ? 'Leitor pronto. Centralize o documento; a leitura começa automaticamente quando a moldura ficar verde.' : 'Leitor pronto. Enquadre o documento e use “Tirar foto e ler”.');
+        if (worker && stream && !captureBusy) setStatus(autoReadToggle?.checked ? 'Leitor pronto. Posicione o cupom; a leitura começa automaticamente quando ele estiver nítido e imóvel.' : 'Leitor pronto. Enquadre o documento e use “Tirar foto e ler”.');
       });
     } catch (error) {
       console.warn('Webcam não pôde ser aberta:', error);
@@ -713,7 +909,7 @@ export function initDeliveryReceiptCapture(form) {
     activeReceipt = input.dataset.receiptKind;
     readableSince = 0;
     autoReadDone = false;
-    waitingForReframe = false;
+    previousBox = null;
     setPreview(image);
     await recognize(image, activeReceipt);
     input.value = '';

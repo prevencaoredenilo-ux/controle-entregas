@@ -6069,13 +6069,23 @@ input:focus, select:focus, textarea:focus { border-color: var(--blue) !important
 .receipt-capture-panel [hidden]{display:none!important}
 .receipt-auto-read{display:flex!important;grid-template-columns:auto 1fr;align-items:flex-start;gap:8px;padding:9px 10px;border:1px solid var(--line);border-radius:9px;background:#fff;color:var(--text)!important;font-size:11px!important;line-height:1.4}
 .receipt-auto-read input{width:16px;height:16px;margin:0;accent-color:#178747;flex:0 0 auto}
-.receipt-camera-stage{position:relative;width:100%;aspect-ratio:16/9;margin-top:8px;overflow:hidden;border-radius:12px;background:#111}
+.receipt-camera-stage{position:relative;width:100%;min-height:320px;height:min(60vw,68vh,700px);max-height:700px;aspect-ratio:16/9;margin-top:8px;overflow:hidden;border-radius:14px;background:#090b0d;box-shadow:0 8px 26px rgba(0,0,0,.22)}
 .receipt-camera-stage video{display:block;width:100%;height:100%;object-fit:contain;background:#111}
-.receipt-guide{position:absolute;left:30%;right:30%;top:6%;bottom:6%;border:3px solid #e23a4a;border-radius:12px;box-shadow:0 0 0 999px rgba(0,0,0,.22),inset 0 0 0 1px rgba(255,255,255,.55);pointer-events:none;transition:border-color .15s ease,box-shadow .15s ease}
-.receipt-camera-stage[data-quality="good"] .receipt-guide{border-color:#19c96b;box-shadow:0 0 0 999px rgba(0,0,0,.12),0 0 16px rgba(25,201,107,.55),inset 0 0 0 1px rgba(255,255,255,.75)}
-.receipt-frame-status{position:absolute;left:50%;bottom:7px;transform:translateX(-50%);max-width:94%;padding:5px 9px;border:1px solid rgba(255,255,255,.22);border-radius:999px;background:rgba(20,28,36,.88);color:#fff;text-align:center;font-size:10px;font-weight:800;line-height:1.2;white-space:nowrap;pointer-events:none}
-.receipt-frame-status::before{content:"";display:inline-block;width:7px;height:7px;margin-right:6px;border-radius:50%;background:#f04452;vertical-align:1px}
-.receipt-camera-stage[data-quality="good"] .receipt-frame-status::before{background:#35e982;box-shadow:0 0 7px #35e982}
+.receipt-guide{position:absolute;left:32%;right:32%;top:4%;bottom:4%;border:4px solid #ef3546;border-radius:16px;box-shadow:0 0 0 999px rgba(0,0,0,.25),inset 0 0 0 1px rgba(255,255,255,.55);pointer-events:none;transition:border-color .15s ease,box-shadow .15s ease}
+.receipt-guide span{position:absolute;width:24px;height:24px;border-color:inherit;border-style:solid}
+.receipt-guide span:nth-child(1){left:-4px;top:-4px;border-width:5px 0 0 5px;border-radius:12px 0 0}
+.receipt-guide span:nth-child(2){right:-4px;top:-4px;border-width:5px 5px 0 0;border-radius:0 12px 0 0}
+.receipt-guide span:nth-child(3){left:-4px;bottom:-4px;border-width:0 0 5px 5px;border-radius:0 0 0 12px}
+.receipt-guide span:nth-child(4){right:-4px;bottom:-4px;border-width:0 5px 5px 0;border-radius:0 0 12px}
+.receipt-camera-stage[data-quality="near"] .receipt-guide{border-color:#f2bf19;box-shadow:0 0 0 999px rgba(0,0,0,.20),0 0 18px rgba(242,191,25,.55),inset 0 0 0 1px rgba(255,255,255,.75)}
+.receipt-camera-stage[data-quality="good"] .receipt-guide{border-color:#19c96b;box-shadow:0 0 0 999px rgba(0,0,0,.12),0 0 20px rgba(25,201,107,.65),inset 0 0 0 1px rgba(255,255,255,.75)}
+.receipt-frame-status{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);width:max-content;max-width:92%;padding:12px 18px;border:1px solid rgba(255,255,255,.35);border-radius:14px;background:rgba(15,22,30,.91);color:#fff;text-align:center;font-size:clamp(16px,2.1vw,24px);font-weight:850;line-height:1.22;white-space:normal;pointer-events:none;box-shadow:0 4px 20px rgba(0,0,0,.35)}
+.receipt-frame-status::before{content:"";display:inline-block;width:11px;height:11px;margin-right:9px;border-radius:50%;background:#f04452;vertical-align:2px}
+.receipt-camera-stage[data-quality="near"] .receipt-frame-status::before{background:#f2bf19;box-shadow:0 0 9px #f2bf19}
+.receipt-camera-stage[data-quality="good"] .receipt-frame-status::before{background:#35e982;box-shadow:0 0 9px #35e982}
+.receipt-camera-stage[data-capture-flash="true"]::after{content:"CAPTURADO";position:absolute;inset:0;display:grid;place-items:center;background:rgba(255,255,255,.58);color:#101820;font-size:clamp(24px,5vw,54px);font-weight:950;letter-spacing:.08em;animation:receipt-capture-flash .22s ease-out forwards;pointer-events:none}
+.receipt-focus-hint{padding:10px 12px;border:1px solid #e7c85d;border-radius:9px;background:#fff8d8;color:#624b00!important;font-size:13px!important;font-weight:750}
+@keyframes receipt-capture-flash{from{opacity:1}to{opacity:0}}
 .receipt-preview-wrap{position:relative;display:table;width:max-content;max-width:100%;margin-top:8px;border-radius:12px;overflow:hidden;line-height:0;background:#111}
 .receipt-preview-wrap img{display:block;width:auto;max-width:100%;max-height:420px;object-fit:contain}
 .receipt-ocr-overlay{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none}
@@ -6102,7 +6112,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--blue) !important
 .receipt-field-tracker li[data-track-state="found"] b{color:#15803d}
 .receipt-field-tracker li[data-track-state="missing"]{border-color:#fecaca;background:#fff7f7}
 .receipt-field-tracker li[data-track-state="missing"] b{color:#b91c1c}
-@media(max-width:600px){.receipt-kind-buttons button,.receipt-camera-actions button{flex:1 1 100%}.receipt-capture-panel{padding:11px}.receipt-field-tracker ul{grid-template-columns:1fr}}
+@media(max-width:600px){.receipt-kind-buttons button,.receipt-camera-actions button{flex:1 1 100%}.receipt-capture-panel{padding:11px}.receipt-field-tracker ul{grid-template-columns:1fr}.receipt-camera-stage{min-height:260px;height:52vh;max-height:520px}.receipt-guide{left:31%;right:31%;top:3%;bottom:3%}.receipt-frame-status{bottom:7px;padding:9px 12px;max-width:94%;font-size:16px}}
 
 
 /* v13.56 — organização do formulário de entrega em etapas visuais */

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { assessFrameQuality, configureReceiptWorker, findReceiptPaperBounds, findReceiptTraceBoxes, getTesseractApi, mergeOcrLinesWithVerticalOffset, normalizeNeighborhood, parseDeliveryReceiptText, parseCouponText } from '../receipt-capture.js';
+import { analyzeReceiptFrame, assessFrameQuality, configureReceiptWorker, findReceiptPaperBounds, findReceiptTraceBoxes, getTesseractApi, mergeOcrLinesWithVerticalOffset, normalizeNeighborhood, parseDeliveryReceiptText, parseCouponText } from '../receipt-capture.js';
 
 test('lê os campos do relatório e converte o horário de Cuiabá para Brasília', () => {
   const result = parseDeliveryReceiptText([
@@ -121,6 +121,27 @@ test('moldura fica vermelha para imagem escura e verde para texto claro, contras
     }
   }
   assert.equal(assessFrameQuality({ data: sharpText, width, height }).readable, true);
+});
+
+test('analisa cupom vertical no guia e orienta quando falta foco ou posição', () => {
+  const width = 320; const height = 180;
+  const makeFrame = (left = 108, top = 9, paperWidth = 104, paperHeight = 162, addText = true) => {
+    const data = new Uint8ClampedArray(width * height * 4);
+    for (let i = 0; i < data.length; i += 4) { data[i] = 35; data[i + 1] = 35; data[i + 2] = 35; data[i + 3] = 255; }
+    for (let y = top; y < Math.min(height, top + paperHeight); y += 1) {
+      for (let x = left; x < Math.min(width, left + paperWidth); x += 1) {
+        const offset = (y * width + x) * 4;
+        const ink = addText && y % 11 < 2 && x > left + 10 && x < left + paperWidth - 10;
+        const value = ink ? 24 : 244;
+        data[offset] = value; data[offset + 1] = value; data[offset + 2] = value;
+      }
+    }
+    return { data, width, height };
+  };
+  assert.equal(analyzeReceiptFrame(makeFrame()).state, 'good');
+  assert.match(analyzeReceiptFrame(makeFrame(24)).message, /Mova para a direita/);
+  assert.match(analyzeReceiptFrame(makeFrame(108, 9, 50, 70)).message, /Aproxime o cupom/);
+  assert.match(analyzeReceiptFrame(makeFrame(108, 9, 104, 162, false)).message, /Fora de foco/);
 });
 
 test('não confunde o próximo rótulo com telefone quando Fone(s) está vazio', () => {
