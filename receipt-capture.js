@@ -552,7 +552,6 @@ export function initDeliveryReceiptCapture(form) {
     setStatus('Ajustando o enquadramento e realçando o texto localmente…');
     try {
       const [worker, prepared] = await Promise.all([getOcr(), prepareImageForOcr(image)]);
-      setPreview(prepared.image);
       setStatus(prepared.cropped ? 'Papel recortado e texto realçado no aparelho. Lendo…' : 'Texto realçado no aparelho. Lendo…');
       let { data } = await worker.recognize(prepared.image);
       if (kind === 'delivery' && !parseDeliveryReceiptText(data.text || '').doc) {
@@ -669,6 +668,18 @@ export function initDeliveryReceiptCapture(form) {
         video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
         audio: false,
       });
+      stream.getVideoTracks().forEach((track) => track.addEventListener('ended', () => {
+        if (stream?.getTracks().some((activeTrack) => activeTrack.readyState === 'live')) return;
+        if (qualityTimer) clearInterval(qualityTimer);
+        qualityTimer = null;
+        stream = null;
+        video.srcObject = null;
+        cameraStage.hidden = true;
+        captureButton.hidden = true;
+        stopButton.hidden = true;
+        startButton.hidden = false;
+        setStatus('A webcam foi encerrada pelo navegador ou pelo dispositivo. Toque em “Abrir webcam” para continuar; a foto capturada continua disponível.');
+      }, { once: true }));
       video.srcObject = stream;
       await video.play();
       cameraStage.hidden = false;
