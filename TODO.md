@@ -44,3 +44,5 @@
 - [x] Usar concordância e formato/contexto dos campos para escolher leituras; não preencher valores divergentes como se fossem certos e mostrar alternativas para conferência.
 - [x] Manter o processamento OCR no navegador, sem enviar imagem ao servidor; validar com testes de consenso e conflito.
 - [x] Exibir na prévia a imagem efetivamente tratada, remover o desfoque artificial e limitar a ampliação para preservar nitidez sem exceder 2,5 MP de processamento.
+- [x] Comparar uma segunda leitura OCR independente com segmentação diferente mesmo quando a confiança geral da primeira leitura for alta; testar uma terceira variante somente quando faltarem campos ou houver incerteza, mantendo até três tentativas locais.
+- [x] Manter como incertos os valores divergentes quando houver empate de leituras, mesmo que a confiança global de uma delas seja maior; apresentar as alternativas para conferência.

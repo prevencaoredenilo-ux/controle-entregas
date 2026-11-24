@@ -85,9 +85,9 @@ export function getTesseractApi(module) {
   return api;
 }
 
-export async function configureReceiptWorker(worker) {
+export async function configureReceiptWorker(worker, pageSegMode = '6') {
   if (typeof worker?.setParameters === 'function') {
-    await worker.setParameters({ tessedit_pageseg_mode: '6' });
+    await worker.setParameters({ tessedit_pageseg_mode: String(pageSegMode) });
   }
   return worker;
 }
@@ -228,8 +228,7 @@ export function mergeOcrCandidates(kind, candidates = []) {
     if (!ranked.length) continue;
     const winner = ranked[0];
     const runnerUp = ranked[1];
-    const margin = runnerUp ? (winner.votes * 30 + winner.bestConfidence * 0.25) - (runnerUp.votes * 30 + runnerUp.bestConfidence * 0.25) : Infinity;
-    if (winner.bestConfidence < 30 || (runnerUp && winner.votes === runnerUp.votes && margin < 8)) {
+    if (winner.bestConfidence < 30 || (runnerUp && winner.votes === runnerUp.votes)) {
       uncertain.push({ field: key, candidates: ranked.map((item) => item.value) });
       continue;
     }
@@ -848,32 +847,50 @@ export function initDeliveryReceiptCapture(form) {
       const [worker, prepared] = await Promise.all([getOcr(), prepareImageForOcr(image)]);
       setPreview(prepared.image);
       setStatus(prepared.cropped ? 'Papel recortado e texto realçado no aparelho. Lendo…' : 'Texto realçado no aparelho. Lendo…');
+      await configureReceiptWorker(worker, '6');
       const first = await worker.recognize(prepared.image);
       const candidates = [{ text: first.data.text || '', confidence: first.data.confidence, data: first.data }];
       const firstFields = kind === 'coupon' ? parseCouponText(first.data.text || '') : parseDeliveryReceiptText(first.data.text || '');
-      const anchorFields = kind === 'coupon' ? ['coupon'] : ['doc', 'clientName', 'street'];
+      const anchorFields = kind === 'coupon' ? ['coupon'] : ['pdv', 'doc', 'clientName', 'phone', 'street', 'neighborhood', 'operationDate', 'entryTimeOnly'];
       const hasWeakAnchor = anchorFields.some((field) => !firstFields[field]);
       const firstConfidence = Number(first.data.confidence);
-      if (!Number.isFinite(firstConfidence) || firstConfidence < 82 || hasWeakAnchor) {
-        setStatus('A primeira leitura ficou incerta. Testando outras versões locais em português, com letras e números…');
-        for (const mode of ['contrast', 'threshold']) {
-          try {
-            const variant = await createOcrVariant(prepared.image, mode);
-            if (!variant) continue;
+      // Sempre comparar uma segunda leitura independente: confiança global alta
+      // não garante que cada campo (especialmente COO/DOC) foi lido corretamente.
+      try {
+        const variant = await createOcrVariant(prepared.image, 'contrast');
+        if (variant) {
+          await configureReceiptWorker(worker, '11');
+          const result = await worker.recognize(variant.image);
+          const mappedData = scaleOcrDataBoxes(result.data, prepared.width / variant.width, prepared.height / variant.height);
+          candidates.push({ text: result.data.text || '', confidence: result.data.confidence, data: mappedData });
+        }
+      } catch (error) {
+        console.debug('A leitura OCR independente não pôde ser processada; mantendo a primeira leitura:', error);
+      }
+      let decision = mergeOcrCandidates(kind, candidates);
+      const weakAfterTwo = anchorFields.some((field) => !decision.fields[field]);
+      const needsThird = !Number.isFinite(firstConfidence) || firstConfidence < 82 || hasWeakAnchor || weakAfterTwo;
+      if (needsThird && !(kind === 'delivery' && !decision.fields.doc)) {
+        setStatus('As leituras anteriores ficaram incertas. Testando outra versão local em português, com letras e números…');
+        try {
+          const variant = await createOcrVariant(prepared.image, 'threshold');
+          if (variant) {
+            await configureReceiptWorker(worker, '6');
             const result = await worker.recognize(variant.image);
             const mappedData = scaleOcrDataBoxes(result.data, prepared.width / variant.width, prepared.height / variant.height);
             candidates.push({ text: result.data.text || '', confidence: result.data.confidence, data: mappedData });
-          } catch (error) {
-            console.debug(`A variante OCR ${mode} não pôde ser processada; mantendo as leituras anteriores:`, error);
           }
+        } catch (error) {
+          console.debug('A variante OCR threshold não pôde ser processada; mantendo as leituras anteriores:', error);
         }
+        decision = mergeOcrCandidates(kind, candidates);
       }
-      let decision = mergeOcrCandidates(kind, candidates);
       let data = decision.bestCandidate.data || first.data;
-      if (kind === 'delivery' && !decision.fields.doc) {
+      if (kind === 'delivery' && !decision.fields.doc && candidates.length < 3) {
         try {
           const lowerCrop = await prepareLowerReceiptCrop(prepared.image, prepared.width, prepared.height);
           if (lowerCrop) {
+            await configureReceiptWorker(worker, '6');
             const { data: lowerData } = await worker.recognize(lowerCrop.image);
             const combined = mergeOcrLinesWithVerticalOffset(first.data, lowerData, lowerCrop.top);
             combined.text = [first.data.text, lowerData.text].filter(Boolean).join('\n');

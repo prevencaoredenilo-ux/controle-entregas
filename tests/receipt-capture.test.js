@@ -44,6 +44,13 @@ test('consenso OCR usa leituras repetidas e mantém divergência para confirmaç
   ]);
   assert.equal('clientName' in conflict.fields, false);
   assert.deepEqual(conflict.uncertain.find(({ field }) => field === 'clientName')?.candidates, ['Maria Silva', 'Marina Silva']);
+
+  const confidenceConflict = mergeOcrCandidates('coupon', [
+    { text: 'NFC-e n. 000015693', confidence: 96 },
+    { text: 'NFC-e n. 000015698', confidence: 48 },
+  ]);
+  assert.equal('coupon' in confidenceConflict.fields, false);
+  assert.deepEqual(confidenceConflict.uncertain.find(({ field }) => field === 'coupon')?.candidates, ['000015693', '000015698']);
 });
 
 test('localiza visualmente as linhas da NFC-e e do COO no cupom', () => {
@@ -94,7 +101,8 @@ test('configura o Tesseract para ler o comprovante como um bloco de texto', asyn
   const calls = [];
   const worker = { async setParameters(parameters) { calls.push(parameters); } };
   assert.equal(await configureReceiptWorker(worker), worker);
-  assert.deepEqual(calls, [{ tessedit_pageseg_mode: '6' }]);
+  assert.equal(await configureReceiptWorker(worker, '11'), worker);
+  assert.deepEqual(calls, [{ tessedit_pageseg_mode: '6' }, { tessedit_pageseg_mode: '11' }]);
 });
 
 test('corrige artefatos vistos no OCR da foto sem inventar telefone', () => {
