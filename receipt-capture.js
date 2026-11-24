@@ -201,6 +201,46 @@ export function parseCouponText(text) {
   return fields;
 }
 
+export function mergeOcrCandidates(kind, candidates = []) {
+  const parse = kind === 'coupon' ? parseCouponText : parseDeliveryReceiptText;
+  const parsed = candidates.map((candidate) => ({
+    ...candidate,
+    fields: parse(candidate?.text || ''),
+    confidence: Number.isFinite(Number(candidate?.confidence)) ? Number(candidate.confidence) : 50,
+  }));
+  const keys = [...new Set(parsed.flatMap((candidate) => Object.keys(candidate.fields)))];
+  const fields = {};
+  const uncertain = [];
+  for (const key of keys) {
+    const groups = new Map();
+    for (const candidate of parsed) {
+      const value = candidate.fields[key];
+      if (!value) continue;
+      const canonical = normalize(value).replace(/[^a-z0-9]/g, '');
+      if (!canonical) continue;
+      const group = groups.get(canonical) || { value, votes: 0, bestConfidence: 0, candidate };
+      group.votes += 1;
+      group.bestConfidence = Math.max(group.bestConfidence, candidate.confidence);
+      if (candidate.confidence > group.candidate.confidence) group.candidate = candidate;
+      groups.set(canonical, group);
+    }
+    const ranked = [...groups.values()].sort((a, b) => (b.votes * 30 + b.bestConfidence * 0.25) - (a.votes * 30 + a.bestConfidence * 0.25));
+    if (!ranked.length) continue;
+    const winner = ranked[0];
+    const runnerUp = ranked[1];
+    const margin = runnerUp ? (winner.votes * 30 + winner.bestConfidence * 0.25) - (runnerUp.votes * 30 + runnerUp.bestConfidence * 0.25) : Infinity;
+    if (winner.bestConfidence < 30 || (runnerUp && winner.votes === runnerUp.votes && margin < 8)) {
+      uncertain.push({ field: key, candidates: ranked.map((item) => item.value) });
+      continue;
+    }
+    fields[key] = winner.value;
+  }
+  const bestCandidate = [...parsed].sort((a, b) => (
+    Object.keys(b.fields).length * 100 + b.confidence - (Object.keys(a.fields).length * 100 + a.confidence)
+  ))[0] || { fields: {}, data: null };
+  return { fields, uncertain, bestCandidate, attempts: parsed.length };
+}
+
 const TRACE_SPECS = {
   delivery: [
     ['pdv', 'PDV', /\bPDV\b/i, '#2563eb'],
@@ -227,7 +267,7 @@ export function findReceiptTraceBoxes(kind, lines, fields) {
     const line = (lines || []).find((item) => {
       const text = String(item?.text || '');
       const normalizedText = normalize(text).replace(/[^a-z0-9]/g, '');
-      return labelPattern.test(text) || (value.length >= 3 && normalizedText.includes(value));
+      return labelPattern.test(text) && value.length >= 2 && normalizedText.includes(value);
     });
     const bbox = line?.bbox;
     if (!bbox || ![bbox.x0, bbox.y0, bbox.x1, bbox.y1].every(Number.isFinite) || bbox.x1 <= bbox.x0 || bbox.y1 <= bbox.y0) return [];
@@ -240,6 +280,18 @@ function getOcrLines(data) {
   const nestedLines = (data?.blocks || []).flatMap((block) => (block.paragraphs || []).flatMap((paragraph) => paragraph.lines || []));
   if (nestedLines.length) return nestedLines;
   return data?.words || [];
+}
+
+function scaleOcrDataBoxes(data, scaleX = 1, scaleY = 1) {
+  const lines = getOcrLines(data).map((line) => ({
+    ...line,
+    bbox: line?.bbox ? {
+      ...line.bbox,
+      x0: line.bbox.x0 * scaleX, x1: line.bbox.x1 * scaleX,
+      y0: line.bbox.y0 * scaleY, y1: line.bbox.y1 * scaleY,
+    } : line?.bbox,
+  }));
+  return { ...data, lines };
 }
 
 export function mergeOcrLinesWithVerticalOffset(primary, secondary, offsetY) {
@@ -364,6 +416,56 @@ async function prepareImageForOcr(image) {
   return blob
     ? { image: blob, width: canvas.width, height: canvas.height, cropped: Boolean(paper) }
     : { image, width: originalWidth, height: originalHeight, cropped: false };
+}
+
+async function createOcrVariant(image, mode) {
+  if (typeof createImageBitmap !== 'function') return null;
+  const bitmap = await createImageBitmap(image);
+  try {
+    const scale = Math.min(1, 2200 / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    const context = canvas.getContext('2d', { willReadFrequently: mode === 'threshold' });
+    if (!context) return null;
+    if (mode === 'threshold') {
+      context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
+      const histogram = new Uint32Array(256);
+      for (let i = 0; i < pixels.data.length; i += 4) histogram[Math.round(pixels.data[i] * 0.2126 + pixels.data[i + 1] * 0.7152 + pixels.data[i + 2] * 0.0722)] += 1;
+      const total = canvas.width * canvas.height;
+      let totalLuminance = 0;
+      for (let value = 0; value < 256; value += 1) totalLuminance += value * histogram[value];
+      let backgroundWeight = 0;
+      let backgroundLuminance = 0;
+      let bestVariance = -1;
+      let threshold = 150;
+      for (let value = 0; value < 256; value += 1) {
+        backgroundWeight += histogram[value];
+        if (!backgroundWeight) continue;
+        const foregroundWeight = total - backgroundWeight;
+        if (!foregroundWeight) break;
+        backgroundLuminance += value * histogram[value];
+        const meanBackground = backgroundLuminance / backgroundWeight;
+        const meanForeground = (totalLuminance - backgroundLuminance) / foregroundWeight;
+        const variance = backgroundWeight * foregroundWeight * (meanBackground - meanForeground) ** 2;
+        if (variance > bestVariance) { bestVariance = variance; threshold = value; }
+      }
+      for (let i = 0; i < pixels.data.length; i += 4) {
+        const luminance = pixels.data[i] * 0.2126 + pixels.data[i + 1] * 0.7152 + pixels.data[i + 2] * 0.0722;
+        const value = luminance >= threshold ? 255 : 0;
+        pixels.data[i] = value; pixels.data[i + 1] = value; pixels.data[i + 2] = value;
+      }
+      context.putImageData(pixels, 0, 0);
+    } else {
+      context.filter = 'grayscale(1) contrast(1.18) brightness(1.06)';
+      context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    }
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+    return blob ? { image: blob, width: canvas.width, height: canvas.height } : null;
+  } finally {
+    bitmap.close?.();
+  }
 }
 
 async function prepareLowerReceiptCrop(image, width, height) {
@@ -713,8 +815,7 @@ export function initDeliveryReceiptCapture(form) {
     if (focusControls) focusControls.hidden = true;
     if (focusHint) focusHint.hidden = true;
   };
-  const applyRecognized = (kind, text) => {
-    const fields = kind === 'coupon' ? parseCouponText(text) : parseDeliveryReceiptText(text);
+  const applyRecognized = (kind, fields, uncertain = [], attempts = 1) => {
     const found = Object.keys(fields).length;
     let applied = 0;
     Object.entries(fields).forEach(([name, value]) => {
@@ -728,25 +829,58 @@ export function initDeliveryReceiptCapture(form) {
         if (setField(form, name, value, { onlyIfBlank: !replaceDefault })) applied += 1;
       }
     });
-    setStatus(applied ? `Leitura concluída: ${applied} campo(s) preenchido(s). Confira e corrija antes de registrar.` : found ? 'Leitura concluída, mas os campos já tinham valor. Confira e corrija antes de registrar.' : 'Não encontrei campos com segurança. Tente outra foto ou preencha manualmente.');
-    return { fields, found: found > 0 };
+    const fieldLabels = { pdv: 'PDV', doc: 'COO/DOC', clientName: 'Cliente', phone: 'Telefone', street: 'Logradouro', houseNumber: 'Número', neighborhood: 'Bairro', operationDate: 'Data', entryTimeOnly: 'Horário', coupon: 'NFC-e' };
+    const uncertaintyNote = uncertain.length
+      ? ` Leituras divergentes — confirme: ${uncertain.map(({ field, candidates }) => `${fieldLabels[field] || field}: ${candidates.join(' / ')}`).join('; ')}.`
+      : '';
+    const attemptNote = attempts > 1 ? ` Comparei ${attempts} leituras locais.` : '';
+    setStatus(`${applied ? `Leitura concluída: ${applied} campo(s) preenchido(s).` : found ? 'Leitura concluída, mas os campos já tinham valor.' : 'Não encontrei campos com segurança. Tente outra foto ou preencha manualmente.'}${attemptNote}${uncertaintyNote} Confira e corrija antes de registrar.`);
+    return { fields, found: found > 0, uncertain };
   };
   const recognize = async (image, kind) => {
     setStatus('Ajustando o enquadramento e realçando o texto localmente…');
     try {
       const [worker, prepared] = await Promise.all([getOcr(), prepareImageForOcr(image)]);
       setStatus(prepared.cropped ? 'Papel recortado e texto realçado no aparelho. Lendo…' : 'Texto realçado no aparelho. Lendo…');
-      let { data } = await worker.recognize(prepared.image);
-      if (kind === 'delivery' && !parseDeliveryReceiptText(data.text || '').doc) {
-        const lowerCrop = await prepareLowerReceiptCrop(prepared.image, prepared.width, prepared.height);
-        if (lowerCrop) {
-          const { data: lowerData } = await worker.recognize(lowerCrop.image);
-          const combined = mergeOcrLinesWithVerticalOffset(data, lowerData, lowerCrop.top);
-          combined.text = [data.text, lowerData.text].filter(Boolean).join('\n');
-          data = combined;
+      const first = await worker.recognize(prepared.image);
+      const candidates = [{ text: first.data.text || '', confidence: first.data.confidence, data: first.data }];
+      const firstFields = kind === 'coupon' ? parseCouponText(first.data.text || '') : parseDeliveryReceiptText(first.data.text || '');
+      const anchorFields = kind === 'coupon' ? ['coupon'] : ['doc', 'clientName', 'street'];
+      const hasWeakAnchor = anchorFields.some((field) => !firstFields[field]);
+      const firstConfidence = Number(first.data.confidence);
+      if (!Number.isFinite(firstConfidence) || firstConfidence < 82 || hasWeakAnchor) {
+        setStatus('A primeira leitura ficou incerta. Testando outras versões locais em português, com letras e números…');
+        for (const mode of ['contrast', 'threshold']) {
+          try {
+            const variant = await createOcrVariant(prepared.image, mode);
+            if (!variant) continue;
+            const result = await worker.recognize(variant.image);
+            const mappedData = scaleOcrDataBoxes(result.data, prepared.width / variant.width, prepared.height / variant.height);
+            candidates.push({ text: result.data.text || '', confidence: result.data.confidence, data: mappedData });
+          } catch (error) {
+            console.debug(`A variante OCR ${mode} não pôde ser processada; mantendo as leituras anteriores:`, error);
+          }
         }
       }
-      const result = applyRecognized(kind, data.text || '');
+      let decision = mergeOcrCandidates(kind, candidates);
+      let data = decision.bestCandidate.data || first.data;
+      if (kind === 'delivery' && !decision.fields.doc) {
+        try {
+          const lowerCrop = await prepareLowerReceiptCrop(prepared.image, prepared.width, prepared.height);
+          if (lowerCrop) {
+            const { data: lowerData } = await worker.recognize(lowerCrop.image);
+            const combined = mergeOcrLinesWithVerticalOffset(first.data, lowerData, lowerCrop.top);
+            combined.text = [first.data.text, lowerData.text].filter(Boolean).join('\n');
+            candidates.push({ text: combined.text, confidence: lowerData.confidence, data: combined });
+            decision = mergeOcrCandidates(kind, candidates);
+            data = decision.bestCandidate.data || combined;
+          }
+        } catch (error) {
+          console.debug('A tentativa extra do rodapé falhou; mantendo o resultado das outras leituras:', error);
+        }
+      }
+      data = { ...data, lines: candidates.flatMap((candidate) => getOcrLines(candidate.data)) };
+      const result = applyRecognized(kind, decision.fields, decision.uncertain, decision.attempts);
       const traceCount = drawTraceOverlay(kind, data, result.fields, prepared.width, prepared.height);
       updateTracker(kind, result.fields, { traceCount });
       return result.found;

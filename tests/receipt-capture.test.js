@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { analyzeReceiptFrame, assessFrameQuality, buildCameraTrackConstraints, configureReceiptWorker, findReceiptPaperBounds, findReceiptTraceBoxes, getCameraFocusOptions, getCameraResolutionPreference, getTesseractApi, mergeOcrLinesWithVerticalOffset, normalizeNeighborhood, parseDeliveryReceiptText, parseCouponText } from '../receipt-capture.js';
+import { analyzeReceiptFrame, assessFrameQuality, buildCameraTrackConstraints, configureReceiptWorker, findReceiptPaperBounds, findReceiptTraceBoxes, getCameraFocusOptions, getCameraResolutionPreference, getTesseractApi, mergeOcrCandidates, mergeOcrLinesWithVerticalOffset, normalizeNeighborhood, parseDeliveryReceiptText, parseCouponText } from '../receipt-capture.js';
 
 test('lê os campos do relatório e converte o horário de Cuiabá para Brasília', () => {
   const result = parseDeliveryReceiptText([
@@ -26,6 +26,26 @@ test('lê COO como DOC junto com o número NFC-e quando os dois estão no cupom'
   assert.deepEqual(parseCouponText('NFC-e n. 000015693 Série 302 COO: 35174'), { coupon: '000015693', doc: '35174' });
 });
 
+test('consenso OCR usa leituras repetidas e mantém divergência para confirmação em vez de adivinhar', () => {
+  const base = '23/11/26 07:13:47 PDV 002\nFone(s): 66992354592\nLogradouro: Av Amazonas 374\nBairro: Centro\nCOO: 35174';
+  const decision = mergeOcrCandidates('delivery', [
+    { text: `Cliente: Maria Silva\n${base}`, confidence: 70 },
+    { text: `Cliente: Maria Silva\n${base}`, confidence: 66 },
+    { text: `Cliente: Marina Silva\n${base.replace('35174', '35179')}`, confidence: 69 },
+  ]);
+  assert.equal(decision.fields.clientName, 'Maria Silva');
+  assert.equal(decision.fields.doc, '35174');
+  assert.equal(decision.uncertain.length, 0);
+  assert.equal(decision.attempts, 3);
+
+  const conflict = mergeOcrCandidates('delivery', [
+    { text: `Cliente: Maria Silva\n${base}`, confidence: 70 },
+    { text: `Cliente: Marina Silva\n${base}`, confidence: 70 },
+  ]);
+  assert.equal('clientName' in conflict.fields, false);
+  assert.deepEqual(conflict.uncertain.find(({ field }) => field === 'clientName')?.candidates, ['Maria Silva', 'Marina Silva']);
+});
+
 test('localiza visualmente as linhas da NFC-e e do COO no cupom', () => {
   const boxes = findReceiptTraceBoxes('coupon', [
     { text: 'NFC-e n. 000015693', bbox: { x0: 10, y0: 20, x1: 230, y1: 48 } },
@@ -33,6 +53,12 @@ test('localiza visualmente as linhas da NFC-e e do COO no cupom', () => {
   ], { coupon: '000015693', doc: '35174' });
   assert.deepEqual(boxes.map(({ key }) => key), ['coupon', 'doc']);
   assert.deepEqual(boxes[1], { key: 'doc', label: 'COO → DOC', color: '#9333ea', x0: 15, y0: 70, x1: 180, y1: 96 });
+});
+
+test('não marca como correto um rótulo cujo valor diverge do consenso OCR', () => {
+  assert.deepEqual(findReceiptTraceBoxes('coupon', [
+    { text: 'COO: 35179', bbox: { x0: 15, y0: 70, x1: 180, y1: 96 } },
+  ], { doc: '35174' }), []);
 });
 
 test('localiza PDV, COO e cliente no relatório de entrega', () => {

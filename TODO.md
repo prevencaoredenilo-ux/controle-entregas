@@ -40,3 +40,6 @@
 - [x] Manter foco automático quando suportado e mostrar ajuste manual de distância apenas quando a câmera e o navegador oferecerem essa capacidade.
 - [x] Preservar a captura por webcam e a seleção de foto se algum controle não estiver disponível.
 - [x] Validar sintaxe, testes automatizados e integridade do diff; não há webcam física disponível neste ambiente para confirmar foco/resolução no dispositivo real.
+- [x] Quando a primeira leitura do comprovante tiver baixa confiança ou faltar campo-chave, comparar até três versões da imagem processadas localmente com OCR em português.
+- [x] Usar concordância e formato/contexto dos campos para escolher leituras; não preencher valores divergentes como se fossem certos e mostrar alternativas para conferência.
+- [x] Manter o processamento OCR no navegador, sem enviar imagem ao servidor; validar com testes de consenso e conflito.
