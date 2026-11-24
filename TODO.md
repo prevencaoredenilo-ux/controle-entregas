@@ -13,3 +13,5 @@
 - [ ] Testar câmera/foco e permissões em aparelho/navegador reais; testar foto com EXIF de celular.
 - [ ] Instalar/abrir online, completar o cache e repetir OCR/QR com aparelho offline.
 - [ ] Confirmar com o responsável a regra de conversão do fuso Cuiabá → Brasília.
+
+- [x] Ajuste de desempenho: limitar chamadas OCR ao tempo total máximo de 25 s e pular leituras extras quando a primeira for suficiente.

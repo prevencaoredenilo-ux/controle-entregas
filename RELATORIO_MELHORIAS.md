@@ -51,3 +51,8 @@ Versões e fontes detalhadas estão em `vendor/tesseract/VERSIONS.md`. jsQR é a
 1. Abra o app online e aguarde a instalação/cache dos arquivos offline. Abra Lançamento por foto e permita a webcam; posicione o comprovante, capture e confirme que a câmera fecha. Verifique a miniatura e confira/corrija todos os campos.
 2. Escolha uma imagem pela galeria, incluindo uma foto celular com EXIF. Confirme orientação, preenchimento e mensagem de revisão. Teste uma NFC-e com QR para preencher número/série/mês.
 3. Após abrir o app e carregar assets enquanto online, ative modo avião, reabra a PWA e teste OCR/QR. A primeira instalação/cache requer conexão; a imagem permanece local.
+
+
+## Ajuste de desempenho após publicação
+
+A leitura agora limita cada chamada OCR ao orçamento restante de 25 s, interrompe e encerra o worker ao exceder o limite, evita variantes quando a primeira leitura é suficiente e só tenta recortes/passadas extras quando ainda há tempo. Em aparelhos lentos, pode encerrar sem resultado completo; nesse caso orienta o usuário a tentar imagem melhor ou QR. Sintaxe e 40 testes passaram novamente.

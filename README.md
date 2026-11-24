@@ -357,3 +357,6 @@ O OCR (Tesseract.js com idioma português) e a leitura de QR NFC-e (jsQR/Barcode
 > **Aviso de fuso horário:** o horário do comprovante continua sendo convertido de `America/Cuiaba` para `America/Sao_Paulo`. O formulário interpreta valores como horário local do aparelho; se o aparelho estiver configurado no fuso de Mato Grosso, a conversão pode causar diferença de uma hora. A regra precisa ser confirmada pelo responsável pelo sistema.
 
 Versão desta entrega: 13.66.0.
+
+
+**Tempo de leitura:** o OCR é interrompido ao atingir 25 segundos; em aparelho lento, pode ser necessário repetir com enquadramento mais nítido ou ler o QR da NFC-e.

@@ -1054,11 +1054,26 @@ export function initDeliveryReceiptCapture(form) {
           return true;
         }
       }
+      const startedAt = Date.now();
       const [worker, prepared] = await Promise.all([getOcr(), prepareImageForOcr(image)]);
+      const elapsed = () => Date.now() - startedAt;
+      const recognizeTimed = async (target, input, budget = 22000) => {
+        const remaining = Math.max(1, Math.min(budget, 24000 - elapsed()));
+        let timer;
+        try {
+          return await Promise.race([target.recognize(input), new Promise((_, reject) => {
+            timer = setTimeout(async () => {
+              try { await target.terminate(); } catch {}
+              if (tesseractWorkerInstance === target) { tesseractWorkerInstance = null; tesseractWorkerPromise = null; }
+              reject(new Error('OCR_TIMEOUT_25S'));
+            }, remaining);
+          })]);
+        } finally { clearTimeout(timer); }
+      };
       setPreview(prepared.image);
       setStatus(prepared.cropped ? 'Papel recortado e texto realçado no aparelho. Lendo…' : 'Texto realçado no aparelho. Lendo…');
       await configureReceiptWorker(worker, '6');
-      const first = await worker.recognize(prepared.image);
+      const first = await recognizeTimed(worker, prepared.image);
       const candidates = [{ text: first.data.text || '', confidence: first.data.confidence, data: first.data }];
       if (kind === 'coupon') {
         const keyCoupon = couponFromQrText(first.data.text || '');
@@ -1081,13 +1096,13 @@ export function initDeliveryReceiptCapture(form) {
       const anchorFields = kind === 'coupon' ? ['coupon'] : ['pdv', 'doc', 'clientName', 'phone', 'street', 'neighborhood', 'operationDate', 'entryTimeOnly'];
       const hasWeakAnchor = anchorFields.some((field) => !firstFields[field]);
       const firstConfidence = Number(first.data.confidence);
-      // Sempre comparar uma segunda leitura independente: confiança global alta
-      // não garante que cada campo (especialmente COO/DOC) foi lido corretamente.
-      try {
+      // Evitar passadas caras quando a primeira leitura já encontrou os dados.
+      const shouldRunVariant = hasWeakAnchor || !Number.isFinite(firstConfidence) || firstConfidence < 70;
+      if (shouldRunVariant && elapsed() < 15000) try {
         const variant = await createOcrVariant(prepared.image, 'contrast');
         if (variant) {
           await configureReceiptWorker(worker, '4');
-          const result = await worker.recognize(variant.image);
+          const result = await recognizeTimed(worker, variant.image, 8000);
           const mappedData = scaleOcrDataBoxes(result.data, prepared.width / variant.width, prepared.height / variant.height);
           candidates.push({ text: result.data.text || '', confidence: result.data.confidence, data: mappedData });
         }
@@ -1096,14 +1111,14 @@ export function initDeliveryReceiptCapture(form) {
       }
       let decision = mergeOcrCandidates(kind, candidates);
       const weakAfterTwo = anchorFields.some((field) => !decision.fields[field]);
-      const needsThird = !Number.isFinite(firstConfidence) || firstConfidence < 82 || hasWeakAnchor || weakAfterTwo;
+      const needsThird = weakAfterTwo && elapsed() < 17000;
       if (needsThird && !(kind === 'delivery' && !decision.fields.doc)) {
         setStatus('As leituras anteriores ficaram incertas. Testando outra versão local em português, com letras e números…');
         try {
           const variant = await createOcrVariant(prepared.image, 'threshold');
           if (variant) {
             await configureReceiptWorker(worker, '6');
-            const result = await worker.recognize(variant.image);
+            const result = await recognizeTimed(worker, variant.image, 8000);
             const mappedData = scaleOcrDataBoxes(result.data, prepared.width / variant.width, prepared.height / variant.height);
             candidates.push({ text: result.data.text || '', confidence: result.data.confidence, data: mappedData });
           }
@@ -1113,12 +1128,12 @@ export function initDeliveryReceiptCapture(form) {
         decision = mergeOcrCandidates(kind, candidates);
       }
       let data = decision.bestCandidate.data || first.data;
-      if (kind === 'delivery' && !decision.fields.doc && candidates.length < 3) {
+      if (kind === 'delivery' && !decision.fields.doc && candidates.length < 3 && elapsed() < 18000) {
         try {
           const lowerCrop = await prepareLowerReceiptCrop(prepared.image, prepared.width, prepared.height);
           if (lowerCrop) {
             await configureReceiptWorker(worker, '6');
-            const { data: lowerData } = await worker.recognize(lowerCrop.image);
+            const { data: lowerData } = await recognizeTimed(worker, lowerCrop.image, 5000);
             const combined = mergeOcrLinesWithVerticalOffset(first.data, lowerData, lowerCrop.top);
             combined.text = [first.data.text, lowerData.text].filter(Boolean).join('\n');
             candidates.push({ text: combined.text, confidence: lowerData.confidence, data: combined });
@@ -1138,7 +1153,7 @@ export function initDeliveryReceiptCapture(form) {
       console.error('OCR local falhou:', error);
       clearTraceOverlay();
       updateTracker(kind, {}, { error: true });
-      setStatus('Não foi possível iniciar o leitor OCR local. Confira os arquivos instalados no aparelho ou use o preenchimento manual. A imagem nunca é enviada.');
+      setStatus(error?.message === 'OCR_TIMEOUT_25S' ? 'A leitura levou mais de 25 segundos e foi interrompida. Tente uma foto mais nítida, aproxime o cupom ou use o QR NFC-e. A imagem permanece no aparelho.' : 'Não foi possível iniciar o leitor OCR local. Confira os arquivos instalados no aparelho ou use o preenchimento manual. A imagem nunca é enviada.');
       return false;
     }
   };
