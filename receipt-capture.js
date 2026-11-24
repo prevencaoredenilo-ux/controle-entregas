@@ -369,6 +369,11 @@ function estimatePaperRotation(rgba, width, bounds) {
   return Math.abs(angle) <= 0.22 ? angle : 0;
 }
 
+export function getReceiptProcessingScale(width, height) {
+  if (!(width > 0) || !(height > 0)) return 1;
+  return Math.min(2, 4000 / Math.max(width, height), Math.sqrt(2_450_000 / (width * height)));
+}
+
 async function prepareImageForOcr(image) {
   if (typeof createImageBitmap !== 'function') {
     const dimensions = await new Promise((resolve) => {
@@ -399,14 +404,14 @@ async function prepareImageForOcr(image) {
   const angle = paper && probePixels ? estimatePaperRotation(probePixels, probeWidth, paper) : 0;
   const rotatedWidth = Math.ceil(Math.abs(sourceWidth * Math.cos(angle)) + Math.abs(sourceHeight * Math.sin(angle)));
   const rotatedHeight = Math.ceil(Math.abs(sourceHeight * Math.cos(angle)) + Math.abs(sourceWidth * Math.sin(angle)));
-  const scale = Math.min(2, 4000 / Math.max(rotatedWidth, rotatedHeight));
+  const scale = getReceiptProcessingScale(rotatedWidth, rotatedHeight);
   const canvas = document.createElement('canvas');
   canvas.width = Math.max(1, Math.round(rotatedWidth * scale));
   canvas.height = Math.max(1, Math.round(rotatedHeight * scale));
   const context = canvas.getContext('2d');
   if (!context) { bitmap.close?.(); return { image, width: originalWidth, height: originalHeight }; }
   context.imageSmoothingQuality = 'high';
-  context.filter = 'grayscale(1) contrast(1.52) brightness(1.03) blur(0.25px)';
+  context.filter = 'grayscale(1) contrast(1.28) brightness(1.04)';
   context.translate(canvas.width / 2, canvas.height / 2);
   context.rotate(-angle);
   context.drawImage(bitmap, sourceX, sourceY, sourceWidth, sourceHeight, -sourceWidth * scale / 2, -sourceHeight * scale / 2, sourceWidth * scale, sourceHeight * scale);
@@ -841,6 +846,7 @@ export function initDeliveryReceiptCapture(form) {
     setStatus('Ajustando o enquadramento e realçando o texto localmente…');
     try {
       const [worker, prepared] = await Promise.all([getOcr(), prepareImageForOcr(image)]);
+      setPreview(prepared.image);
       setStatus(prepared.cropped ? 'Papel recortado e texto realçado no aparelho. Lendo…' : 'Texto realçado no aparelho. Lendo…');
       const first = await worker.recognize(prepared.image);
       const candidates = [{ text: first.data.text || '', confidence: first.data.confidence, data: first.data }];

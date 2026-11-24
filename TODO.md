@@ -43,3 +43,4 @@
 - [x] Quando a primeira leitura do comprovante tiver baixa confiança ou faltar campo-chave, comparar até três versões da imagem processadas localmente com OCR em português.
 - [x] Usar concordância e formato/contexto dos campos para escolher leituras; não preencher valores divergentes como se fossem certos e mostrar alternativas para conferência.
 - [x] Manter o processamento OCR no navegador, sem enviar imagem ao servidor; validar com testes de consenso e conflito.
+- [x] Exibir na prévia a imagem efetivamente tratada, remover o desfoque artificial e limitar a ampliação para preservar nitidez sem exceder 2,5 MP de processamento.

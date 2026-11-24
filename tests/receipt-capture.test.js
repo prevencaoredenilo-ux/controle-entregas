@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { analyzeReceiptFrame, assessFrameQuality, buildCameraTrackConstraints, configureReceiptWorker, findReceiptPaperBounds, findReceiptTraceBoxes, getCameraFocusOptions, getCameraResolutionPreference, getTesseractApi, mergeOcrCandidates, mergeOcrLinesWithVerticalOffset, normalizeNeighborhood, parseDeliveryReceiptText, parseCouponText } from '../receipt-capture.js';
+import { analyzeReceiptFrame, assessFrameQuality, buildCameraTrackConstraints, configureReceiptWorker, findReceiptPaperBounds, findReceiptTraceBoxes, getCameraFocusOptions, getCameraResolutionPreference, getReceiptProcessingScale, getTesseractApi, mergeOcrCandidates, mergeOcrLinesWithVerticalOffset, normalizeNeighborhood, parseDeliveryReceiptText, parseCouponText } from '../receipt-capture.js';
 
 test('lê os campos do relatório e converte o horário de Cuiabá para Brasília', () => {
   const result = parseDeliveryReceiptText([
@@ -174,6 +174,14 @@ test('solicita até 1920×1080 sem exceder a resolução máxima anunciada pela 
   assert.deepEqual(getCameraResolutionPreference({ width: { max: 1280 }, height: { max: 720 } }), { width: 1280, height: 720 });
   assert.deepEqual(getCameraResolutionPreference({ width: { max: 3840 }, height: { max: 2160 } }), { width: 1920, height: 1080 });
   assert.deepEqual(getCameraResolutionPreference({}), { width: 1920, height: 1080 });
+});
+
+test('amplia cupons pequenos sem ultrapassar o orçamento de pixels que permite nitidez', () => {
+  assert.equal(getReceiptProcessingScale(1000, 500), 2);
+  const scale = getReceiptProcessingScale(4000, 4000);
+  assert.ok(scale < 1);
+  assert.ok(Math.round(4000 * scale) ** 2 <= 2_500_000);
+  assert.equal(getReceiptProcessingScale(0, 0), 1);
 });
 
 test('oferece foco manual somente quando a câmera expõe modo e faixa ajustável', () => {
