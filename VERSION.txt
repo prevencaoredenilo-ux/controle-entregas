@@ -1,2 +1,1 @@
-V8.0.0 — Nova arquitetura visual de Centro de Comando, menu reorganizado, navegação por áreas e preservação dos fluxos operacionais.
-Aplicação ativa offline-first; histórico antigo preservado em _arquivo_historico. GPS ao vivo, sincronização multi-dispositivo e autenticação real não fazem parte desta versão local.
+13.66.0

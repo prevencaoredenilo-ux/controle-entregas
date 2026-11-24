@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { analyzeReceiptFrame, assessFrameQuality, buildCameraTrackConstraints, configureReceiptWorker, findReceiptPaperBounds, findReceiptTraceBoxes, getCameraFocusOptions, getCameraResolutionPreference, getReceiptProcessingScale, getTesseractApi, mergeOcrCandidates, mergeOcrLinesWithVerticalOffset, normalizeNeighborhood, parseDeliveryReceiptText, parseCouponText } from '../receipt-capture.js';
+import { analyzeReceiptFrame, assessFrameQuality, buildCameraTrackConstraints, configureReceiptWorker, findReceiptPaperBounds, findReceiptTraceBoxes, getCameraFocusOptions, getCameraResolutionPreference, getReceiptProcessingScale, getTesseractApi, getReceiptTimestampWarning, mergeOcrCandidates, mergeOcrLinesWithVerticalOffset, normalizeNeighborhood, parseDeliveryReceiptText, parseCouponText } from '../receipt-capture.js';
 
 test('lê os campos do relatório e converte o horário de Cuiabá para Brasília', () => {
   const result = parseDeliveryReceiptText([
@@ -19,11 +19,11 @@ test('lê os campos do relatório e converte o horário de Cuiabá para Brasíli
 });
 
 test('lê o número da NFC-e como cupom preservando zeros à esquerda', () => {
-  assert.deepEqual(parseCouponText('NFC-e n. 000015693 Serie 302'), { coupon: '000015693' });
+  assert.deepEqual(parseCouponText('NFC-e n. 000015693 Serie 302'), { coupon: '000015693', couponSeries: '302' });
 });
 
 test('lê COO como DOC junto com o número NFC-e quando os dois estão no cupom', () => {
-  assert.deepEqual(parseCouponText('NFC-e n. 000015693 Série 302 COO: 35174'), { coupon: '000015693', doc: '35174' });
+  assert.deepEqual(parseCouponText('NFC-e n. 000015693 Série 302 COO: 35174'), { coupon: '000015693', couponSeries: '302', doc: '35174' });
 });
 
 test('consenso OCR usa leituras repetidas e mantém divergência para confirmação em vez de adivinhar', () => {
@@ -185,9 +185,10 @@ test('solicita até 1920×1080 sem exceder a resolução máxima anunciada pela 
 });
 
 test('amplia cupons pequenos sem ultrapassar o orçamento de pixels que permite nitidez', () => {
-  assert.equal(getReceiptProcessingScale(1000, 500), 2);
+  assert.equal(getReceiptProcessingScale(1000, 500), 1.8);
   const scale = getReceiptProcessingScale(4000, 4000);
   assert.ok(scale < 1);
+  assert.ok(4000 * scale <= 1800);
   assert.ok(Math.round(4000 * scale) ** 2 <= 2_500_000);
   assert.equal(getReceiptProcessingScale(0, 0), 1);
 });
@@ -253,4 +254,36 @@ test('padroniza nomes e logradouro sem alterar os identificadores numéricos', (
   assert.equal(result.pdv, '002');
   assert.equal(result.doc, '35174');
   assert.equal(parseDeliveryReceiptText('Logradouro: Bv getulio vargas sn').street, 'Av. Getulio Vargas');
+});
+
+
+test('separa Cliente e Fone(s) quando aparecem na mesma linha', () => {
+  const result = parseDeliveryReceiptText('Cliente: João Silva Fone(s): (66) 99999-0000');
+  assert.equal(result.clientName, 'João Silva');
+  assert.equal(result.phone, '(66) 99999-0000');
+});
+test('prefere data da venda/PDV e ignora linha de impressão', () => {
+  const result = parseDeliveryReceiptText('Impressão: 23/11/26 10:00:00\n23/11/26 07:13:47 PDV 002');
+  assert.equal(result.entryTimeOnly, '08:13');
+  assert.equal(result.operationDate, '2026-11-23');
+});
+test('não escolhe entre duas datas de venda com prioridade igual', () => {
+  const text = '23/11/26 07:13:47 PDV 002\n24/11/26 10:00:00 Venda';
+  const result = parseDeliveryReceiptText(text);
+  assert.equal('operationDate' in result, false);
+  assert.match(getReceiptTimestampWarning(text), /mais de uma data\/hora/);
+});
+test('aceita ano com quatro dígitos e converte virada de dia após a conversão atual', () => {
+  const result = parseDeliveryReceiptText('31/12/2026 23:30:00 PDV 002');
+  assert.equal(result.operationDate, '2027-01-01');
+  assert.equal(result.entryTimeOnly, '00:30');
+});
+
+
+test('reconhece variações rotuladas da NFC-e, pontos, número curto e série anterior ao número', () => {
+  assert.deepEqual(parseCouponText('NFC-e n. 000.015.693'), { coupon: '000015693' });
+  assert.deepEqual(parseCouponText('NFC-€ Nº 7'), { coupon: '7' });
+  assert.deepEqual(parseCouponText('NFCe Número: 42'), { coupon: '42' });
+  assert.deepEqual(parseCouponText('Série 302 NFC—e No. 000015693'), { coupon: '000015693', couponSeries: '302' });
+  assert.deepEqual(parseCouponText('texto 123456789 sem rótulo'), {});
 });

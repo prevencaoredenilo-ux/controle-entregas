@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validateBackupData, MAX_DELIVERY_TRIPS, normalizeTripCount, buildDeliveryTrips } from '../db.js';
+import { couponsMatch, normalizeCouponNumber } from '../coupon-utils.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
@@ -80,4 +81,12 @@ test('Entrega Grande limita viagens e preserva viagens já existentes', () => {
   assert.equal(next[0].status, 'concluida');
   assert.equal(next[1].status, 'pendente');
   assert.equal(next[2].tripIndex, 3);
+});
+
+test('normaliza zeros à esquerda apenas para comparar duplicidade de cupom', () => {
+  assert.equal(normalizeCouponNumber('000.015.693'), '15693');
+  assert.equal(couponsMatch({ coupon: '000015693' }, { coupon: '15693' }), true);
+  assert.equal(couponsMatch({ coupon: '15693', couponSeries: '002' }, { coupon: '00015693', couponSeries: '2' }), true);
+  assert.equal(couponsMatch({ coupon: '15693', couponSeries: '2' }, { coupon: '15693', couponSeries: '3' }), false);
+  assert.equal(couponsMatch({ coupon: '15693', couponSeries: '2' }, { coupon: '15693' }), false);
 });

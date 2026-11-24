@@ -348,3 +348,12 @@ Você indicou o repositório `prevencaoredenilo-ux/controle-entregas` (V14.8) co
 - Não altera históricos nem backups existentes.
 
 Observação: nesta arquitetura local, outro dispositivo ainda não recebe automaticamente os mesmos dados. O perfil de consulta está pronto; visualização ao vivo entre aparelhos exigirá a sincronização online futura.
+
+
+## Captura local de comprovantes
+
+O OCR (Tesseract.js com idioma português) e a leitura de QR NFC-e (jsQR/BarcodeDetector) são executados no navegador. Após instalar e abrir o app conectado para completar o cache do Service Worker, os arquivos necessários ficam disponíveis offline. As imagens ficam apenas em memória durante a captura/leitura e não são enviadas nem persistidas pelo sistema. Confira e corrija os campos antes de salvar.
+
+> **Aviso de fuso horário:** o horário do comprovante continua sendo convertido de `America/Cuiaba` para `America/Sao_Paulo`. O formulário interpreta valores como horário local do aparelho; se o aparelho estiver configurado no fuso de Mato Grosso, a conversão pode causar diferença de uma hora. A regra precisa ser confirmada pelo responsável pelo sistema.
+
+Versão desta entrega: 13.66.0.

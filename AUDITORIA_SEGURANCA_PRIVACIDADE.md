@@ -35,3 +35,8 @@ A aplicação pode armazenar nome de cliente, telefone, endereço, bairro, dados
 ## Testes e evidências
 
 Os comandos `npm run check:syntax` e `npm test` devem ser executados no CI. A publicação deve aguardar revisão do PR, confirmação das configurações do GitHub Pages e decisão explícita sobre qualquer backend ou migração externa.
+
+
+## Atualização 13.66.0
+
+OCR Tesseract.js e modelo português fast, além de jsQR, são ativos vendorizados e fixados localmente. O processamento da foto é local; nenhum envio a serviço de OCR/backend foi introduzido. CSP via meta restringe scripts a mesma origem, habilita worker local/blob para o runtime e permite somente conexões locais, Google Fonts e Open-Meteo. Service Worker armazena apenas respostas bem-sucedidas (res.ok) da mesma origem. Revisar manualmente implantação de CSP no GitHub Pages e comportamento offline em navegador real.

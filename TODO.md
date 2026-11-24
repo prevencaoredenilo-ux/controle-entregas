@@ -1,48 +1,15 @@
-# TODO — saneamento da versão ativa
+# TODO — melhorias da captura de comprovantes
 
-## 1. Consistência técnica
-- [x] Alinhar versão exibida, query strings dos módulos, Service Worker e manifesto.
-- [x] Garantir que todas as referências locais da aplicação ativa existam.
-- [x] Preservar `_arquivo_historico` sem misturar cópias antigas com a execução da raiz.
+## Concluído nesta rodada (13.66.0)
+- [x] Corrigir aplicação e origem dos campos, proteção de edição real, substituição de valores padrão/OCR, data e hora, preview, contagem, alertas, parsing cliente/telefone, bairro único aproximado, ambiguidade de horário, `toBlob(null)` e bloqueio de leitura concorrente.
+- [x] Normalizar cupom somente na comparação de duplicidade; considerar série e número quando informada; mostrar entrega existente e preservar valor confirmado.
+- [x] OCR Tesseract.js local/offline, assets e checksums/licenças; singleton com encerramento ocioso e progresso.
+- [x] Pré-processar imagem com EXIF, redução, escala de cinza/contraste, modos PSM; controles separados câmera/galeria e encerramento da webcam após foto.
+- [x] Ler QR NFC-e com BarcodeDetector/jsQR local; validar chave/DV e obter série, número/mês; OCR de chave e parser rotulado; exigir conferência antes de salvar.
+- [x] Testes node:test, jsdom, duplicidade e parser sem fotos reais.
+- [x] Alinhar versão, CSP e cache seguro; não migrar IndexedDB.
 
-## 2. Métricas e regras
-- [x] Calcular tempo médio no cliente quando existem chegada e finalização.
-- [x] Evitar agrupamento de datas com conversão UTC que desloca dias em fusos brasileiros.
-- [x] Manter no dashboard a distinção entre dados avaliados, pendentes e sem horário.
-
-## 3. Interface e responsividade
-- [x] Melhorar leitura do cabeçalho e dos filtros em mobile.
-- [x] Tornar tabelas largas navegáveis sem quebrar o layout.
-- [x] Reforçar foco visível, áreas de toque e estados vazios.
-- [x] Reduzir efeitos quando o utilizador prefere movimento reduzido.
-
-## 4. Relatórios e documentação
-- [x] Manter exportação Excel/CSV e impressão sem prometer backend inexistente.
-- [x] Documentar limitações reais: autenticação, sincronização, GPS e múltiplas viagens.
-- [x] Entregar auditoria técnica com funções, fluxos e achados priorizados.
-
-## 5. Validação
-- [x] `node --check` nos módulos JavaScript ativos.
-- [x] Verificação de referências de HTML e imports.
-- [x] Servir a raiz por HTTP e verificar `index.html`, assets, módulos e Service Worker.
-- [x] Gerar ZIP final somente com a pasta do projeto.
-
-## 6. Repasses a entregadores terceirizados
-- [ ] Cadastrar entregador como interno ou terceirizado, com periodicidade quinzenal/mensal e dados de pagamento.
-- [ ] Calcular automaticamente o repasse integral da taxa nas entregas finalizadas por terceirizados.
-- [ ] Excluir do repasse retiradas na loja e taxas reembolsadas.
-- [ ] Exibir fechamento por período, marcar como pago e manter histórico auditado.
-- [ ] Incluir os repasses na exportação CSV e no Dossiê Excel.
-
-## 7. Qualidade e foco da webcam
-- [x] Solicitar até 1920×1080 sem exceder o máximo anunciado pela câmera e mostrar a resolução realmente entregue pelo navegador.
-- [x] Permitir escolher outra webcam quando houver mais de uma, para evitar usar uma câmera de resolução inferior por engano.
-- [x] Manter foco automático quando suportado e mostrar ajuste manual de distância apenas quando a câmera e o navegador oferecerem essa capacidade.
-- [x] Preservar a captura por webcam e a seleção de foto se algum controle não estiver disponível.
-- [x] Validar sintaxe, testes automatizados e integridade do diff; não há webcam física disponível neste ambiente para confirmar foco/resolução no dispositivo real.
-- [x] Quando a primeira leitura do comprovante tiver baixa confiança ou faltar campo-chave, comparar até três versões da imagem processadas localmente com OCR em português.
-- [x] Usar concordância e formato/contexto dos campos para escolher leituras; não preencher valores divergentes como se fossem certos e mostrar alternativas para conferência.
-- [x] Manter o processamento OCR no navegador, sem enviar imagem ao servidor; validar com testes de consenso e conflito.
-- [x] Exibir na prévia a imagem efetivamente tratada, remover o desfoque artificial e limitar a ampliação para preservar nitidez sem exceder 2,5 MP de processamento.
-- [x] Comparar uma segunda leitura OCR independente com segmentação diferente mesmo quando a confiança geral da primeira leitura for alta; testar uma terceira variante somente quando faltarem campos ou houver incerteza, mantendo até três tentativas locais.
-- [x] Manter como incertos os valores divergentes quando houver empate de leituras, mesmo que a confiança global de uma delas seja maior; apresentar as alternativas para conferência.
+## Verificação manual pendente
+- [ ] Testar câmera/foco e permissões em aparelho/navegador reais; testar foto com EXIF de celular.
+- [ ] Instalar/abrir online, completar o cache e repetir OCR/QR com aparelho offline.
+- [ ] Confirmar com o responsável a regra de conversão do fuso Cuiabá → Brasília.

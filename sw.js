@@ -1,9 +1,15 @@
-const CACHE_PREFIX = 'orbita-v13-65-safe-';
+const CACHE_PREFIX = 'orbita-v13-66-safe-';
 const CACHE = `${CACHE_PREFIX}1`;
 const ASSETS = [
-  './', './index.html', './styles.css?v=13.65', './app.js?v=13.65', './db.js?v=13.48', './helpers.js?v=13.48', './views.js?v=13.65', './receipt-capture.js?v=13.65', './excel-report.js?v=13.48', './manifest.webmanifest?v=13.65',
+  './', './index.html', './styles.css?v=13.66', './app.js?v=13.66', './db.js?v=13.66', './helpers.js?v=13.66', './views.js?v=13.66', './receipt-capture.js?v=13.66', './excel-report.js?v=13.66', './manifest.webmanifest?v=13.66',
  
-  './icons/icon-192.png', './icons/icon-512.png', './assets/delivery-courier-mascot.png',
+  './icons/icon-192.png', './icons/icon-512.png',
+  './vendor/tesseract/tesseract.esm.min.js', './vendor/tesseract/worker.min.js',
+  './vendor/tesseract/tesseract-core-lstm.wasm.js', './vendor/tesseract/tesseract-core-lstm.wasm',
+  './vendor/tesseract/tesseract-core-simd-lstm.wasm.js', './vendor/tesseract/tesseract-core-simd-lstm.wasm',
+  './vendor/tesseract/tesseract-core-simd.wasm.js', './vendor/tesseract/tesseract-core-simd.wasm',
+  './vendor/tesseract/tesseract-core.wasm.js', './vendor/tesseract/tesseract-core.wasm',
+  './vendor/tesseract/lang/por.traineddata', './vendor/jsqr/jsQR.js',
 ];
 
 self.addEventListener('install', (event) => {
@@ -20,8 +26,10 @@ self.addEventListener('fetch', (event) => {
   if (req.mode === 'navigate') { event.respondWith(fetch(req).catch(() => caches.match('./index.html'))); return; }
   event.respondWith(
     fetch(req).then((res) => {
-      const clone = res.clone();
-      caches.open(CACHE).then((cache) => cache.put(req, clone));
+      if (res.ok && new URL(res.url).origin === self.location.origin) {
+        const clone = res.clone();
+        caches.open(CACHE).then((cache) => cache.put(req, clone));
+      }
       return res;
     }).catch(() => caches.match(req))
   );

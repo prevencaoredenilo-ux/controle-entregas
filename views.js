@@ -1,8 +1,9 @@
-import { Deliveries, Vehicles, Drivers, DriverPayouts, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters, MAX_DELIVERY_TRIPS, normalizeTripCount, buildDeliveryTrips } from './db.js?v=13.48';
-import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, seasonalContext, SEASONAL_PREVIEW_CATALOG, SEASONAL_ANIMATION_CONFIG, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=13.48';
-import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=13.65';
-import { exportFullExcelReport } from './excel-report.js?v=13.48';
-import { initDeliveryReceiptCapture } from './receipt-capture.js?v=13.65';
+import { couponsMatch } from './coupon-utils.js';
+import { Deliveries, Vehicles, Drivers, DriverPayouts, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters, MAX_DELIVERY_TRIPS, normalizeTripCount, buildDeliveryTrips } from './db.js?v=13.66';
+import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, seasonalContext, SEASONAL_PREVIEW_CATALOG, SEASONAL_ANIMATION_CONFIG, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=13.66';
+import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=13.66';
+import { exportFullExcelReport } from './excel-report.js?v=13.66';
+import { initDeliveryReceiptCapture } from './receipt-capture.js?v=13.66';
 
 const DEFAULT_OPERATIONAL_TARGETS = { startMinutes:120, arrivalMinutes:210, warningMinutes:30, successTarget:90 };
 
@@ -964,7 +965,7 @@ export async function openDeliveryModal(record = null) {
     <form id="deliveryForm">
       ${!record ? `<section id="receiptCapturePanel" class="receipt-capture-panel" aria-label="Lançamento por foto">
         <strong>Preencha pela webcam ou por foto dos comprovantes</strong>
-        <p>As imagens são lidas neste navegador e não são salvas nem enviadas. A internet é necessária para carregar o leitor OCR na primeira utilização.</p>
+        <p>As imagens são lidas neste aparelho e nunca são salvas nem enviadas. Depois de instalado e com os arquivos locais carregados, o OCR também funciona offline.</p>
         <small>Abra a webcam e coloque o cupom inteiro no retângulo. O guia orienta a posição e captura automaticamente quando estiver nítido e parado por 1 segundo. São avaliados cinco quadros; retire o cupom para liberar outra captura. Tudo é processado neste aparelho e o botão manual continua disponível.</small>
         <div class="receipt-kind-buttons"><button type="button" class="btn-ghost btn-small" data-receipt-kind="delivery" aria-pressed="true">Relatório de entrega</button><button type="button" class="btn-ghost btn-small" data-receipt-kind="coupon" aria-pressed="false">Cupom fiscal (NFC-e)</button></div>
         <label class="receipt-auto-read"><input type="checkbox" data-camera-auto checked /> Capturar e preencher automaticamente quando o cupom ficar nítido e parado (COO → DOC; número da NFC-e → Cupom)</label>
@@ -991,7 +992,7 @@ export async function openDeliveryModal(record = null) {
             <li data-track-mode="coupon" data-track-key="doc"><span>DOC (COO)</span><b data-track-value>Aguardando leitura</b></li>
           </ul>
         </section>
-        <div class="receipt-file-inputs"><label>Selecionar foto do relatório<input type="file" accept="image/*" capture="environment" data-receipt-kind="delivery" /></label><label>Selecionar foto do cupom<input type="file" accept="image/*" capture="environment" data-receipt-kind="coupon" /></label></div>
+        <div class="receipt-file-inputs"><label>Tirar foto do relatório<input type="file" accept="image/*" capture="environment" data-receipt-kind="delivery" /></label><label>Escolher relatório da galeria<input type="file" accept="image/*" data-receipt-kind="delivery" /></label><label>Tirar foto do cupom<input type="file" accept="image/*" capture="environment" data-receipt-kind="coupon" /></label><label>Escolher cupom da galeria<input type="file" accept="image/*" data-receipt-kind="coupon" /></label></div>
         <small id="receiptCaptureStatus" role="status" aria-live="polite">Escolha um comprovante, abra a webcam ou selecione uma foto.</small>
       </section>` : ''}
       <div class="delivery-number-preview-card ${record ? 'is-edit' : ''}">
@@ -1011,6 +1012,8 @@ export async function openDeliveryModal(record = null) {
           <label>PDV/Caixa *<input name="pdv" required value="${escapeHtml(record?.pdv || '')}" /></label>
           <label>DOC * <span>(COO do relatório)</span><input name="doc" required value="${escapeHtml(record?.doc || '')}" placeholder="Número COO" /></label>
           <label>Cupom NFC-e<input name="coupon" value="${escapeHtml(record?.coupon || '')}" /></label>
+          <label>Série NFC-e<input name="couponSeries" value="${escapeHtml(record?.couponSeries || '')}" placeholder="Opcional" /></label>
+          <label>Série NFC-e<input name="couponSeries" value="${escapeHtml(record?.couponSeries || '')}" placeholder="Opcional" /></label>
         </div>
       </section>
       <section class="delivery-form-section">
@@ -1262,11 +1265,11 @@ async function saveDeliveryForm(record) {
 
   if (fd.type === 'agendada' && !fd.scheduledAt) return toast('Informe a data e hora do agendamento.', 'error');
 
-  // duplicidade acidental de cupom no mesmo dia/ambiente
+  // Bloqueia cupons duplicados entre entregas ativas do ambiente, normalizando apenas para comparar.
   if (fd.coupon) {
     const all = await Deliveries.active(env);
-    const dup = all.find((d) => d.coupon === fd.coupon && d.id !== record?.id);
-    if (dup) return toast('Já existe uma entrega ativa com esse número de cupom.', 'error');
+    const dup = all.find((delivery) => delivery.id !== record?.id && couponsMatch({ coupon: fd.coupon, couponSeries: fd.couponSeries }, delivery));
+    if (dup) return toast(`Já existe uma entrega ativa #${dup.purchaseNumber} com esse número de cupom.`, 'error');
   }
 
   let normalizedTripCount = 0;
@@ -1284,7 +1287,8 @@ async function saveDeliveryForm(record) {
     entryTime: entryTime.toISOString(),
     pdv: fd.pdv.trim(),
     doc: fd.doc.trim(),
-    coupon: fd.coupon?.trim() || '',
+    coupon: fd.coupon || '',
+    couponSeries: fd.couponSeries?.trim() || '',
     clientName: fd.clientName?.trim() || '',
     phone: fd.phone?.trim() || '',
     street: fd.street.trim(),
@@ -3995,7 +3999,7 @@ function openVehicleAddModal(record = null) {
    ========================================================= */
 export async function renderSettings() {
   const cfg = JSON.parse(localStorage.getItem('orbita_settings') || '{}');
-  const { listAutoBackups } = await import('./db.js?v=13.48');
+  const { listAutoBackups } = await import('./db.js?v=13.66');
   const autoBackups = await listAutoBackups();
   const backupReasonLabel = (reason = '') => reason === 'abertura' ? 'Abertura do sistema' : reason === 'periodico-1min' ? 'Segurança · 1 minuto' : reason ? 'Alteração salva' : 'Automático';
   const autoList = autoBackups.length
@@ -4034,13 +4038,13 @@ export async function renderSettings() {
 export function wireSettingsEvents() {
   $$('.auto-restore-btn').forEach((btn) => btn.addEventListener('click', async () => {
     if (!confirm('Restaurar esse backup automático vai substituir os dados atuais. Continuar?')) return;
-    const { restoreAutoBackup } = await import('./db.js?v=13.48');
+    const { restoreAutoBackup } = await import('./db.js?v=13.66');
     await restoreAutoBackup(btn.dataset.id);
     toast('Backup automático restaurado.', 'success');
     refreshApp();
   }));
   $('#settingsBackupBtn')?.addEventListener('click', async () => {
-    const data = await (await import('./db.js?v=13.48')).exportAll();
+    const data = await (await import('./db.js?v=13.66')).exportAll();
     downloadJSON(`orbita-backup-completo-${new Date().toISOString().slice(0,10)}.json`, data);
     toast('Backup completo gerado.', 'success');
   });
@@ -4048,12 +4052,12 @@ export function wireSettingsEvents() {
     const file = e.target.files[0];
     if (!file) return;
     if (!confirm('Isso vai substituir os dados atuais pelo conteúdo do backup. Um backup de segurança dos dados atuais será baixado antes. Continuar?')) { e.target.value = ''; return; }
-    const currentBackup = await (await import('./db.js?v=13.48')).exportAll();
+    const currentBackup = await (await import('./db.js?v=13.66')).exportAll();
     downloadJSON(`orbita-backup-seguranca-antes-restauracao-${Date.now()}.json`, currentBackup);
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      await (await import('./db.js?v=13.48')).importAll(data);
+      await (await import('./db.js?v=13.66')).importAll(data);
       toast('Backup restaurado.', 'success');
       refreshApp();
     } catch { toast('Arquivo de backup inválido.', 'error'); }
