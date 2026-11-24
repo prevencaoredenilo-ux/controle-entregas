@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { analyzeReceiptFrame, assessFrameQuality, configureReceiptWorker, findReceiptPaperBounds, findReceiptTraceBoxes, getTesseractApi, mergeOcrLinesWithVerticalOffset, normalizeNeighborhood, parseDeliveryReceiptText, parseCouponText } from '../receipt-capture.js';
+import { analyzeReceiptFrame, assessFrameQuality, buildCameraTrackConstraints, configureReceiptWorker, findReceiptPaperBounds, findReceiptTraceBoxes, getCameraFocusOptions, getCameraResolutionPreference, getTesseractApi, mergeOcrLinesWithVerticalOffset, normalizeNeighborhood, parseDeliveryReceiptText, parseCouponText } from '../receipt-capture.js';
 
 test('lê os campos do relatório e converte o horário de Cuiabá para Brasília', () => {
   const result = parseDeliveryReceiptText([
@@ -142,6 +142,33 @@ test('analisa cupom vertical no guia e orienta quando falta foco ou posição', 
   assert.match(analyzeReceiptFrame(makeFrame(24)).message, /Mova para a direita/);
   assert.match(analyzeReceiptFrame(makeFrame(108, 9, 50, 70)).message, /Aproxime o cupom/);
   assert.match(analyzeReceiptFrame(makeFrame(108, 9, 104, 162, false)).message, /Fora de foco/);
+});
+
+test('solicita até 1920×1080 sem exceder a resolução máxima anunciada pela câmera', () => {
+  assert.deepEqual(getCameraResolutionPreference({ width: { max: 1280 }, height: { max: 720 } }), { width: 1280, height: 720 });
+  assert.deepEqual(getCameraResolutionPreference({ width: { max: 3840 }, height: { max: 2160 } }), { width: 1920, height: 1080 });
+  assert.deepEqual(getCameraResolutionPreference({}), { width: 1920, height: 1080 });
+});
+
+test('oferece foco manual somente quando a câmera expõe modo e faixa ajustável', () => {
+  assert.deepEqual(getCameraFocusOptions({ focusMode: ['continuous', 'manual'], focusDistance: { min: 0.1, max: 1, step: 0.05 } }), {
+    autoMode: 'continuous', manualAvailable: true, min: 0.1, max: 1, step: 0.05,
+  });
+  assert.equal(getCameraFocusOptions({ focusMode: ['continuous'] }).manualAvailable, false);
+  assert.equal(getCameraFocusOptions({ focusMode: ['manual'], focusDistance: { min: 0.5, max: 0.5 } }).manualAvailable, false);
+  assert.equal(getCameraFocusOptions({}).autoMode, null);
+});
+
+test('envia foco como constraint exata para que a câmera não ignore o pedido em silêncio', () => {
+  assert.deepEqual(buildCameraTrackConstraints({ width: 1280, height: 720 }, { focusMode: 'manual', focusDistance: 0.55 }), {
+    width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 },
+    focusMode: { exact: 'manual' }, focusDistance: { exact: 0.55 },
+  });
+  assert.deepEqual(buildCameraTrackConstraints({ width: 1920, height: 1080 }, { focusMode: 'continuous' }), {
+    width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 }, focusMode: { exact: 'continuous' },
+  });
+  assert.equal('focusDistance' in buildCameraTrackConstraints({ width: 1920, height: 1080 }, { focusMode: 'manual' }), false);
+  assert.equal('focusMode' in buildCameraTrackConstraints({ width: 1920, height: 1080 }, { focusMode: null }), false);
 });
 
 test('não confunde o próximo rótulo com telefone quando Fone(s) está vazio', () => {

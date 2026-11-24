@@ -508,6 +508,44 @@ export function analyzeReceiptFrame(imageData) {
   return { state: 'good', message: 'Nítido — segure parado…', present: true, box, sharpness };
 }
 
+export function getCameraResolutionPreference(capabilities = {}) {
+  const maxWidth = Number(capabilities.width?.max);
+  const maxHeight = Number(capabilities.height?.max);
+  return {
+    width: Number.isFinite(maxWidth) && maxWidth > 0 ? Math.min(1920, Math.floor(maxWidth)) : 1920,
+    height: Number.isFinite(maxHeight) && maxHeight > 0 ? Math.min(1080, Math.floor(maxHeight)) : 1080,
+  };
+}
+
+export function getCameraFocusOptions(capabilities = {}) {
+  const modes = Array.isArray(capabilities.focusMode) ? capabilities.focusMode : [];
+  const range = capabilities.focusDistance;
+  const manualAvailable = modes.includes('manual')
+    && Number.isFinite(Number(range?.min))
+    && Number.isFinite(Number(range?.max))
+    && Number(range.max) > Number(range.min);
+  return {
+    autoMode: modes.includes('continuous') ? 'continuous' : modes.includes('single-shot') ? 'single-shot' : null,
+    manualAvailable,
+    min: manualAvailable ? Number(range.min) : null,
+    max: manualAvailable ? Number(range.max) : null,
+    step: manualAvailable && Number(range.step) > 0 ? Number(range.step) : 0.01,
+  };
+}
+
+export function buildCameraTrackConstraints(resolution = {}, { focusMode = null, focusDistance = null } = {}) {
+  const constraints = {
+    width: { ideal: Number(resolution.width) || 1920 },
+    height: { ideal: Number(resolution.height) || 1080 },
+    frameRate: { ideal: 30 },
+  };
+  if (focusMode) constraints.focusMode = { exact: focusMode };
+  if (focusMode === 'manual' && focusDistance !== null && focusDistance !== '' && Number.isFinite(Number(focusDistance))) {
+    constraints.focusDistance = { exact: Number(focusDistance) };
+  }
+  return constraints;
+}
+
 export function initDeliveryReceiptCapture(form) {
   const panel = form.querySelector('#receiptCapturePanel');
   const video = panel?.querySelector('video');
@@ -521,6 +559,14 @@ export function initDeliveryReceiptCapture(form) {
   const status = panel?.querySelector('#receiptCaptureStatus');
   const frameStatus = panel?.querySelector('[data-frame-status]');
   const focusHint = panel?.querySelector('[data-focus-hint]');
+  const cameraDeviceField = panel?.querySelector('[data-camera-selector]');
+  const cameraDeviceSelect = panel?.querySelector('[data-camera-device]');
+  const cameraResolution = panel?.querySelector('[data-camera-resolution]');
+  const focusControls = panel?.querySelector('[data-focus-controls]');
+  const focusModeSelect = panel?.querySelector('[data-focus-mode]');
+  const focusDistanceInput = panel?.querySelector('[data-focus-distance]');
+  const focusDistanceValue = panel?.querySelector('[data-focus-distance-value]');
+  const focusStatus = panel?.querySelector('[data-focus-status]');
   const autoReadToggle = panel?.querySelector('[data-camera-auto]');
   const startButton = panel?.querySelector('[data-camera-start]');
   const captureButton = panel?.querySelector('[data-camera-capture]');
@@ -545,6 +591,12 @@ export function initDeliveryReceiptCapture(form) {
   let previousBox = null;
   let audioContext = null;
   let captureBusy = false;
+  let cameraOpening = false;
+  let activeTrack = null;
+  let activeFocusOptions = getCameraFocusOptions();
+  let activeFocusMode = null;
+  let focusAdjustTimer = null;
+  let activeResolutionPreference = { width: 1920, height: 1080 };
   const qualityCanvas = document.createElement('canvas');
   qualityCanvas.width = 320;
   qualityCanvas.height = 180;
@@ -643,6 +695,7 @@ export function initDeliveryReceiptCapture(form) {
   };
   const stopCamera = () => {
     if (qualityTimer) clearInterval(qualityTimer);
+    clearTimeout(focusAdjustTimer);
     qualityTimer = null;
     readableSince = 0;
     captureLocked = false;
@@ -650,11 +703,15 @@ export function initDeliveryReceiptCapture(form) {
     previousBox = null;
     stream?.getTracks().forEach((track) => track.stop());
     stream = null;
+    activeTrack = null;
     video.srcObject = null;
     cameraStage.hidden = true;
     captureButton.hidden = true;
     stopButton.hidden = true;
     startButton.hidden = false;
+    if (cameraResolution) cameraResolution.textContent = 'Resolução efetiva: webcam fechada.';
+    if (focusControls) focusControls.hidden = true;
+    if (focusHint) focusHint.hidden = true;
   };
   const applyRecognized = (kind, text) => {
     const fields = kind === 'coupon' ? parseCouponText(text) : parseDeliveryReceiptText(text);
@@ -837,26 +894,104 @@ export function initDeliveryReceiptCapture(form) {
     setStatus(activeReceipt === 'delivery' ? 'Relatório selecionado: o COO será preenchido no campo DOC.' : 'Cupom NFC-e selecionado: o número do cupom será preenchido no campo Cupom.');
   }));
   autoReadToggle?.addEventListener('change', () => { readableSince = 0; autoReadDone = false; previousBox = null; });
-  startButton?.addEventListener('click', async () => {
+  const applyTrackSettings = async (track, { focusMode = activeFocusMode, focusDistance = null } = {}) => {
+    await track.applyConstraints(buildCameraTrackConstraints(activeResolutionPreference, { focusMode, focusDistance }));
+  };
+  const showCurrentCameraSettings = () => {
+    const settings = activeTrack?.getSettings?.() || {};
+    if (cameraResolution) {
+      if (settings.width && settings.height) {
+        const belowPreferred = settings.width < 1280 || settings.height < 720;
+        cameraResolution.textContent = belowPreferred
+          ? `Resolução recebida: ${settings.width} × ${settings.height} px — abaixo do esperado; tente outra webcam no seletor.`
+          : `Resolução recebida: ${settings.width} × ${settings.height} px`;
+      } else cameraResolution.textContent = 'O navegador não informou a resolução efetiva da webcam.';
+    }
+    if (cameraDeviceSelect && settings.deviceId) cameraDeviceSelect.value = settings.deviceId;
+  };
+  const refreshCameraDevices = async () => {
+    if (!cameraDeviceSelect || !navigator.mediaDevices?.enumerateDevices) return;
+    try {
+      const devices = (await navigator.mediaDevices.enumerateDevices()).filter((device) => device.kind === 'videoinput');
+      const currentId = activeTrack?.getSettings?.().deviceId || cameraDeviceSelect.value;
+      cameraDeviceSelect.replaceChildren(new Option('Seleção automática', ''));
+      devices.forEach((device, index) => cameraDeviceSelect.add(new Option(device.label || `Câmera ${index + 1}`, device.deviceId)));
+      if (cameraDeviceField) cameraDeviceField.hidden = devices.length < 2;
+      cameraDeviceSelect.value = devices.some((device) => device.deviceId === currentId) ? currentId : '';
+    } catch (error) {
+      console.debug('Não foi possível listar as webcams:', error);
+    }
+  };
+  const configureFocusControls = async (track) => {
+    let capabilities = {};
+    try { capabilities = track.getCapabilities?.() || {}; } catch (error) { console.debug('Capacidades de foco indisponíveis:', error); }
+    activeFocusOptions = getCameraFocusOptions(capabilities);
+    activeFocusMode = activeFocusOptions.autoMode || (activeFocusOptions.manualAvailable ? 'manual' : null);
+    if (activeFocusOptions.autoMode) {
+      try { await applyTrackSettings(track, { focusMode: activeFocusOptions.autoMode }); }
+      catch (error) { console.debug('Foco automático contínuo indisponível; mantendo o padrão da câmera:', error); }
+    } else if (activeFocusOptions.manualAvailable) {
+      const initialDistance = (activeFocusOptions.min + activeFocusOptions.max) / 2;
+      try { await applyTrackSettings(track, { focusMode: 'manual', focusDistance: initialDistance }); }
+      catch (error) { console.debug('A câmera não aceitou o modo manual inicial:', error); }
+    }
+    const canChooseMode = activeFocusOptions.manualAvailable && activeFocusOptions.autoMode;
+    const canAdjustManually = activeFocusOptions.manualAvailable;
+    if (focusControls) focusControls.hidden = !canAdjustManually;
+    if (focusModeSelect) focusModeSelect.hidden = !canChooseMode;
+    if (focusModeSelect && canChooseMode) {
+      focusModeSelect.replaceChildren(
+        new Option(activeFocusOptions.autoMode === 'continuous' ? 'Automático contínuo' : 'Automático (um ajuste)', activeFocusOptions.autoMode),
+        new Option('Manual', 'manual'),
+      );
+      focusModeSelect.value = activeFocusMode;
+    }
+    if (focusDistanceInput && canAdjustManually) {
+      focusDistanceInput.min = String(activeFocusOptions.min);
+      focusDistanceInput.max = String(activeFocusOptions.max);
+      focusDistanceInput.step = String(activeFocusOptions.step);
+      const currentDistance = Number(track.getSettings?.().focusDistance);
+      focusDistanceInput.value = String(Number.isFinite(currentDistance)
+        ? Math.min(activeFocusOptions.max, Math.max(activeFocusOptions.min, currentDistance))
+        : (activeFocusOptions.min + activeFocusOptions.max) / 2);
+      focusDistanceInput.disabled = activeFocusMode !== 'manual';
+    }
+    if (focusDistanceValue && focusDistanceInput) focusDistanceValue.textContent = focusDistanceInput.value;
+    if (focusHint) {
+      focusHint.hidden = Boolean(canAdjustManually);
+      if (!canAdjustManually) focusHint.textContent = activeFocusOptions.autoMode
+        ? 'O foco automático está ativo. Esta câmera/navegador não disponibiliza ajuste manual de distância.'
+        : 'O navegador não expõe controles de foco para esta câmera; aproxime ou afaste o cupom até ficar nítido.';
+    }
+    if (focusStatus) focusStatus.textContent = canChooseMode
+      ? 'Foco automático ativado. Se necessário, mude para Manual e ajuste a distância.'
+      : canAdjustManually ? 'Ajuste manual disponível nesta câmera.' : '';
+  };
+  const startCamera = async (requestedDeviceId = cameraDeviceSelect?.value || '') => {
+    if (cameraOpening) return;
     if (!navigator.mediaDevices?.getUserMedia) {
       setStatus('Webcam indisponível neste navegador. Abra o site por HTTPS ou selecione uma foto abaixo.');
       return;
     }
+    cameraOpening = true;
     try {
+      const videoConstraints = {
+        width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 },
+        ...(requestedDeviceId ? { deviceId: { exact: requestedDeviceId } } : { facingMode: { ideal: 'environment' } }),
+      };
       stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+        video: videoConstraints,
         audio: false,
       });
-      try {
-        const track = stream.getVideoTracks()[0];
-        const modes = track?.getCapabilities?.().focusMode;
-        if (modes?.includes('continuous')) {
-          await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
-          if (focusHint) focusHint.hidden = true;
-        } else if (focusHint) focusHint.hidden = false;
-      } catch (error) {
-        console.debug('Foco contínuo indisponível; mantendo o foco automático padrão:', error);
-        if (focusHint) focusHint.hidden = false;
+      activeTrack = stream.getVideoTracks()[0] || null;
+      let capabilities = {};
+      try { capabilities = activeTrack?.getCapabilities?.() || {}; } catch (error) { console.debug('Resolução máxima não informada:', error); }
+      activeResolutionPreference = getCameraResolutionPreference(capabilities);
+      if (activeTrack) {
+        try { await applyTrackSettings(activeTrack, { focusMode: null }); }
+        catch (error) { console.debug('Mantendo a melhor resolução inicial oferecida pela câmera:', error); }
+        await configureFocusControls(activeTrack);
+        showCurrentCameraSettings();
       }
       const AudioContextClass = window.AudioContext || window.webkitAudioContext;
       if (!audioContext && AudioContextClass) audioContext = new AudioContextClass();
@@ -866,15 +1001,21 @@ export function initDeliveryReceiptCapture(form) {
         if (qualityTimer) clearInterval(qualityTimer);
         qualityTimer = null;
         stream = null;
+        activeTrack = null;
         video.srcObject = null;
         cameraStage.hidden = true;
         captureButton.hidden = true;
         stopButton.hidden = true;
         startButton.hidden = false;
+        if (focusControls) focusControls.hidden = true;
+        if (focusHint) focusHint.hidden = true;
+        if (cameraResolution) cameraResolution.textContent = 'A webcam foi desconectada.';
         setStatus('A webcam foi encerrada pelo navegador ou pelo dispositivo. Toque em “Abrir webcam” para continuar; a foto capturada continua disponível.');
       }, { once: true }));
       video.srcObject = stream;
       await video.play();
+      showCurrentCameraSettings();
+      await refreshCameraDevices();
       cameraStage.hidden = false;
       cameraStage.dataset.quality = 'bad';
       startButton.hidden = true;
@@ -898,8 +1039,51 @@ export function initDeliveryReceiptCapture(form) {
       console.warn('Webcam não pôde ser aberta:', error);
       stream?.getTracks().forEach((track) => track.stop());
       stream = null;
+      activeTrack = null;
+      if (cameraResolution) cameraResolution.textContent = 'Não foi possível obter a resolução da webcam.';
       setStatus('Não consegui acessar a webcam. Autorize o acesso no navegador ou escolha uma foto.');
+    } finally {
+      cameraOpening = false;
     }
+  };
+  startButton?.addEventListener('click', () => { void startCamera(); });
+  cameraDeviceSelect?.addEventListener('change', () => {
+    if (!stream) return;
+    const requestedDeviceId = cameraDeviceSelect.value;
+    stopCamera();
+    void startCamera(requestedDeviceId);
+  });
+  focusModeSelect?.addEventListener('change', async () => {
+    if (!activeTrack) return;
+    const nextMode = focusModeSelect.value;
+    const previousMode = activeFocusMode;
+    const distance = Number(focusDistanceInput?.value);
+    try {
+      await applyTrackSettings(activeTrack, { focusMode: nextMode, focusDistance: distance });
+      activeFocusMode = nextMode;
+      if (focusDistanceInput) focusDistanceInput.disabled = nextMode !== 'manual';
+      if (focusStatus) focusStatus.textContent = nextMode === 'manual' ? 'Foco manual ativo. Ajuste o controle até as letras ficarem nítidas.' : 'Foco automático ativado.';
+      showCurrentCameraSettings();
+    } catch (error) {
+      console.warn('A câmera não aceitou o modo de foco selecionado:', error);
+      focusModeSelect.value = previousMode || activeFocusOptions.autoMode;
+      if (focusStatus) focusStatus.textContent = 'Não foi possível mudar o foco. A câmera manteve o ajuste anterior.';
+    }
+  });
+  focusDistanceInput?.addEventListener('input', () => {
+    if (focusDistanceValue) focusDistanceValue.textContent = focusDistanceInput.value;
+    clearTimeout(focusAdjustTimer);
+    focusAdjustTimer = setTimeout(async () => {
+      if (!activeTrack || activeFocusMode !== 'manual') return;
+      try {
+        await applyTrackSettings(activeTrack, { focusMode: 'manual', focusDistance: Number(focusDistanceInput.value) });
+        if (focusStatus) focusStatus.textContent = 'Foco manual atualizado.';
+        showCurrentCameraSettings();
+      } catch (error) {
+        console.debug('A câmera não aceitou esse ajuste de foco:', error);
+        if (focusStatus) focusStatus.textContent = 'A câmera não aceitou essa posição de foco.';
+      }
+    }, 140);
   });
   stopButton?.addEventListener('click', stopCamera);
   captureButton?.addEventListener('click', () => captureFrame(activeReceipt));

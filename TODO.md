@@ -33,3 +33,10 @@
 - [ ] Excluir do repasse retiradas na loja e taxas reembolsadas.
 - [ ] Exibir fechamento por período, marcar como pago e manter histórico auditado.
 - [ ] Incluir os repasses na exportação CSV e no Dossiê Excel.
+
+## 7. Qualidade e foco da webcam
+- [x] Solicitar até 1920×1080 sem exceder o máximo anunciado pela câmera e mostrar a resolução realmente entregue pelo navegador.
+- [x] Permitir escolher outra webcam quando houver mais de uma, para evitar usar uma câmera de resolução inferior por engano.
+- [x] Manter foco automático quando suportado e mostrar ajuste manual de distância apenas quando a câmera e o navegador oferecerem essa capacidade.
+- [x] Preservar a captura por webcam e a seleção de foto se algum controle não estiver disponível.
+- [x] Validar sintaxe, testes automatizados e integridade do diff; não há webcam física disponível neste ambiente para confirmar foco/resolução no dispositivo real.

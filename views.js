@@ -1,8 +1,8 @@
 import { Deliveries, Vehicles, Drivers, DriverPayouts, Collaborators, Neighborhoods, CostCategories, ReturnReasons, Cycles, OdometerLogs, Costs, DayClosures, AuditLog, Counters, MAX_DELIVERY_TRIPS, normalizeTripCount, buildDeliveryTrips } from './db.js?v=13.48';
 import { $, $$, money, dateBR, dateTimeBR, timeBR, escapeHtml, toast, badge, STATUS_META, guardClick, downloadCSV, downloadJSON, wirePhoneMask, animateStatCards, motivationalPhrase, performanceProfile, seasonalContext, SEASONAL_PREVIEW_CATALOG, SEASONAL_ANIMATION_CONFIG, barChartSVG, lineChartSVG, thermometerHTML } from './helpers.js?v=13.48';
-import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=13.61';
+import { getEnv, getOperatorName, getOperatorRole, canPerform, closeModal, openModal, refreshApp } from './app.js?v=13.62';
 import { exportFullExcelReport } from './excel-report.js?v=13.48';
-import { initDeliveryReceiptCapture } from './receipt-capture.js?v=13.61';
+import { initDeliveryReceiptCapture } from './receipt-capture.js?v=13.62';
 
 const DEFAULT_OPERATIONAL_TARGETS = { startMinutes:120, arrivalMinutes:210, warningMinutes:30, successTarget:90 };
 
@@ -968,6 +968,8 @@ export async function openDeliveryModal(record = null) {
         <small>Abra a webcam e coloque o cupom inteiro no retângulo. O guia orienta a posição e captura automaticamente quando estiver nítido e parado por 1 segundo. São avaliados cinco quadros; retire o cupom para liberar outra captura. Tudo é processado neste aparelho e o botão manual continua disponível.</small>
         <div class="receipt-kind-buttons"><button type="button" class="btn-ghost btn-small" data-receipt-kind="delivery" aria-pressed="true">Relatório de entrega</button><button type="button" class="btn-ghost btn-small" data-receipt-kind="coupon" aria-pressed="false">Cupom fiscal (NFC-e)</button></div>
         <label class="receipt-auto-read"><input type="checkbox" data-camera-auto checked /> Capturar e preencher automaticamente quando o cupom ficar nítido e parado (COO → DOC; número da NFC-e → Cupom)</label>
+        <div class="receipt-camera-settings"><label data-camera-selector hidden>Webcam<select data-camera-device aria-label="Selecionar webcam"></select></label><small data-camera-resolution role="status">Resolução efetiva: aguardando webcam.</small></div>
+        <fieldset class="receipt-focus-controls" data-focus-controls hidden><legend>Foco da webcam</legend><label>Modo<select data-focus-mode aria-label="Modo de foco"></select></label><label class="receipt-focus-distance">Distância do foco <output data-focus-distance-value></output><input type="range" data-focus-distance aria-label="Ajuste manual da distância do foco" disabled /></label><small data-focus-status role="status"></small></fieldset>
         <div class="receipt-camera-actions"><button type="button" class="btn-ghost btn-small" data-camera-start>Abrir webcam</button><button type="button" class="btn-primary btn-small" data-camera-capture hidden>Tirar foto e ler</button><button type="button" class="btn-ghost btn-small" data-camera-stop hidden>Fechar webcam</button></div>
         <div class="receipt-camera-stage" data-quality="bad" hidden><video playsinline muted aria-label="Prévia ao vivo da webcam"></video><div class="receipt-guide" aria-hidden="true"><span></span><span></span><span></span><span></span></div><div class="receipt-frame-status" data-frame-status role="status" aria-live="polite">Coloque o cupom dentro do retângulo</div></div>
         <small class="receipt-focus-hint" data-focus-hint hidden>Foco não ajustável nesta câmera: afaste ou aproxime o cupom até ficar nítido.</small>

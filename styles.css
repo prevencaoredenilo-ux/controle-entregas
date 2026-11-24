@@ -6069,6 +6069,17 @@ input:focus, select:focus, textarea:focus { border-color: var(--blue) !important
 .receipt-capture-panel [hidden]{display:none!important}
 .receipt-auto-read{display:flex!important;grid-template-columns:auto 1fr;align-items:flex-start;gap:8px;padding:9px 10px;border:1px solid var(--line);border-radius:9px;background:#fff;color:var(--text)!important;font-size:11px!important;line-height:1.4}
 .receipt-auto-read input{width:16px;height:16px;margin:0;accent-color:#178747;flex:0 0 auto}
+.receipt-camera-settings{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin-top:8px}
+.receipt-camera-settings [hidden],.receipt-focus-controls [hidden]{display:none!important}
+.receipt-camera-settings label,.receipt-focus-controls>label{display:flex;flex-wrap:wrap;align-items:center;gap:6px;color:var(--text);font-size:12px;font-weight:750}
+.receipt-camera-settings select,.receipt-focus-controls select{max-width:100%;min-width:180px;padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--text);font:inherit}
+.receipt-camera-settings small,.receipt-focus-controls small{color:var(--text-muted);font-size:11px;line-height:1.4}
+.receipt-focus-controls{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin:8px 0 0;padding:9px 11px;border:1px solid var(--line);border-radius:9px;background:#f8fafc}
+.receipt-focus-controls legend{padding:0 5px;color:var(--ink);font-size:12px;font-weight:850}
+.receipt-focus-controls .receipt-focus-distance{display:flex;flex-wrap:wrap;align-items:center;gap:6px;color:var(--text);font-size:12px;font-weight:750}
+.receipt-focus-distance input{width:min(260px,48vw);accent-color:#178747}
+.receipt-focus-distance output{min-width:3.5em;color:var(--text-muted);font-variant-numeric:tabular-nums}
+.receipt-focus-controls>[data-focus-status]{flex:1 1 100%}
 .receipt-camera-stage{position:relative;width:100%;min-height:320px;height:min(60vw,68vh,700px);max-height:700px;aspect-ratio:16/9;margin-top:8px;overflow:hidden;border-radius:14px;background:#090b0d;box-shadow:0 8px 26px rgba(0,0,0,.22)}
 .receipt-camera-stage video{display:block;width:100%;height:100%;object-fit:contain;background:#111}
 .receipt-guide{position:absolute;left:32%;right:32%;top:4%;bottom:4%;border:4px solid #ef3546;border-radius:16px;box-shadow:0 0 0 999px rgba(0,0,0,.25),inset 0 0 0 1px rgba(255,255,255,.55);pointer-events:none;transition:border-color .15s ease,box-shadow .15s ease}
