@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { assessFrameQuality, configureReceiptWorker, findReceiptTraceBoxes, getTesseractApi, mergeOcrLinesWithVerticalOffset, normalizeNeighborhood, parseDeliveryReceiptText, parseCouponText } from '../receipt-capture.js';
+import { assessFrameQuality, configureReceiptWorker, findReceiptPaperBounds, findReceiptTraceBoxes, getTesseractApi, mergeOcrLinesWithVerticalOffset, normalizeNeighborhood, parseDeliveryReceiptText, parseCouponText } from '../receipt-capture.js';
 
 test('lê os campos do relatório e converte o horário de Cuiabá para Brasília', () => {
   const result = parseDeliveryReceiptText([
@@ -12,8 +12,8 @@ test('lê os campos do relatório e converte o horário de Cuiabá para Brasíli
     'COO: 35174 PDV: 002',
   ].join('\n'));
   assert.deepEqual(result, {
-    pdv: '002', doc: '35174', clientName: 'exemplo', phone: '(66) 3000-0000',
-    street: 'Av Getulio Vargas', houseNumber: 's/n', neighborhood: 'Centro',
+    pdv: '002', doc: '35174', clientName: 'Exemplo', phone: '(66) 3000-0000',
+    street: 'Av. Getulio Vargas', houseNumber: 's/n', neighborhood: 'Centro',
     operationDate: '2026-11-23', entryTimeOnly: '08:13',
   });
 });
@@ -82,11 +82,12 @@ test('corrige artefatos vistos no OCR da foto sem inventar telefone', () => {
     'CO0: 35174 PDV: 002',
   ].join('\n'));
   assert.equal(result.doc, '35174');
-  assert.equal(result.clientName, 'alzira');
+  assert.equal(result.clientName, 'Alzira');
   assert.equal(result.phone, undefined);
-  assert.equal(result.street, 'av getulio vargas');
+  assert.equal(result.street, 'Av. Getulio Vargas');
   assert.equal(result.houseNumber, 's/n');
   assert.equal(normalizeNeighborhood(result.neighborhood), normalizeNeighborhood('Vermelho'));
+  assert.equal(normalizeNeighborhood('Arro Vermelho'), normalizeNeighborhood('Vermelho'));
   assert.equal(result.operationDate, '2026-11-23');
   assert.equal(result.entryTimeOnly, '08:13');
 });
@@ -95,6 +96,10 @@ test('prioriza o COO do comprovante e normaliza “Bairro Vermelho” como “Ve
   const result = parseDeliveryReceiptText(['23/11/26 07:13:47 PDV 002 DOC 35180', 'Bairro: bairro vermelho', 'COO: 35174 PDV: 002'].join('\n'));
   assert.equal(result.doc, '35174');
   assert.equal(normalizeNeighborhood(result.neighborhood), normalizeNeighborhood('Vermelho'));
+});
+
+test('recupera o COO pelo contexto do operador quando a sigla não foi reconhecida', () => {
+  assert.equal(parseDeliveryReceiptText('D0: 35174 POU: 002 Operador(a): Regina Chaves').doc, '35174');
 });
 
 test('moldura fica vermelha para imagem escura e verde para texto claro, contrastado e nítido', () => {
@@ -121,11 +126,41 @@ test('moldura fica vermelha para imagem escura e verde para texto claro, contras
 test('não confunde o próximo rótulo com telefone quando Fone(s) está vazio', () => {
   const result = parseDeliveryReceiptText('Fone(s):\nLogradouro: Av Central 10\nBairro: Centro');
   assert.equal(result.phone, undefined);
-  assert.equal(result.street, 'Av Central');
+  assert.equal(result.street, 'Av. Central');
   assert.equal(result.houseNumber, '10');
 });
 
 test('não sugere dados quando os rótulos esperados não aparecem', () => {
   assert.deepEqual(parseDeliveryReceiptText('texto sem campos reconhecíveis'), {});
   assert.deepEqual(parseCouponText('documento sem NFC-e'), {});
+});
+
+test('detecta a folha contra o fundo e mantém margem ao recortá-la', () => {
+  const width = 160; const height = 320;
+  const pixels = new Uint8ClampedArray(width * height * 4);
+  for (let i = 0; i < pixels.length; i += 4) {
+    pixels[i] = 140; pixels[i + 1] = 100; pixels[i + 2] = 70; pixels[i + 3] = 255;
+  }
+  for (let y = 60; y < 260; y += 1) {
+    for (let x = 20; x < 140; x += 1) {
+      const offset = (y * width + x) * 4;
+      pixels[offset] = 230; pixels[offset + 1] = 228; pixels[offset + 2] = 220;
+    }
+  }
+  const bounds = findReceiptPaperBounds(pixels, width, height);
+  assert.ok(bounds);
+  assert.ok(bounds.x < 20 && bounds.y < 60);
+  assert.ok(bounds.x + bounds.width > 139 && bounds.y + bounds.height > 259);
+  assert.equal(findReceiptPaperBounds(new Uint8ClampedArray(width * height * 4), width, height), null);
+});
+
+test('padroniza nomes e logradouro sem alterar os identificadores numéricos', () => {
+  const result = parseDeliveryReceiptText('PDV: 002\nCliente: maria da silva\nLogradouro: avenida brasil 45\nBairro: centro\nCOO: 35174');
+  assert.equal(result.clientName, 'Maria da Silva');
+  assert.equal(result.street, 'Av. Brasil');
+  assert.equal(result.houseNumber, '45');
+  assert.equal(result.neighborhood, 'Centro');
+  assert.equal(result.pdv, '002');
+  assert.equal(result.doc, '35174');
+  assert.equal(parseDeliveryReceiptText('Logradouro: Bv getulio vargas sn').street, 'Av. Getulio Vargas');
 });

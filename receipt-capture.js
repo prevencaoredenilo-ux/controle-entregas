@@ -6,7 +6,77 @@ function normalize(value = '') {
 }
 
 export function normalizeNeighborhood(value = '') {
-  return normalize(value).replace(/[^a-z0-9]/g, '').replace(/^(?:bairro|barro)/, '');
+  return normalize(value).replace(/[^a-z0-9]/g, '').replace(/^(?:bairro|barro)/, '').replace(/^arro(?=vermelho)/, '');
+}
+
+function titleCasePortuguese(value = '') {
+  const particles = new Set(['da', 'das', 'de', 'do', 'dos', 'e']);
+  return String(value).replace(/\s+/g, ' ').trim().toLocaleLowerCase('pt-BR').split(' ').map((word, index) => (
+    index > 0 && particles.has(word) ? word : word.replace(/^\p{L}/u, (letter) => letter.toLocaleUpperCase('pt-BR'))
+  )).join(' ');
+}
+
+function normalizeStreet(value = '') {
+  return titleCasePortuguese(value)
+    .replace(/^(?:Av(?:enida)?|Bv)\.?\s+/i, 'Av. ')
+    .replace(/^(?:R(?:ua)?\.?)\s+/i, 'Rua ')
+    .replace(/^(?:Tv|Travessa)\.?\s+/i, 'Travessa ');
+}
+
+function longestSpan(flags, maxGap = 3) {
+  let start = -1;
+  let last = -1;
+  let best = null;
+  flags.forEach((qualified, index) => {
+    if (qualified) {
+      if (start < 0) start = index;
+      last = index;
+    } else if (start >= 0 && index - last > maxGap) {
+      if (!best || last - start > best.end - best.start) best = { start, end: last };
+      start = -1;
+      last = -1;
+    }
+  });
+  if (start >= 0 && (!best || last - start > best.end - best.start)) best = { start, end: last };
+  return best;
+}
+
+export function findReceiptPaperBounds(rgba, width, height) {
+  if (!rgba || !width || !height || rgba.length < width * height * 4) return null;
+  const mask = new Uint8Array(width * height);
+  for (let pixel = 0; pixel < width * height; pixel += 1) {
+    const offset = pixel * 4;
+    const red = rgba[offset]; const green = rgba[offset + 1]; const blue = rgba[offset + 2];
+    const luminance = red * 0.2126 + green * 0.7152 + blue * 0.0722;
+    if (luminance >= 145 && Math.max(red, green, blue) - Math.min(red, green, blue) <= 85) mask[pixel] = 1;
+  }
+  const centerLeft = Math.floor(width * 0.28);
+  const centerRight = Math.ceil(width * 0.72);
+  const rowFlags = Array.from({ length: height }, (_, y) => {
+    let hits = 0;
+    for (let x = centerLeft; x < centerRight; x += 1) hits += mask[y * width + x];
+    return hits / Math.max(1, centerRight - centerLeft) >= 0.45;
+  });
+  const rows = longestSpan(rowFlags, 4);
+  if (!rows || rows.end - rows.start + 1 < height * 0.18) return null;
+  const columnFlags = Array.from({ length: width }, (_, x) => {
+    let hits = 0;
+    for (let y = rows.start; y <= rows.end; y += 1) hits += mask[y * width + x];
+    return hits / (rows.end - rows.start + 1) >= 0.40;
+  });
+  const columns = longestSpan(columnFlags, 3);
+  if (!columns || columns.end - columns.start + 1 < width * 0.35) return null;
+  const boxWidth = columns.end - columns.start + 1;
+  const boxHeight = rows.end - rows.start + 1;
+  const aspectRatio = boxWidth / boxHeight;
+  if (aspectRatio < 0.25 || aspectRatio > 1.5) return null;
+  const padX = Math.max(2, Math.round(boxWidth * 0.025));
+  const padY = Math.max(2, Math.round(boxHeight * 0.025));
+  return {
+    x: Math.max(0, columns.start - padX), y: Math.max(0, rows.start - padY),
+    width: Math.min(width, columns.end + padX + 1) - Math.max(0, columns.start - padX),
+    height: Math.min(height, rows.end + padY + 1) - Math.max(0, rows.start - padY),
+  };
 }
 
 export function getTesseractApi(module) {
@@ -81,9 +151,13 @@ function parseReceiptTimestamp(text) {
 }
 
 function parseCooNumber(text) {
-  const match = String(text || '').match(/\bCOO\s*[:.]?\s*(\d{1,10})/i)
-    || String(text || '').match(/\bC\s*[O0Q]\s*[O0QD]\s*[:.]?\s*(\d{1,10})/i);
-  return match?.[1] || '';
+  const source = String(text || '');
+  const match = source.match(/\bCOO\s*[:.]?\s*(\d{1,10})/i)
+    || source.match(/\bC\s*[O0Q]\s*[O0QD]\s*[:.]?\s*(\d{1,10})/i);
+  if (match?.[1]) return match[1];
+  const operatorLine = source.split(/\r?\n/).find((line) => /\bOPERADOR\b/i.test(line));
+  const contextualMatch = operatorLine?.match(/\b(\d{4,10})\s*[,;:.]?\s*P[DO0][VUW]\s*[:.]?\s*\d{1,6}\b/i);
+  return contextualMatch?.[1] || '';
 }
 
 export function parseDeliveryReceiptText(text) {
@@ -93,7 +167,7 @@ export function parseDeliveryReceiptText(text) {
   const coo = parseCooNumber(text);
   if (coo) result.doc = coo;
   const client = lineAfterLabel(text, ['cliente']);
-  if (client) result.clientName = client.replace(/^cliente\s*[:.]?\s*/i, '').trim();
+  if (client) result.clientName = titleCasePortuguese(client.replace(/^cliente\s*[:.]?\s*/i, ''));
   const phone = lineAfterLabel(text, ['fone(?:s|\\(s\\))', 'telefone']);
   if (phone && phone.replace(/\D/g, '').length >= 8) {
     result.phone = phone.replace(/^(?:fone(?:s|\(s\))?|telefone)\s*[:.]?\s*/i, '').trim();
@@ -103,15 +177,15 @@ export function parseDeliveryReceiptText(text) {
     const cleaned = address.replace(/^logradouro\s*[:.]?\s*/i, '').replace(/\s+[|_~—–-]+\s*[\p{L}]?\s*$/u, '').trim();
     const number = cleaned.match(/\s+(\d+[A-Za-z]?)\s*$/);
     if (number) {
-      result.street = cleaned.slice(0, number.index).trim();
+      result.street = normalizeStreet(cleaned.slice(0, number.index));
       result.houseNumber = number[1];
     } else if (/\bS\s*\/?\s*N\.?\s*$/i.test(cleaned)) {
-      result.street = cleaned.replace(/\s+S\s*\/?\s*N\.?\s*$/i, '').trim();
+      result.street = normalizeStreet(cleaned.replace(/\s+S\s*\/?\s*N\.?\s*$/i, ''));
       result.houseNumber = 's/n';
-    } else result.street = cleaned;
+    } else result.street = normalizeStreet(cleaned);
   }
   const neighborhood = lineAfterLabel(text, ['bairro']);
-  if (neighborhood) result.neighborhood = neighborhood.replace(/^bairro\s*[:.]?\s*/i, '').trim();
+  if (neighborhood) result.neighborhood = titleCasePortuguese(neighborhood.replace(/^bairro\s*[:.]?\s*/i, ''));
   const timestamp = parseReceiptTimestamp(text);
   if (timestamp) Object.assign(result, { operationDate: timestamp.date, entryTimeOnly: timestamp.time });
   return result;
@@ -190,6 +264,32 @@ async function getOcr() {
   return tesseractWorkerPromise;
 }
 
+function sharpenCanvas(context, canvas) {
+  if (canvas.width * canvas.height > 4_000_000) return;
+  try {
+    const original = context.getImageData(0, 0, canvas.width, canvas.height);
+    const blurCanvas = document.createElement('canvas');
+    blurCanvas.width = canvas.width;
+    blurCanvas.height = canvas.height;
+    const blurContext = blurCanvas.getContext('2d');
+    if (!blurContext) return;
+    blurContext.filter = 'blur(0.8px)';
+    blurContext.drawImage(canvas, 0, 0);
+    const blurred = blurContext.getImageData(0, 0, canvas.width, canvas.height);
+    for (let offset = 0; offset < original.data.length; offset += 4) {
+      const difference = original.data[offset] - blurred.data[offset];
+      if (Math.abs(difference) < 5) continue;
+      const value = Math.max(0, Math.min(255, Math.round(original.data[offset] + difference * 0.65)));
+      original.data[offset] = value;
+      original.data[offset + 1] = value;
+      original.data[offset + 2] = value;
+    }
+    context.putImageData(original, 0, 0);
+  } catch (error) {
+    console.debug('Realce de nitidez ignorado; seguindo com contraste local:', error);
+  }
+}
+
 async function prepareImageForOcr(image) {
   if (typeof createImageBitmap !== 'function') {
     const dimensions = await new Promise((resolve) => {
@@ -204,19 +304,33 @@ async function prepareImageForOcr(image) {
   const bitmap = await createImageBitmap(image);
   const originalWidth = bitmap.width;
   const originalHeight = bitmap.height;
-  const scale = Math.min(1, 2800 / Math.max(bitmap.width, bitmap.height));
+  const probeWidth = Math.min(160, bitmap.width);
+  const probeHeight = Math.max(1, Math.round(bitmap.height * probeWidth / bitmap.width));
+  const probeCanvas = document.createElement('canvas');
+  probeCanvas.width = probeWidth;
+  probeCanvas.height = probeHeight;
+  const probeContext = probeCanvas.getContext('2d', { willReadFrequently: true });
+  probeContext?.drawImage(bitmap, 0, 0, probeWidth, probeHeight);
+  const paper = probeContext ? findReceiptPaperBounds(probeContext.getImageData(0, 0, probeWidth, probeHeight).data, probeWidth, probeHeight) : null;
+  const sourceX = paper ? Math.floor(paper.x * bitmap.width / probeWidth) : 0;
+  const sourceY = paper ? Math.floor(paper.y * bitmap.height / probeHeight) : 0;
+  const sourceWidth = paper ? Math.min(bitmap.width - sourceX, Math.ceil(paper.width * bitmap.width / probeWidth)) : bitmap.width;
+  const sourceHeight = paper ? Math.min(bitmap.height - sourceY, Math.ceil(paper.height * bitmap.height / probeHeight)) : bitmap.height;
+  const scale = Math.min(2, 2800 / Math.max(sourceWidth, sourceHeight));
   const canvas = document.createElement('canvas');
-  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
-  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+  canvas.width = Math.max(1, Math.round(sourceWidth * scale));
+  canvas.height = Math.max(1, Math.round(sourceHeight * scale));
   const context = canvas.getContext('2d');
   if (!context) { bitmap.close?.(); return { image, width: originalWidth, height: originalHeight }; }
-  context.filter = 'grayscale(1) contrast(1.35)';
-  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  context.imageSmoothingQuality = 'high';
+  context.filter = 'grayscale(1) contrast(1.5)';
+  context.drawImage(bitmap, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, canvas.width, canvas.height);
+  sharpenCanvas(context, canvas);
   bitmap.close?.();
-  const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.96));
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
   return blob
-    ? { image: blob, width: canvas.width, height: canvas.height }
-    : { image, width: originalWidth, height: originalHeight };
+    ? { image: blob, width: canvas.width, height: canvas.height, cropped: Boolean(paper) }
+    : { image, width: originalWidth, height: originalHeight, cropped: false };
 }
 
 async function prepareLowerReceiptCrop(image, width, height) {
@@ -231,7 +345,7 @@ async function prepareLowerReceiptCrop(image, width, height) {
   if (!context) { bitmap.close?.(); return null; }
   context.drawImage(bitmap, 0, top, width, cropHeight, 0, 0, width, cropHeight);
   bitmap.close?.();
-  const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.98));
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
   return blob ? { image: blob, top } : null;
 }
 
@@ -435,10 +549,11 @@ export function initDeliveryReceiptCapture(form) {
     return { fields, found: found > 0 };
   };
   const recognize = async (image, kind) => {
-    setStatus('Preparando o leitor de texto em português…');
+    setStatus('Ajustando o enquadramento e realçando o texto localmente…');
     try {
       const [worker, prepared] = await Promise.all([getOcr(), prepareImageForOcr(image)]);
-      setStatus('Lendo a imagem no navegador… aguarde.');
+      setPreview(prepared.image);
+      setStatus(prepared.cropped ? 'Papel recortado e texto realçado no aparelho. Lendo…' : 'Texto realçado no aparelho. Lendo…');
       let { data } = await worker.recognize(prepared.image);
       if (kind === 'delivery' && !parseDeliveryReceiptText(data.text || '').doc) {
         const lowerCrop = await prepareLowerReceiptCrop(prepared.image, prepared.width, prepared.height);
