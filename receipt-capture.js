@@ -292,6 +292,13 @@ export function initDeliveryReceiptCapture(form) {
   const stopButton = panel?.querySelector('[data-camera-stop]');
   if (!panel || !video || !cameraStage || !status) return;
 
+  // Inicia o download do OCR enquanto o operador enquadra/prepara o comprovante.
+  // getOcr() mantém uma única Promise/worker, também usada pela leitura de fotos.
+  const ocrWarmup = getOcr().catch((error) => {
+    console.warn('Leitor OCR não pôde ser pré-carregado:', error);
+    return null;
+  });
+
   let stream = null;
   let activeReceipt = 'delivery';
   let previewUrl = null;
@@ -542,10 +549,6 @@ export function initDeliveryReceiptCapture(form) {
       setStatus('Webcam indisponível neste navegador. Abra o site por HTTPS ou selecione uma foto abaixo.');
       return;
     }
-    const warmup = getOcr().catch((error) => {
-      console.warn('Leitor OCR não pôde ser pré-carregado:', error);
-      return null;
-    });
     try {
       stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
@@ -566,7 +569,7 @@ export function initDeliveryReceiptCapture(form) {
       inspectFrame();
       qualityTimer = setInterval(inspectFrame, 250);
       setStatus(autoReadToggle?.checked ? (activeReceipt === 'coupon' ? 'Coloque somente o cupom NFC-e inteiro na moldura; mantenha-o imóvel quando ela ficar verde.' : 'Coloque o comprovante inteiro na moldura; mantenha-o imóvel quando ela ficar verde para preencher os campos.') : 'Enquadre o documento inteiro na moldura e use “Tirar foto e ler”.');
-      warmup.then((worker) => {
+      ocrWarmup.then((worker) => {
         if (worker && stream && !captureBusy) setStatus(autoReadToggle?.checked ? 'Leitor pronto. Centralize o documento; a leitura começa automaticamente quando a moldura ficar verde.' : 'Leitor pronto. Enquadre o documento e use “Tirar foto e ler”.');
       });
     } catch (error) {

@@ -1,7 +1,7 @@
-const CACHE_PREFIX = 'orbita-v13-57-safe-';
+const CACHE_PREFIX = 'orbita-v13-58-safe-';
 const CACHE = `${CACHE_PREFIX}1`;
 const ASSETS = [
-  './', './index.html', './styles.css?v=13.57', './app.js?v=13.57', './db.js?v=13.48', './helpers.js?v=13.48', './views.js?v=13.57', './receipt-capture.js?v=13.57', './excel-report.js?v=13.48', './manifest.webmanifest?v=13.57',
+  './', './index.html', './styles.css?v=13.58', './app.js?v=13.58', './db.js?v=13.48', './helpers.js?v=13.48', './views.js?v=13.58', './receipt-capture.js?v=13.58', './excel-report.js?v=13.48', './manifest.webmanifest?v=13.58',
  
   './icons/icon-192.png', './icons/icon-512.png', './assets/delivery-courier-mascot.png',
 ];
