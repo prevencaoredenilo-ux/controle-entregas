@@ -1,6 +1,6 @@
 # TODO — melhorias da captura de comprovantes
 
-## Concluído nesta rodada (13.66.2)
+## Concluído nesta rodada (13.66.3)
 - [x] Corrigir aplicação e origem dos campos, proteção de edição real, substituição de valores padrão/OCR, data e hora, preview, contagem, alertas, parsing cliente/telefone, bairro único aproximado, ambiguidade de horário, `toBlob(null)` e bloqueio de leitura concorrente.
 - [x] Normalizar cupom somente na comparação de duplicidade; considerar série e número quando informada; mostrar entrega existente e preservar valor confirmado.
 - [x] OCR Tesseract.js local/offline, assets e checksums/licenças; singleton com encerramento ocioso e progresso.
@@ -19,3 +19,5 @@
 - [x] Rótulo do número do relatório ajustado para COO e removidos os controles Série NFC-e duplicados (série permanece interna para comparação NFC-e).
 
 - [x] Ampliado o modal de registro de entrega para 1120 px e maior altura útil, com limite adaptado a celular.
+
+- [x] Restaurado o menu recolhido acessível: faixa de ícones a 78 px e botão expandir visível em desktop.

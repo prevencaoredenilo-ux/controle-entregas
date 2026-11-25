@@ -1,4 +1,4 @@
-# Relatório de melhorias — Órbita Controle de Entregas 13.66.2
+# Relatório de melhorias — Órbita Controle de Entregas 13.66.3
 
 ## Mudanças por etapa
 
@@ -8,7 +8,7 @@
 4. **Imagem/câmera:** solicitação até 1920×1080; orientação EXIF, redução a cerca de 1800 px, escala de cinza/contraste; opções separadas de câmera e galeria, prévia processada e fechamento da webcam após captura.
 5. **NFC-e:** BarcodeDetector com reserva jsQR local; validação de chave de 44 dígitos e DV módulo 11; extrai série, número e mês; parser OCR aceita variações e pontuação. Número NFC-e mantém zeros conforme lido. A interface pede conferência antes do registro.
 6. **Testes:** `node:test`, jsdom, parser, chave/DV e comparação de duplicidade; nenhum comprovante real foi usado.
-7. **Limpeza:** versão única 13.66.2; cache SW só grava resposta OK de mesma origem; CSP adicionada; mascote removido do precache por ausência de uso detectada. Nenhuma migração IndexedDB foi feita.
+7. **Limpeza:** versão única 13.66.3; cache SW só grava resposta OK de mesma origem; CSP adicionada; mascote removido do precache por ausência de uso detectada. Nenhuma migração IndexedDB foi feita.
 
 ## Arquivos relevantes alterados ou adicionados
 
@@ -58,11 +58,16 @@ Versões e fontes detalhadas estão em `vendor/tesseract/VERSIONS.md`. jsQR é a
 A leitura agora limita cada chamada OCR ao orçamento restante de 25 s, interrompe e encerra o worker ao exceder o limite, evita variantes quando a primeira leitura é suficiente e só tenta recortes/passadas extras quando ainda há tempo. Em aparelhos lentos, pode encerrar sem resultado completo; nesse caso orienta o usuário a tentar imagem melhor ou QR. Sintaxe e 40 testes passaram novamente.
 
 
-## Ajuste de interface 13.66.2
+## Ajuste de interface 13.66.3
 
 No formulário de registro, o rótulo obrigatório DOC foi renomeado para COO. Os dois controles visíveis duplicados de Série NFC-e foram removidos; uma única entrada oculta preserva a série obtida por QR/OCR para a checagem interna de duplicidade. O cache do Service Worker foi atualizado para garantir a troca dos arquivos após atualização. Sintaxe e 41 testes passaram.
 
 
-## Ajuste de interface 13.66.2
+## Ajuste de interface 13.66.3
 
 O modal do registro de entrega foi ampliado para até 1120 px de largura e quase toda a altura útil da janela; em celular, mantém margens pequenas e rolagem interna. A versão e o cache offline foram atualizados. Sintaxe e 42 testes passaram.
+
+
+## Correção do menu 13.66.3
+
+No desktop, o menu recolhido mantém faixa de ícones de 78 px e botão de expandir acessível. Atualizei versão e cache offline.

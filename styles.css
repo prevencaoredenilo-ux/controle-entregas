@@ -6216,3 +6216,20 @@ input:focus, select:focus, textarea:focus { border-color: var(--blue) !important
     max-height: calc(100dvh - 16px) !important;
   }
 }
+
+
+/* 13.66.3 — menu recolhido continua acessível e pode ser expandido */
+.app-v8 #sidebarCollapseBtn,
+.app-v8 .rail-toggle { display: flex !important; }
+@media (min-width: 901px) {
+  .app-v8.sidebar-collapsed .nav-rail,
+  .app-v8.sidebar-collapsed .nav-rail.open {
+    width: 78px !important; flex: 0 0 78px !important; min-width: 78px !important; max-width: 78px !important;
+    padding: 12px 8px !important; opacity: 1 !important; visibility: visible !important;
+    transform: none !important; pointer-events: auto !important; overflow-x: hidden !important;
+  }
+  .app-v8.sidebar-collapsed .nav-rail > *,
+  .app-v8.sidebar-collapsed .nav-rail .rail-toggle { visibility: visible !important; }
+  .app-v8.sidebar-collapsed .rail-toggle { justify-content: center !important; padding: 8px 4px !important; }
+  .app-v8.sidebar-collapsed .rail-toggle b { display: none !important; }
+}

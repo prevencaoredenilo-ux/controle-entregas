@@ -1,7 +1,7 @@
 {
   "name": "orbita-controle-entregas",
   "private": true,
-  "version": "13.66.2",
+  "version": "13.66.3",
   "description": "Órbita — controle de entregas offline-first",
   "type": "module",
   "scripts": {

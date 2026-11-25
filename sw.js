@@ -1,7 +1,7 @@
-const CACHE_PREFIX = 'orbita-v13-66-2-safe-';
-const CACHE = `${CACHE_PREFIX}3`;
+const CACHE_PREFIX = 'orbita-v13-66-3-safe-';
+const CACHE = `${CACHE_PREFIX}4`;
 const ASSETS = [
-  './', './index.html', './styles.css?v=13.66.2', './app.js?v=13.66.2', './db.js?v=13.66.2', './helpers.js?v=13.66.2', './views.js?v=13.66.2', './receipt-capture.js?v=13.66.2', './excel-report.js?v=13.66.2', './manifest.webmanifest?v=13.66.2',
+  './', './index.html', './styles.css?v=13.66.3', './app.js?v=13.66.3', './db.js?v=13.66.3', './helpers.js?v=13.66.3', './views.js?v=13.66.3', './receipt-capture.js?v=13.66.3', './excel-report.js?v=13.66.3', './manifest.webmanifest?v=13.66.3',
  
   './icons/icon-192.png', './icons/icon-512.png',
   './vendor/tesseract/tesseract.esm.min.js', './vendor/tesseract/worker.min.js',

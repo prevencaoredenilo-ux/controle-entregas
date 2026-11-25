@@ -106,3 +106,13 @@ test('modal de registro de entrega usa largura ampliada e mantém limite respons
   assert.ok(css.includes('max-height: calc(100vh - 40px)'));
   assert.ok(css.includes('max-height: calc(100dvh - 16px)'));
 });
+
+
+test('menu recolhido mantém faixa de ícones e botão de expansão visíveis', () => {
+  const css = read('styles.css');
+  const fix = css.slice(css.lastIndexOf('13.66.3 — menu recolhido'));
+  assert.ok(fix.includes('.app-v8 #sidebarCollapseBtn'));
+  assert.ok(fix.includes('display: flex !important'));
+  assert.ok(fix.includes('width: 78px !important'));
+  assert.ok(fix.includes('visibility: visible !important'));
+});
