@@ -90,3 +90,11 @@ test('normaliza zeros à esquerda apenas para comparar duplicidade de cupom', ()
   assert.equal(couponsMatch({ coupon: '15693', couponSeries: '2' }, { coupon: '15693', couponSeries: '3' }), false);
   assert.equal(couponsMatch({ coupon: '15693', couponSeries: '2' }, { coupon: '15693' }), false);
 });
+
+test('formulário apresenta COO e não duplica campos visíveis de série NFC-e', () => {
+  const views = read('views.js');
+  assert.match(views, /<label>COO \\*/);
+  assert.doesNotMatch(views, /<label>DOC \\*/);
+  assert.doesNotMatch(views, /<label>Série NFC-e/);
+  assert.equal((views.match(/name=\"couponSeries\"/g) || []).length, 1);
+});
