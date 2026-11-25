@@ -6203,3 +6203,16 @@ input:focus, select:focus, textarea:focus { border-color: var(--blue) !important
   .app-v8 #modalWrap:has(#deliveryForm) .delivery-section-grid-receipt { grid-template-columns: minmax(0, 1fr) !important; }
   .app-v8 #modalWrap:has(#deliveryForm) .delivery-field-wide { grid-column: auto !important; }
 }
+
+
+/* 13.66.2 — modal de registro de entrega ampliado */
+.app-v8 #modalWrap:has(#deliveryForm) .modal {
+  width: min(1120px, calc(100vw - 48px)) !important;
+  max-height: calc(100vh - 40px) !important;
+}
+@media (max-width: 640px) {
+  .app-v8 #modalWrap:has(#deliveryForm) .modal {
+    width: calc(100vw - 16px) !important;
+    max-height: calc(100dvh - 16px) !important;
+  }
+}

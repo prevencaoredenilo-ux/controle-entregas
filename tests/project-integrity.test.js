@@ -98,3 +98,11 @@ test('formulário apresenta COO e não duplica campos visíveis de série NFC-e'
   assert.doesNotMatch(views, /<label>Série NFC-e/);
   assert.equal((views.match(/name=\"couponSeries\"/g) || []).length, 1);
 });
+
+test('modal de registro de entrega usa largura ampliada e mantém limite responsivo', () => {
+  const css = read('styles.css');
+  assert.ok(css.includes('.app-v8 #modalWrap:has(#deliveryForm) .modal {'));
+  assert.ok(css.includes('width: min(1120px, calc(100vw - 48px))'));
+  assert.ok(css.includes('max-height: calc(100vh - 40px)'));
+  assert.ok(css.includes('max-height: calc(100dvh - 16px)'));
+});
