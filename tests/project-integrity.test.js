@@ -108,11 +108,12 @@ test('modal de registro de entrega usa largura ampliada e mantém limite respons
 });
 
 
-test('menu recolhido mantém faixa de ícones e botão de expansão visíveis', () => {
+test('menu desktop recolhido desaparece por completo e permanece reabrível pelo cabeçalho', () => {
   const css = read('styles.css');
-  const fix = css.slice(css.lastIndexOf('13.66.3 — menu recolhido'));
-  assert.ok(fix.includes('.app-v8 #sidebarCollapseBtn'));
-  assert.ok(fix.includes('display: flex !important'));
-  assert.ok(fix.includes('width: 78px !important'));
-  assert.ok(fix.includes('visibility: visible !important'));
+  const fix = css.slice(css.lastIndexOf('13.66.4 — menu desktop recolhido'));
+  assert.ok(fix.includes('.app-v8 #menuBtn'));
+  assert.ok(fix.includes('display: inline-flex !important'));
+  assert.ok(fix.includes('width: 0 !important'));
+  assert.ok(fix.includes('max-width: 0 !important'));
+  assert.ok(fix.includes('pointer-events: none !important'));
 });

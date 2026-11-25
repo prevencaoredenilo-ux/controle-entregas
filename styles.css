@@ -6233,3 +6233,21 @@ input:focus, select:focus, textarea:focus { border-color: var(--blue) !important
   .app-v8.sidebar-collapsed .rail-toggle { justify-content: center !important; padding: 8px 4px !important; }
   .app-v8.sidebar-collapsed .rail-toggle b { display: none !important; }
 }
+
+
+/* 13.66.4 — menu desktop recolhido totalmente oculto, com reabertura no cabeçalho */
+.app-v8 #menuBtn,
+.app-v8 .header-menu { display: inline-flex !important; }
+@media (min-width: 901px) {
+  .app-v8 #sidebarCollapseBtn, .app-v8 .rail-toggle { display: none !important; }
+  .app-v8.sidebar-collapsed .nav-rail,
+  .app-v8.sidebar-collapsed .nav-rail.open {
+    width: 0 !important; flex: 0 0 0 !important; min-width: 0 !important; max-width: 0 !important;
+    padding: 0 !important; margin: 0 !important; border: 0 !important;
+    opacity: 0 !important; visibility: hidden !important; transform: translateX(-100%) !important;
+    pointer-events: none !important; overflow: hidden !important;
+  }
+}
+@media (max-width: 900px) {
+  .app-v8 #sidebarCollapseBtn, .app-v8 .rail-toggle { display: none !important; }
+}
